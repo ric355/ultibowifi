@@ -1,0 +1,9 @@
+ppas.sh
+*.txt
+*.elf
+*.img
+lib/*
+*.bak
+*.o
+*.ppu
+
