@@ -51,7 +51,12 @@
             <LinkSmart Value="True"/>
           </Linking>
           <Other>
-            <CustomOptions Value="-dZERO"/>
+            <CustomOptions Value="-dZERO
+-dsdhci
+-dsdhci_debug
+-dMMC_DEBUG
+-dinterrupt_debug
+-dcorescanextended"/>
           </Other>
         </CompilerOptions>
       </Item2>
@@ -98,11 +103,21 @@
     </Target>
     <SearchPaths>
       <IncludeFiles Value="$(ProjOutDir)"/>
-      <OtherUnitFiles Value="../SpeedyLogger/source"/>
       <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
+    <Parsing>
+      <SyntaxOptions>
+        <IncludeAssertionCode Value="True"/>
+      </SyntaxOptions>
+    </Parsing>
     <CodeGeneration>
       <SmartLinkUnit Value="True"/>
+      <Checks>
+        <IOChecks Value="True"/>
+        <RangeChecks Value="True"/>
+        <OverflowChecks Value="True"/>
+        <StackChecks Value="True"/>
+      </Checks>
       <TargetProcessor Value="ARMV7A"/>
       <TargetController Value="RPI3B"/>
       <TargetCPU Value="arm"/>
@@ -124,6 +139,9 @@
 -dsdhci_debug
 -dMMC_DEBUG
 -dinterrupt_debug"/>
+      <ExecuteBefore>
+        <ShowAllMessages Value="True"/>
+      </ExecuteBefore>
     </Other>
   </CompilerOptions>
   <Debugging>
