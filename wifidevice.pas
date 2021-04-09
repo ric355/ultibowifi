@@ -947,32 +947,50 @@ procedure dumpregisters(WIFI : PWIFIDevice);
 type
   arrayptr = ^arraytype;
   arraytype = array[0..99] of longword;
+  arrayptrbytes = ^arraybytes;
+  arraybytes = array[0..1000] of byte;
 var
   SDHCI : PSDHCIHost;
   r : arrayptr;
+  rb : arrayptrbytes;
 begin
    SDHCI:=PSDHCIHost(WIFI^.Device.DeviceData);
 
     r := arrayptr(SDHCI^.address);
+    rb := arrayptrbytes(SDHCI^.address);
 
 
     wifiloginfo(nil, '32 bit block count 0x'+ inttohex(r^[0], 8));
-    wifiloginfo(nil, 'blocksize and count 0x%x'+ inttohex(r^[1], 8));
+    wifiloginfo(nil, 'blocksize and count 0x'+ inttohex(r^[1], 8));
     wifiloginfo(nil, 'arg 0x%x'+ inttohex(r^[2], 8));
-    wifiloginfo(nil, 'transfermode and command 0x%x'+ inttohex(r^[3], 8));
-    wifiloginfo(nil, 'response0 0x%x'+ inttohex(r^[4], 8));
-    wifiloginfo(nil, 'response1 0x%x'+ inttohex(r^[5], 8));
-    wifiloginfo(nil, 'response2 0x%x'+ inttohex(r^[6], 8));
-    wifiloginfo(nil, 'response3 0x%x'+ inttohex(r^[7], 8));
+    wifiloginfo(nil, 'transfermode and command 0x'+ inttohex(r^[3], 8));
+    wifiloginfo(nil, 'response0 0x'+ inttohex(r^[4], 8));
+    wifiloginfo(nil, 'response1 0x'+ inttohex(r^[5], 8));
+    wifiloginfo(nil, 'response2 0x'+ inttohex(r^[6], 8));
+    wifiloginfo(nil, 'response3 0x'+ inttohex(r^[7], 8));
     //wifiloginfo(nil, 'buffer data port 0x%x'+ inttohex(r^[8], 8));
-    wifiloginfo(nil, 'present state 0x%x'+ inttohex(r^[9], 8));
-    wifiloginfo(nil, 'host ctrl1, pwr ctrl, block gap ctrl, wakeup ctrl0x%x'+ inttohex(r^[10], 8));
-    wifiloginfo(nil, 'clock ctrl, timeout ctrl, sw reset 0x%x'+ inttohex(r^[11], 8));
-    wifiloginfo(nil, 'normal interrupt status, error interrupt status 0x%x'+ inttohex(r^[12], 8));
-    wifiloginfo(nil, 'normal interr enable, error interr enable 0x%x'+ inttohex(r^[13], 8));
-    wifiloginfo(nil, 'auto cmd status, host ctrl 2 0x%x'+ inttohex(r^[14], 8));
-    wifiloginfo(nil, 'capabilities part 1 0x%x'+ inttohex(r^[15], 8));
-    wifiloginfo(nil, 'capabilities part 2 0x%x'+ inttohex(r^[16], 8));
+    wifiloginfo(nil, 'present state 0x'+ inttohex(r^[9], 8));
+    wifiloginfo(nil, 'host ctrl1, pwr ctrl, block gap ctrl, wakeup ctrl0x'+ inttohex(r^[10], 8));
+
+
+    wifiloginfo(nil, 'host ctrl1 0x' +inttohex(rb^[SDHCI_HOST_CONTROL], 2));
+    wifiloginfo(nil, 'pwr ctrl 0x' +inttohex(rb^[SDHCI_POWER_CONTROL], 2));
+    wifiloginfo(nil, 'block gap ctrl 0x' +inttohex(rb^[SDHCI_BLOCK_GAP_CONTROL], 2));
+    wifiloginfo(nil, 'wakeup ctrl 0x' +inttohex(rb^[SDHCI_WAKE_UP_CONTROL], 2));
+
+    wifiloginfo(nil, 'clock ctrl, timeout ctrl, sw reset 0x'+ inttohex(r^[11], 8));
+
+    wifiloginfo(nil, 'clock ctrl byte 1 0x' +inttohex(rb^[SDHCI_CLOCK_CONTROL], 2));
+    wifiloginfo(nil, 'clock ctrl byte 2 0x' +inttohex(rb^[SDHCI_CLOCK_CONTROL+1], 2));
+    wifiloginfo(nil, 'timeout ctrl 0x' +inttohex(rb^[SDHCI_TIMEOUT_CONTROL], 2));
+    wifiloginfo(nil, 'sw reset 0x' +inttohex(rb^[SDHCI_SOFTWARE_RESET], 2));
+
+
+    wifiloginfo(nil, 'normal interrupt status, error interrupt status 0x'+ inttohex(r^[12], 8));
+    wifiloginfo(nil, 'normal interr enable, error interr enable 0x'+ inttohex(r^[13], 8));
+    wifiloginfo(nil, 'auto cmd status, host ctrl 2 0x'+ inttohex(r^[14], 8));
+    wifiloginfo(nil, 'capabilities part 1 0x'+ inttohex(r^[15], 8));
+    wifiloginfo(nil, 'capabilities part 2 0x'+ inttohex(r^[16], 8));
 end;
 
 
