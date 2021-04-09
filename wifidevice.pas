@@ -11,6 +11,8 @@ uses
   GlobalConfig,GlobalConst,GlobalTypes,Platform,Threads,DMA,gpio;
 
 const
+  FIRMWARE_CHUNK_SIZE = 2048;
+
   {SDIO Bus Speeds (Hz)}
   SDIO_BUS_SPEED_DEFAULT   = 0;
   SDIO_BUS_SPEED_HS26      = 26000000;
@@ -888,6 +890,8 @@ var
 
   WIFIInitialized:Boolean;
 
+  dodumpregisters : boolean = false;
+
 procedure WIFILog(Level:LongWord;WIFI:PWIFIDevice;const AText:String);
 var
  WorkBuffer:String;
@@ -1187,6 +1191,7 @@ begin
  SDHCI:=PSDHCIHost(WIFI^.Device.DeviceData);
  if SDHCI = nil then Exit;
 
+ wifiloginfo(nil, 'clock='+inttostr(clock) + ' max freq='+inttostr(sdhci^.MaximumFrequency));
  {Check Clock}
  if Clock > SDHCI^.MaximumFrequency then
   begin
@@ -2009,6 +2014,10 @@ begin
       end;
     (*end;*)
 
+   // block gap control
+   SDHCIHostWriteByte(SDHCI, SDHCI_BLOCK_GAP_CONTROL, 0);
+   SDHCIHostWriteByte(SDHCI, SDHCI_POWER_CONTROL, 0);
+
    {Check Clock}
    if WIFI^.Clock > 26000000 then
     begin
@@ -2468,6 +2477,12 @@ begin
         {Write Command}
 
         WIFILogDebug(nil,'WIFI Send Command SDHCI_COMMAND cmd=' + inttostr(command^.command) + '  value written to cmd register=' + IntToHex(SDHCIMakeCommand(Command^.Command,Flags),8) + ') status='+inttostr(command^.status));
+
+        if (dodumpregisters) and (command^.Command = SDIO_CMD_RW_EXTENDED) then
+        begin
+          dumpregisters(WIFI);
+          dodumpregisters := false;
+        end;
 
         SDHCIHostWriteWord(SDHCI,SDHCI_COMMAND,SDHCIMakeCommand(Command^.Command,Flags));
 
@@ -2984,9 +2999,6 @@ end;
 
 function WIFIDeviceDownloadFirmware(WIFI : PWIFIDevice) : Longword;
 
-const
-  FIRMWARE_CHUNK_SIZE = 2048;
-
 var
  rambase : longword;
  firmwarefile : file of byte;
@@ -3035,7 +3047,7 @@ begin
 
   move(firmwarep^, WIFI^.resetvec, 4);
   wifiloginfo(nil, 'Reset vector established as 0x' + inttohex(WIFI^.resetvec, 8));
-  fillchar(firmwarep^, 4, 0);
+  //fillchar(firmwarep^, 4, 0);   not sure if this is needed or not.
 
   // we need to split the calls into multiple chunks so that the addressing does
   // not go beyond the limit of the lower part of the address.
@@ -3047,16 +3059,24 @@ begin
   else
     chunksize := fsize;
 
+  // align the size to the backplane block size.
+  // we should probably zero out the extra bytes in the memory buffer.
+  // do that later...
+  if (fsize mod 64 <> 0) then
+    fsize := ((fsize div 64) + 1) * 64;
+
   getmem(comparebuf, fsize);
 
   wifiloginfo(nil, 'bytes to transfer are ' + inttostr(fsize));
   bytestransferred := 0;
+  dodumpregisters := true;
+
   while bytestransferred < fsize do
   begin
 
     sbmem(WIFI, true, firmwarep+off, chunksize, WIFI^.rambase + off);
     bytestransferred := bytestransferred + chunksize;
-    wifiloginfo(nil, 'bytes transferred = ' + inttostr(bytestransferred) + ' bytes left = ' +inttostr(fsize-bytestransferred));
+    //wifiloginfo(nil, 'bytes transferred = ' + inttostr(bytestransferred) + ' bytes left = ' +inttostr(fsize-bytestransferred));
 
     if (bytestransferred < fsize) then
     begin
@@ -3080,7 +3100,7 @@ begin
 
     sbmem(WIFI, false, comparebuf+off, chunksize, WIFI^.rambase + off);
     bytestransferred := bytestransferred + chunksize;
-    wifiloginfo(nil, 'bytes transferred = ' + inttostr(bytestransferred) + ' bytes left = ' +inttostr(fsize-bytestransferred));
+    // wifiloginfo(nil, 'bytes transferred = ' + inttostr(bytestransferred) + ' bytes left = ' +inttostr(fsize-bytestransferred));
 
     if (bytestransferred < fsize) then
     begin
