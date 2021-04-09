@@ -2996,6 +2996,7 @@ begin
     end;
     WIFI^.socramsize := size;
     WIFI^.rambase := $198000;
+    WIFILogInfo(nil, 'Socram size=0x'+inttohex(size, 8) + ' rambase=0x'+inttohex(WIFI^.rambase, 8));
     exit;
   end;
 
@@ -3023,6 +3024,87 @@ begin
     cfgwritel(WIFI, 1, r + Bankidx, 3);
     cfgwritel(WIFI, 1, r + Bankpda, 0);
   end;
+
+  WIFILogInfo(nil, 'Socram size=0x'+inttohex(size, 8) + ' rambase=0x'+inttohex(WIFI^.rambase, 8));
+
+end;
+
+
+(*
+ * Condense config file contents (in buffer buf with length n)
+ * to 'var=value\0' list for firmware:
+ *	- remove comments (starting with '#') and blank lines
+ *	- remove carriage returns
+ *	- convert newlines to nulls
+ *	- mark end with two nulls
+ *	- pad with nulls to multiple of 4 bytes total length
+ *)
+
+function condense(buf : pchar; n : integer) : integer;
+var
+ p, ep, lp, op : pchar;
+ c : char;
+ skipping : boolean;
+ i : integer;
+begin
+
+  Result := 0;
+  skipping := false;      // true if in a comment
+  ep := buf + n;          // end of input
+  op := buf;              // end of output
+  lp := buf;              // start of current output line
+
+  p := buf;
+  while (p < ep) do
+  begin
+    c := p^;
+
+    case c of
+      '#' : skipping := true;
+      #0,
+      #10 : begin
+              skipping := false;
+    	      if (op <> lp) then
+              begin
+                op^ := #0;
+                op += 1;
+                lp := op;
+              end;
+            end;
+      #13: ; //do nothing (don't include in output)
+    else
+      if (not skipping) then
+      begin
+        op^ := c;
+        op += 1;
+      end;
+    end;
+
+    p += 1;
+  end;
+
+  if( not skipping) and (op <> lp) then
+  begin
+    op^ := #0;
+    op+=1;
+  end;
+
+  op^ := #0;
+  op+=1;
+
+  // pad with nulls to multiple of 4 bytes length
+  // note input has to be dword aligned to avoid a crash here.
+
+  n := op - buf;
+  wifiloginfo(nil, 'after condense n='+inttostr(n));
+  while (n and 3 <> 0) do
+  begin
+    op^ := #0;
+    op += 1;
+    n += 1;
+  end;
+  wifiloginfo(nil, 'after padding n='+inttostr(n));
+  Result := n;
 end;
 
 
@@ -3187,32 +3269,89 @@ begin
   *)
 
 
+  // now we need to upload the configuration to ram
+
+  AssignFile(FirmwareFile, ConfigFilename);
+  Reset(FirmwareFile);
+  FSize := FileSize(FirmwareFile);
+
+  WIFILogInfo(nil, 'Size of config ile is ' + inttostr(fsize) + ' bytes');
+
+  // dword align to be sure
+  if (fsize mod 4 <> 0) then
+    fsize := ((fsize div 4) + 1) * 4;
+
+  GetMem(firmwarep, fsize);
+  BlockRead(FirmwareFile, FirmwareP^, FileSize(FirmwareFile));
+
+  fsize := Condense(PChar(FirmwareP), Filesize(FirmwareFile));               // note we deliberately *don't* use fsize here!
+
+  WIFILogInfo(nil, 'Returned size from condense is ' + inttostr(FSize));
+
+  s := '';
+  for i := 1 to fsize do
+  begin
+    if (pchar(FirmwareP+i-1)^ <> #0) then
+      s := s + pchar(FirmwareP+i-1)^
+    else
+      s := s + '[#0]';
+  end;
+
+  wifiloginfo(nil, s);
+
+  // Although what we've done here would seem to be technically correct, I noticed that
+  // ether4330.c only uploads the first 2048 bytes of the config and then breaks out
+  // of the loop. Not sure why that is, as one of the config files is slightly larger
+  // than 2048 bytes. It's 2074 bytes. The condensed version is still shorter
+  // but since it only reads the first 2048 bytes from the source file then my condensed
+  // version is still slightly larger than the one in ether4330.c (for the pi3b version that is)
+  // as I actually read in all 2074 bytes and condense that.
+
+  off := WIFI^.socramsize - fsize - 4;
+  WIFILogInfo(nil, 'Tansferring config file to socram at offset 0x' + inttohex(off, 8));
+  bytestransferred := 0;
+
+  while bytestransferred < fsize do
+  begin
+    sbmem(WIFI, true, firmwarep+bytestransferred, chunksize, off);
+    bytestransferred := bytestransferred + chunksize;
+
+    if (bytestransferred < fsize) then
+    begin
+      off += FIRMWARE_CHUNK_SIZE;
+      if (off + chunksize > fsize) then
+        chunksize := fsize - off;
+    end;
+  end;
+
+  WIFILogInfo(nil, 'Finished transferring config file to socram');
+
+  // now we have to enable the device I think; that should start it executing
+  // need to sort out that reset vector thingy.
+
+  if not config and offset=0 i.e. it's the first block, then
+    put the first 4 bytes of the block into the reset vector variable.
+
  except
    on e : exception do
      wifiloginfo(nil, 'exception : ' + e.message + ' at address ' + inttohex(longword(exceptaddr),8));
  end;
 
 (*
-  upload(ctl, firmware[i].fwfile, 0);
-
-
-
-  if(FWDEBUG) print("config load...");
-  n = upload(ctl, firmware[i].cfgfile, 1);
-  n /= 4;
-  n = (n & 0xFFFF) | (~n << 16);
-  put4(buf, n);
-  sbmem(1, buf, 4, ctl->rambase + ctl->socramsize - 4);
+  n /= 4;                          // divide n by 4 = number of dwords
+  n = (n & 0xFFFF) | (~n << 16);   // mask for the lower 2 bytes (n is length); or in inverted n shifted to the upper 2 bytes? wtf?
+  put4(buf, n);                    // put this new value of in into the beginning of the buffer
+  sbmem(1, buf, 4, ctl->rambase + ctl->socramsize - 4);  // now send those 4 bytes to rambase+socramsize-4 i.e. end of the ram
   if(ctl->armcore == ARMcr4){
-  	sbwindow(ctl->sdregs);
-  	cfgwritel(Fn1, ctl->sdregs + Intstatus, ~0);
-  	if(ctl->resetvec.i != 0){
+  	sbwindow(ctl->sdregs);    // window for SDIO Core Registers address (sdregs is 1804000 on pi 3b
+  	cfgwritel(Fn1, ctl->sdregs + Intstatus, ~0);    // set interrupt status to all 1's on fn1
+  	if(ctl->resetvec.i != 0){                         // is reset vector non zero?
   		if(SBDEBUG) print("%x\n", ctl->resetvec.i);
-  		sbmem(1, ctl->resetvec.c, sizeof(ctl->resetvec.c), 0);
-  	}
-  	sbreset(ctl->armctl, Cr4Cpuhalt, 0);
+  		sbmem(1, ctl->resetvec.c, sizeof(ctl->resetvec.c), 0);  // yes, send non zero reset vector to address zero (will set backplane window)
+  	}                                                               // that puts it at address 0. It must be a 'jump' call is it?
+  	sbreset(ctl->armctl, Cr4Cpuhalt, 0); // put the cpu into reset I guess this must start the firmware.
   }else
-  	sbreset(ctl->armctl, 0, 0);
+  	sbreset(ctl->armctl, 0, 0); // similarly this must start the firmware.
 
 *)
 
