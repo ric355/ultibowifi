@@ -12,6 +12,8 @@ uses
 
 const
   FIRMWARE_CHUNK_SIZE = 2048;
+  FIRWMARE_OPTIONS_COUNT = 7;
+  FIRMWARE_FILENAME_ROOT = 'c:\firmware\';
 
   {SDIO Bus Speeds (Hz)}
   SDIO_BUS_SPEED_DEFAULT   = 0;
@@ -723,6 +725,13 @@ const
 
 
 type
+  TFirmwareEntry = record
+    chipid : word;
+    chipidrev : word;
+    firmwarefilename : string;
+    configfilename : string;
+    regufilename : string;
+  end;
 
   PSDIOData = ^TSDIOData;
    PSDIOCommand = ^TSDIOCommand;
@@ -801,6 +810,7 @@ type
    // wifi chip data - some may not be needed.
 
    chipid : word;
+   chipidrev : word;
    armcore : longword;
    chipcommon : longword;
    armctl : longword;
@@ -891,6 +901,24 @@ var
   WIFIInitialized:Boolean;
 
   dodumpregisters : boolean = false;
+
+  chipid : word;
+  chipidrev : word;
+  firmwarefilename : string;
+  configfilename : string;
+  regufilename : string;
+
+  firmware : array[1..FIRWMARE_OPTIONS_COUNT] of TFirmwareEntry =
+    (
+    	( chipid : $4330; chipidrev : 3; firmwarefilename: 'fw_bcm40183b1.bin'; configfilename: 'bcmdhd.cal.40183.26MHz'; regufilename : ''),
+    	( chipid : $4330; chipidrev : 4; firmwarefilename: 'fw_bcm40183b2.bin'; configfilename: 'bcmdhd.cal.40183.26MHz'; regufilename : ''),
+    	( chipid : 43362; chipidrev : 0; firmwarefilename: 'fw_bcm40181a0.bin'; configfilename: 'bcmdhd.cal.40181'; regufilename : ''),
+    	( chipid : 43362; chipidrev : 1; firmwarefilename: 'fw_bcm40181a2.bin'; configfilename: 'bcmdhd.cal.40181'; regufilename : ''),
+    	( chipid : 43430; chipidrev : 1; firmwarefilename: 'brcmfmac43430-sdio.bin'; configfilename: 'brcmfmac43430-sdio.txt'; regufilename : ''),
+    	( chipid : $4345; chipidrev : 6; firmwarefilename: 'brcmfmac43455-sdio.bin'; configfilename: 'brcmfmac43455-sdio.txt'; regufilename : 'brcmfmac43455-sdio.clm_blob'),
+    	( chipid : $4345; chipidrev : 9; firmwarefilename: 'brcmfmac43456-sdio.bin'; configfilename: 'brcmfmac43456-sdio.txt'; regufilename : 'brcmfmac43456-sdio.clm_blob')
+    );
+
 
 procedure WIFILog(Level:LongWord;WIFI:PWIFIDevice;const AText:String);
 var
@@ -1481,7 +1509,8 @@ begin
    if (Result = WIFI_STATUS_SUCCESS) then
    begin
      wifiloginfo(nil, 'WIFI Chip ID is 0x'+inttohex(chipid, 4) + ' rev ' + inttostr(chipidrev));
-     WIFI^.chipid := chipid; //WIFI^.chipid := chipid;
+     WIFI^.chipid := chipid;
+     WIFI^.chipidrev := chipidrev;
    end;
 
 
@@ -3001,7 +3030,7 @@ function WIFIDeviceDownloadFirmware(WIFI : PWIFIDevice) : Longword;
 
 var
  rambase : longword;
- firmwarefile : file of byte;
+ FirmwareFile : file of byte;
  firmwarep : pbyte;
  comparebuf : pbyte;
  off : longword;
@@ -3010,6 +3039,10 @@ var
  lastramvalue : longword;
  chunksize : longword;
  bytestransferred : longword;
+ Found : boolean;
+ ConfigFilename : string;
+ FirmwareFilename : string;
+ s : string;
 begin
  try
  WIFI_DEFAULT_LOG_LEVEL:=WIFI_LOG_LEVEL_INFO;
@@ -3031,23 +3064,49 @@ begin
 
   WIFILogInfo(nil, 'Starting firmware load...');
 
-  // open firmware file (hard coded for now) and read into a memory buffer
-  // pi3 firware details...
-  //  { 0x4345, 6, "brcmfmac43455-sdio.bin", "brcmfmac43455-sdio.txt", "brcmfmac43455-sdio.clm_blob" },
-  assignfile(firmwarefile, 'c:\firmware\brcmfmac43455-sdio.bin');
-  reset(firmwarefile);
-  fsize := filesize(firmwarefile);
+  // locate firmware detils based on chip id and revision
+
+  Found := false;
+
+  for i := 1 to FIRWMARE_OPTIONS_COUNT do
+  begin
+    if (firmware[i].chipid = WIFI^.chipid) and (firmware[i].chipidrev = WIFI^.chipidrev) then
+    begin
+      FirmwareFilename := FIRMWARE_FILENAME_ROOT + firmware[i].firmwarefilename;
+      ConfigFilename := FIRMWARE_FILENAME_ROOT + firmware[i].configfilename;
+      Found := true;
+      break;
+    end;
+  end;
+
+  if (not Found) then
+  begin
+    WIFILogError(nil, 'Unable to find a suitable firmware file to load for chip id 0x' + inttohex(WIFI^.chipid, 4) + ' revision 0x' + inttohex(WIFI^.chipidrev, 4));
+    exit;
+  end;
+
+  WIFILogInfo(nil, 'Using ' + FirmwareFilename + ' for firmware.');
+
+  // open file and read entire block into memory. Perhaps ought to do this in
+  // chunks really? If we do, then the verify stuff needs to be done a chunk
+  // at a time as well.
+  assignfile(FirmwareFile, FirmwareFilename);
+  reset(FirmwareFile);
+  fsize := filesize(FirmwareFile);
   getmem(firmwarep, fsize);
-  blockread(firmwarefile, firmwarep^, fsize);
-  closefile(firmwarefile);
+  blockread(FirmwareFile, firmwarep^, fsize);
+  closefile(FirmwareFile);
   wifiloginfo(nil, 'firmware file read into memory buffer successfully');
 
   // transfer firmware over the bus to the chip.
-  // first, grab the reset vector from the first 4 bytes of the firmware and then zero it out in the firmware image.
+  // first, grab the reset vector from the first 4 bytes of the firmware.
 
   move(firmwarep^, WIFI^.resetvec, 4);
-  wifiloginfo(nil, 'Reset vector established as 0x' + inttohex(WIFI^.resetvec, 8));
-  //fillchar(firmwarep^, 4, 0);   not sure if this is needed or not.
+  wifiloginfo(nil, 'Reset vector of 0x' + inttohex(WIFI^.resetvec, 8) + ' copied out of firmware');
+
+  // we haven't done this yet but the reset vector is supposed to be written to the
+  // bottom of RAM, depending on which chip it is (as some load the firmware into address
+  // zero anyway).
 
   // we need to split the calls into multiple chunks so that the addressing does
   // not go beyond the limit of the lower part of the address.
@@ -3093,6 +3152,9 @@ begin
   else
     chunksize := fsize;
 
+ (*
+ We don't need this comparison to always run
+
   wifiloginfo(nil, 'bytes to read are ' + inttostr(fsize));
   bytestransferred := 0;
   while bytestransferred < fsize do
@@ -3100,7 +3162,7 @@ begin
 
     sbmem(WIFI, false, comparebuf+off, chunksize, WIFI^.rambase + off);
     bytestransferred := bytestransferred + chunksize;
-    // wifiloginfo(nil, 'bytes transferred = ' + inttostr(bytestransferred) + ' bytes left = ' +inttostr(fsize-bytestransferred));
+     wifiloginfo(nil, 'bytes transferred = ' + inttostr(bytestransferred) + ' bytes left = ' +inttostr(fsize-bytestransferred));
 
     if (bytestransferred < fsize) then
     begin
@@ -3116,12 +3178,13 @@ begin
     if (pbyte(firmwarep+i)^ <> pbyte(comparebuf+i)^) then
     begin
       wifiloginfo(nil, 'compare failed at byte ' + inttostr(i));
-//      break;
+      break;
     end;
   wifiloginfo(nil, 'block comparison completed');
 
   freemem(firmwarep);
   freemem(comparebuf);
+  *)
 
 
  except
