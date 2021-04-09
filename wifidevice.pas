@@ -16,6 +16,7 @@ const
   SDIO_BUS_SPEED_HS26      = 26000000;
   SDIO_BUS_SPEED_HS52      = 52000000;
   SDIO_BUS_SPEED_DDR       = 52000000;
+  SDIO_BUS_SPEED_HS          = 50000000;
   SDIO_BUS_SPEED_HS200     = 200000000;
 
   WLAN_ON_PIN = GPIO_PIN_41;
@@ -1363,6 +1364,13 @@ begin
    else
      wifilogerror(nil, 'Failed to select the card at rca='+inttohex((rcaraw shr 16) and $ff, 8));
 
+   {Set Clock to high speed}
+   WIFILogInfo(nil,'Set device clock');
+   Result:=WIFIDeviceSetClock(WIFI,SDIO_BUS_SPEED_HS);
+   if Result <> WIFI_STATUS_SUCCESS then
+     wifilogError(nil, 'failed to set the clock speed to default')
+   else
+     wifiloginfo(nil, 'Set device clock succeeded');
 
    wifiloginfo(nil, 'setting bus speed via common control registers');
 
