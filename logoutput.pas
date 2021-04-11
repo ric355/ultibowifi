@@ -9,37 +9,25 @@ uses
 
 var
   ConsoleActivated : boolean = false;
-  WindowHandle : TWindowHandle = 0;
   writelock : tspinhandle;
 
-procedure Log(str : string; isinterrupt : boolean = false);
+procedure Log(str : string);
 
 implementation
 
-procedure Log(str : string; isinterrupt : boolean = false);
+uses
+  Platform;
+
+procedure Log(str : string);
 var
   s : string;
 begin
-  s := DateTimeToStr(Now) +': ' + str;
-
-  if (WindowHandle <> 0) then
-  begin
     try
-      // I'm not even sure if I've interpreted the descriptions in the threads unit
-      // regarding how to make spinlocks interrupt-safe here.
-      if not isinterrupt then
-        SpinLockFIQ(writelock)
-      else
-        spinlock(writelock);
-
-      ConsoleWindowWriteLn(WindowHandle, s);
+      SpinLockIRQ(writelock);
+      LoggingOutput(str);
     finally
-      if not isinterrupt then
-        SpinUnlockFIQ(writelock)
-      else
-        spinunlock(writelock);
+      SpinUnlockIRQ(writelock)
     end;
-  end;
 end;
 
 initialization

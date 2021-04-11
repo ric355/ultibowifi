@@ -31,7 +31,8 @@ uses
   mmc,
   devices,
   wifidevice,
-  Ultibo;
+  Ultibo,
+  Logging;
 
 var
   res : longword;
@@ -230,17 +231,15 @@ end;
 begin
   RegisterSDHCI;
 
-  ConsoleFramebufferDeviceAdd(FramebufferDeviceGetDefault);
-  WindowHandle := ConsoleWindowCreate(ConsoleDeviceGetDefault, CONSOLE_POSITION_FULLSCREEN, True);
+  CONSOLE_LOGGING_POSITION := CONSOLE_POSITION_FULLSCREEN;
+  LoggingConsoleDeviceAdd(ConsoleDeviceGetDefault);
+  LoggingDeviceSetDefault(LoggingDeviceFindByType(LOGGING_TYPE_CONSOLE));
+  LoggingOutput('Application Started');
 
   LoggingOutputExHandler:= @myloggingoutputhandler;
 
 
-  MMC_DEFAULT_LOG_LEVEL := MMC_LOG_LEVEL_DEBUG;
-  mmc_log_enabled := true;
   WIFI_LOG_ENABLED := true;
-
-  ConsoleWindowWriteLn(windowhandle, 'Application started.');
 
   SHELL_UPDATE_LOCAL_PATH:= 'c:\clusterkernel\';
   log('Setting update path to ' + SHELL_UPDATE_LOCAL_PATH);
