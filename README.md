@@ -50,12 +50,13 @@ scan the cores to establish key addresses, scan the ram for similar purpose,
 upload firmware to the device, re-download the firmware for verification
 purposes, and upload the configuration.
 
-The last step it tries to do is re-enable the arm core after uploading the
+The last step it takes is to re-enable the arm core after uploading the
 configuration data. At this point the arm core should boot the firmware and
 it should be possible to enable the HT (High Throughput) clock; this is supposedly
-a sign that the firmware has booted properly. Current status is that the HT clock
-does not become available, so there is a problem with the firmware loading still
-I guess.
+a sign that the firmware has booted properly. This works properly as far as I
+can tell, so the next stage is to go ahead and try and get the device to give
+up its mac address, and to scan for networks.
+
 
 Note that this application changes the update path for the kernel. This is
 specific to my own development platform where I run a dual boot system sometimes
