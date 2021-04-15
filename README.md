@@ -11,7 +11,9 @@ Prerequisites for running this app:
 This is a very rough and ready Ultibo application which creates a wifi device and attempts
 to get the Arasan controller to talk to the Cypress WFI chip.
 It doesn't work fully yet but it goes through the motions of creating the necessary devices,
-initialising the Cypress WIFI chip (that stuff does work) uploading the firmware to it.
+initialising the Cypress WIFI chip, uploading the firmware and configuration to it, and
+restarting the arm core, and sending an IOCTL command to get the device's MAC address.
+
 It may work on a pi zero but I haven't tested it there recently. It does try to select
 the right firmware for the device, using the chip id and revision.
 
@@ -26,17 +28,16 @@ in due course. It prevents the mmc.pas unit from creating the MMC device automat
 as this prevents the WIFI device from working. This is needed because this code
 uses the SDHCI device code in mmc.pas, and that code automatically creates the MMC
 device by default when SDHCIHostStart is called.
-That means the mmc.pas file in this repo need to be compiled into the RTL instead
+That means the mmc.pas file in this repo needs to be compiled into the RTL instead
 of the standard one.
 
 You must also compile the RTL with the define IRQ_DEBUG (set in globaldefines.inc)
-otherwise the logging system will not work and the app will crash at random points.
+otherwise the logging system will not work and the app will crash at random points
+(unless you do not compile with any of the debug logging capabilities in mmc.pas).
 
 Within the project file you will find code that creates the wifi device, and code that
-registers and starts an SDHCI device. The SDHCI device is created there because
-it gives us better control over Arasan controller; it requires various GPIO's to be
-set differently to connect it to the Cypress chip instead of to the MMC device.
-This is another thing that needs a proper solution in due course.
+registers and starts the SDHCI device. Some changes will be needed around this
+stuff for the proper Ultibo Core solution.
 
 The guts of what goes on in this application is in the wifidevice source file.
 It contains various functions for talking to the Cypress device including the
@@ -48,14 +49,15 @@ the broadcom full mac driver, the plan9 driver, and the cypress wifi host driver
 At present the system can identify and select the wifi chip, read the chip id,
 scan the cores to establish key addresses, scan the ram for similar purpose,
 upload firmware to the device, re-download the firmware for verification
-purposes, and upload the configuration.
+purposes, abd upload the configuration.
 
-The last step it takes is to re-enable the arm core after uploading the
-configuration data. At this point the arm core should boot the firmware and
-it should be possible to enable the HT (High Throughput) clock; this is supposedly
-a sign that the firmware has booted properly. This works properly as far as I
-can tell, so the next stage is to go ahead and try and get the device to give
-up its mac address, and to scan for networks.
+The next step it takes is to re-enable the arm core after uploading the
+configuration data. At this point the arm core boots the firmware. This enables
+use to convince the chip to give up it mak address via a poke in the IOCTL !
+
+We are reaching the point where we need to consider introducing a secondary
+thread to handle the function 2 (radio) traffic. At the moment the IOCTL response
+is being polled for in the calling thread but this cannot be final solution.
 
 
 Note that this application changes the update path for the kernel. This is
