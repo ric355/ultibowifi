@@ -160,7 +160,7 @@ begin
     BCM2708SDHCIHost.SDHCI.Address:=Pointer(BCM2835_SDHCI_REGS_BASE);
 
     {Register SDHCI}
-    Status:=SDHCINewHostRegister(@BCM2708SDHCIHost.SDHCI);
+    Status:=SDHCIHostRegister(@BCM2708SDHCIHost.SDHCI);
     if Status <> ERROR_SUCCESS then
      begin
       WIFILogError(nil,'BCM2708: Failed to register new SDHCI host: ' + ErrorToString(Status));
