@@ -48,11 +48,9 @@ the broadcom full mac driver, the plan9 driver, and the cypress wifi host driver
 At present the system can identify and select the wifi chip, read the chip id,
 scan the cores to establish key addresses, scan the ram for similar purpose,
 upload firmware to the device, re-download the firmware for verification
-purposes, abd upload the configuration.
-
-The next step it takes is to re-enable the arm core after uploading the
-configuration data. At this point the arm core boots the firmware. This enables
-use to convince the chip to give up it mak address via a poke in the IOCTL !
+purposes, abd upload the configuration. It then subsequently re-enables the arm
+core in order to get the firmware to boot. This enables us to convince the chip
+to give up its MAC address via a poke in the IOCTL !
 
 We are reaching the point where we need to consider introducing a secondary
 thread to handle the function 2 (radio) traffic. At the moment the IOCTL response
