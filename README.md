@@ -3,10 +3,9 @@ Ultibo WIFI Deivice Driver for onboard Cypress WIFI chips
 
 Prerequisites for running this app:
 1. You must boot from a USB drive
-2. Pi3b+  (unless you change the hard coded filename to the right one for your device)
-3. Must be a device with onboard wifi support (*not* a USB wifi device)
-4. USB drive must contain c:\firmware with the correct firmware file in it
-4. You must have the custom mmc.pas file built in to your RTL
+2. Pi3b+ or Pi zero i.e. Must be a device with onboard wifi support (*not* a USB wifi device)
+3. USB drive must contain c:\firmware with the correct firmware file in it
+4. You must have the custom mmc.pas file that is in this repo built in to your RTL
 
 This is a very rough and ready Ultibo application which creates a wifi device and attempts
 to get the Arasan controller to talk to the Cypress WFI chip.
