@@ -37,6 +37,7 @@ uses
 var
   res : longword;
   SDHCI : PSDHCIHost;
+  WIFI:PWIFIDevice;
 
 
 function SDHCIHostCallback(aSDHCI:PSDHCIHost;Data:Pointer):LongWord;
@@ -61,7 +62,6 @@ end;
 
 procedure CreateWIFIDevice;
 var
-  WIFI:PWIFIDevice;
   Status:LongWord;
 begin
 
@@ -269,13 +269,17 @@ begin
 
     log('devicecreate completed');
 
+    WirelessScan(WIFI);
+
     while (true) do
     begin
     end;
 
+
+
   except
     on e : exception do
-      log('Exception: ' + e.message);
+      log('Exception: ' + e.message + ' at ' + inttohex(longword(exceptaddr), 8));
   end;
 
 end.
