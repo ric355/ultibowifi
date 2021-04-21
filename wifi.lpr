@@ -38,6 +38,8 @@ var
   res : longword;
   SDHCI : PSDHCIHost;
   WIFI:PWIFIDevice;
+  SSID : string;
+  key : string;
 
 
 function SDHCIHostCallback(aSDHCI:PSDHCIHost;Data:Pointer):LongWord;
@@ -257,23 +259,36 @@ begin
   end;
 
   try
-    log('Enumerate SDHCI hosts');
+    // enumerate the sdhci hosts so we can grab it and then start it outside
+    // of the core (temporarily).
+
     SDHCIHostEnumerate(@SDHCIHostCallback, nil);
-    log('Finished enumerating SDHCI hosts');
+
 
     SDHCIHostStart(SDHCI);
 
-    log('Calling device create');
+    LoggingOutput('Calling device create');
 
     CreateWIFIDevice;
 
-    log('devicecreate completed');
+    LoggingOutput('Performing a WIFI network scan');
 
     WirelessScan(WIFI);
+
+    LoggingOutput('Attempting to join a WIFI network');
+
+    SSID := SysUtils.GetEnvironmentVariable('SSID');
+    key := SysUtils.GetEnvironmentVariable('KEY');
+
+    if (SSID = '') or (Key = '') then
+       LoggingOutput('Cant join a network without SSID and Key')
+    else
+      WirelessJoinNetwork(WIFI, SSID, Key);
 
     while (true) do
     begin
     end;
+
 
 
 
