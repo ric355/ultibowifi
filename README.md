@@ -27,16 +27,16 @@ when an IOCTL response has been received, and for consumers to register interest
 in events and receive callbacks when they occur.
 
 There is no IP layer implemented yet so no means to pass any traffic. Getting
-close to that point though. A lot of that is part of Ultibo so it's going to about
-getting the relevant glue built to tie it all together.
+close to that point though. A lot of that is part of Ultibo so it's going to
+be about getting the relevant glue built to tie it all together.
 
 Running
 -------
 I have added some pre-built kernels to the repo. There is a kernel7.img and a
 kernel.img. They will run through the initialisation above and scan for networks
-displaying some information about what is found on screen.
+displaying some information on screen about what is found.
 Put the kernel on a USB drive in the usual manner and use it to boot from.
-You *must* use a USB drve; it won't won't via the SD card slot at the moment
+You *must* use a USB drve; it won't work via the SD card slot at the moment
 because we haven't yet migrated the SD support to work via the other SD Host controller
 (since the Arasan is now being used for WIFI).
 
