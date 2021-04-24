@@ -22,10 +22,14 @@ end;
 initialization
   MMC_AUTO_DEVICE_CREATE := False;
   MMC_AUTOSTART := False;
-  BCM2710_REGISTER_SDHCI := False;
   CONSOLE_REGISTER_LOGGING := True;
   CONSOLE_LOGGING_DEFAULT := True;
-  CONSOLE_LOGGING_POSITION := CONSOLE_POSITION_FULLSCREEN;
+  CONSOLE_LOGGING_POSITION := CONSOLE_POSITION_BOTTOM;
+
+  // at the moment we don't want auto init because the USB device where the firmware
+  // is loaded from is not available until after initialisation.
+
+  WIFI_AUTO_INIT := False;
 
 end.
 
