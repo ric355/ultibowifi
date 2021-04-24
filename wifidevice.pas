@@ -4697,13 +4697,14 @@ begin
      it supports WPA2 security
   *)
 
-//  MMC_DEFAULT_LOG_LEVEL:= MMC_LOG_LEVEL_DEBUG;
+ // Set infrastructure mode = 0 (i think)
+ WirelessCommandInt(WIFI, WLC_SET_INFRA, 1);
+
+  WirelessCommandInt(WIFI, WLC_SET_AUTH, WL_AUTH_OPEN_SYSTEM);
 
   // Set Wireless Security Type
-  WirelessCommandInt(WIFI, WLC_SET_WSEC, WHD_SECURITY_WPA2_AES_PSK and $FF);
+  WirelessCommandInt(WIFI, WLC_SET_WSEC, AES_ENABLED); //WHD_SECURITY_WPA2_AES_PSK and $FF);
 
-  // don't know where to get this from at the moment
-  // but we want the first interface I think, so it's going to be either 0 or 1.
   data[0] := 0;  // this is the primary interface
   data[1] := 1;  // wpa security on
   WirelessSetVar(WIFI, 'bsscfg:sup_wpa', @data[0], sizeof(data));
@@ -4714,10 +4715,15 @@ begin
   WirelessSetVar(WIFI, 'bsscfg:sup_wpa2_eapver', @data[0], sizeof(data));
 
   // Send WPA Key
-  // Set the EAPOL key packet timeout value, otherwise unsuccessful supplicant events aren't reported. If the IOVAR is unsupported then continue.
+  // Set the EAPOL key packet timeout value, otherwise unsuccessful supplicant
+  // events aren't reported. If the IOVAR is unsupported then continue.
   data[0] := 0;
   data[1] := DEFAULT_EAPOL_KEY_PACKET_TIMEOUT;
   WirelessSetVar(WIFI, 'bsscfg:sup_wpa_tmo', @data, sizeof(data));
+
+  // Set WPA authentication mode
+  wpa_auth := WPA2_AUTH_PSK;
+  WirelessIOCTLCommand(WIFI, WLC_SET_WPA_AUTH, @wpa_auth, sizeof(wpa_auth), true, @responseval, 4);
 
   fillchar(psk, sizeof(psk), 0);
   move(security_key[1], psk.key[0], length(security_key));
@@ -4729,37 +4735,14 @@ begin
 
   WirelessIOCTLCommand(WIFI, WLC_SET_WSEC_PMK, @psk, sizeof(psk), true, @responseval, 4);
 
-  // Set infrastructure mode = 0 (i think)
-  WirelessCommandInt(WIFI, WLC_SET_INFRA, 0);
-
-  // Set authentication type
- (* if (auth_type == WHD_SECURITY_WEP_SHARED)
-  {
-      auth = WL_AUTH_SHARED_KEY;
-  }
-  else if ( (auth_type == WHD_SECURITY_WPA3_SAE) || (auth_type == WHD_SECURITY_WPA3_WPA2_PSK) )
-  {
-      auth = WL_AUTH_SAE;
-  }
-  else
-  {
-      auth = WL_AUTH_OPEN_SYSTEM;  // looks like it's going to be this one but seems wrong?
-  }*)
-  WirelessCommandInt(WIFI, WLC_SET_AUTH, WL_AUTH_OPEN_SYSTEM);
-
   auth_mfp := 0;
   WirelessSetVar(WIFI, 'mfp', @auth_mfp, 4);
 
-  // Set WPA authentication mode
-  wpa_auth := WPA2_AUTH_PSK;
-  WirelessIOCTLCommand(WIFI, WLC_SET_WPA_AUTH, @wpa_auth, sizeof(wpa_auth), true, @responseval, 4);
-
-
   // Join network
-  fillchar(ext_join_params, sizeof(ext_join_params), 0);
+(*  fillchar(ext_join_params, sizeof(ext_join_params), 0);
 
   ext_join_params.ssid.SSID_len := length(ssid);
-  move(ssid[1], ext_join_params.ssid.SSID[0], length(ssid));
+  move(ssid[1], ext_join_params.ssid.SSID[0], length(ssid));*)
 
   // hard coded to my router for now but will need to be gotten from
   // the scan performed first, ultimately.
@@ -4772,7 +4755,7 @@ begin
   ext_join_params.assoc_params.bssid.octet[2] := $22;
   ext_join_params.assoc_params.bssid.octet[3] := $2c;
   ext_join_params.assoc_params.bssid.octet[4] := $d5;
-  ext_join_params.assoc_params.bssid.octet[5] := $0f;*)
+  ext_join_params.assoc_params.bssid.octet[5] := $0f;
   fillchar(ext_join_params.assoc_params.bssid.octet[0], 6, $ff);
 
   ext_join_params.scan_params.scan_type := 0;
@@ -4780,31 +4763,13 @@ begin
   ext_join_params.scan_params.home_time := -1;
   ext_join_params.scan_params.nprobes := -1;
   ext_join_params.scan_params.passive_time := -1;
-  ext_join_params.assoc_params.bssid_cnt := 0;
-
-  // don't know if we need to do this or not.
-
-  (*
-  if (ap->channel)
-  {
-      ext_join_params->assoc_params.chanspec_num = (uint32_t)1;
-      ext_join_params->assoc_params.chanspec_list[0] =
-          (wl_chanspec_t)htod16( (ap->channel |
-                                  GET_C_VAR(whd_driver, CHANSPEC_BW_20) | GET_C_VAR(whd_driver,
-                                                                                    CHANSPEC_CTL_SB_NONE) ) );
-
-      /* set band properly */
-      wl_band_for_channel = whd_channel_to_wl_band(whd_driver, ap->channel);
-
-      ext_join_params->assoc_params.chanspec_list[0] |= wl_band_for_channel;
-  }
-*)
+  ext_join_params.assoc_params.bssid_cnt := 0;   *)
 
   // finally, try and join the network.
   // temporarily commented out this join method to see if the other one works.
 //  WirelessSetVar(WIFI, 'join', @ext_join_params, sizeof(ext_join_params));
 
-  // this is, if I understand correctly, a simler join.
+  // this is, if I understand correctly, a simpler join.
   fillchar(simplessid, sizeof(simplessid), 0);
   move(ssid[1], simplessid.SSID[0], length(ssid));
   simplessid.SSID_len:=length(ssid);
