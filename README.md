@@ -1,4 +1,4 @@
-Ultibo WIFI Deivice Driver for onboard Cypress WIFI chips
+Ultibo WIFI Device Driver for onboard Cypress WIFI chips
 ----------------------------------------------------------
 
 Prerequisites for building and running this app:
@@ -24,10 +24,10 @@ Latest capabilities (in the approximate order they occur):
 - Full IP traffic is working (although it will fail from time to time)
 
 At the moment I'm debugging the work done to integrate the Ultibo buffer API and
-looking out for all of the complications I haven't taken into proper consideration
-but as a concept it basically works.
+looking out for all of the complications I haven't properly considered but as a
+concept it basically works.
 
-I may changed the architecture a little but not sure yet. At present it uses the
+I may change the architecture a little but not sure yet. At present it uses the
 same thread for both sending and receiving traffic. This is not optimal but it
 may not actually make much difference having a thread for each.
 
