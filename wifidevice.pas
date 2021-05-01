@@ -19,6 +19,8 @@ const
   IOCL_LEN_BYTES = 4;
   ETHERNET_HEADER_BYTES = 14;
 
+  RECEIVE_REQUEST_PACKET_COUNT = 16;
+
   // wifi control commands
   WLC_GET_VAR = 262;
   WLC_SET_VAR = 263;
@@ -1744,11 +1746,11 @@ begin
   end;
 
  // set buffering sizes
- PCYW43455Network(Network)^.ReceiveRequestSize:=16 * sizeof(IOCTL_MSG); // space for 16 reads but I think our thread will only use one each time at present.
+ PCYW43455Network(Network)^.ReceiveRequestSize:=RECEIVE_REQUEST_PACKET_COUNT * sizeof(IOCTL_MSG); // space for 16 reads; actually more than that as a packet can't be as large as the IOCTL msg allocates
  PCYW43455Network(Network)^.TransmitRequestSize:=ETHERNET_MAX_PACKET_SIZE; //+ LAN78XX_TX_OVERHEAD; don't know what overhead we have yet.
- PCYW43455Network(Network)^.ReceiveEntryCount:=40; // increased this to 40 from 4 as we only have one packet per buffer. need to review later
+ PCYW43455Network(Network)^.ReceiveEntryCount:=40;
  PCYW43455Network(Network)^.TransmitEntryCount:=4;
- PCYW43455Network(Network)^.ReceivePacketCount:=16 * IOCTL_MAX_BLKLEN div (ETHERNET_MIN_PACKET_SIZE); // + LAN78XX_RX_OVERHEAD); don't know what overhead we have yet.
+ PCYW43455Network(Network)^.ReceivePacketCount:=RECEIVE_REQUEST_PACKET_COUNT * IOCTL_MAX_BLKLEN div (ETHERNET_MIN_PACKET_SIZE);
  PCYW43455Network(Network)^.TransmitPacketCount:=1;
 
  WIFI^.NetworkP := Network;
@@ -5194,6 +5196,10 @@ procedure JoinCallback(Event : TWIFIEvent; EventRecordP : pwhd_event; RequestIte
 begin
   wifiloginfo(nil, 'wirless join callback: removing an event ' + inttostr(ord(event)) + ' from the list (status='+inttostr(eventrecordp^.whd_event.status)+')');
   RequestItemP^.RegisteredEvents := RequestItemP^.RegisteredEvents - [Event];
+
+  // early termination of the wait.
+  if RequestItemP^.RegisteredEvents = [] then
+    SemaphoreSignal(RequestItemP^.Signal);
 end;
 
 procedure WirelessJoinNetwork(ssid : string; security_key : string; countrycode : string);
@@ -5254,14 +5260,6 @@ var
   responseval : longword;
   auth_mfp : longword;
   wpa_auth : longword;
-  ext_join_params : wl_extjoin_params;
-
-  ints : longword;
-  blockcount, remainder : longword;
-  eventrecordp : pwhd_event;
-  s : string;
-  i : integer;
-  NetworkJoined : boolean = false;
   simplessid : wlc_ssid;
   RequestEntryP : PWIFIRequestItem;
   countrysettings : countryparams;
@@ -5326,36 +5324,6 @@ begin
   auth_mfp := 0;
   WirelessSetVar(WIFI, 'mfp', @auth_mfp, 4);
 
-  // Join network
-(*  fillchar(ext_join_params, sizeof(ext_join_params), 0);
-
-  ext_join_params.ssid.SSID_len := length(ssid);
-  move(ssid[1], ext_join_params.ssid.SSID[0], length(ssid));*)
-
-  // hard coded to my router for now but will need to be gotten from
-  // the scan performed first, ultimately.
-  // also trying $ff as I saw that somewhere, but getting same result for
-  // all at the moment so not sure if it is actually working.
-  // I suspect not!
-
-(*  ext_join_params.assoc_params.bssid.octet[0] := $04;
-  ext_join_params.assoc_params.bssid.octet[1] := $a2;
-  ext_join_params.assoc_params.bssid.octet[2] := $22;
-  ext_join_params.assoc_params.bssid.octet[3] := $2c;
-  ext_join_params.assoc_params.bssid.octet[4] := $d5;
-  ext_join_params.assoc_params.bssid.octet[5] := $0f;
-  fillchar(ext_join_params.assoc_params.bssid.octet[0], 6, $ff);
-
-  ext_join_params.scan_params.scan_type := 0;
-  ext_join_params.scan_params.active_time := -1;
-  ext_join_params.scan_params.home_time := -1;
-  ext_join_params.scan_params.nprobes := -1;
-  ext_join_params.scan_params.passive_time := -1;
-  ext_join_params.assoc_params.bssid_cnt := 0;   *)
-
-  // finally, try and join the network.
-  // temporarily commented out this join method to see if the other one works.
-//  WirelessSetVar(WIFI, 'join', @ext_join_params, sizeof(ext_join_params));
 
   // this is, if I understand correctly, a simpler join.
   fillchar(simplessid, sizeof(simplessid), 0);
@@ -5363,14 +5331,10 @@ begin
   simplessid.SSID_len:=length(ssid);
   WirelessIOCTLCommand(WIFI, WLC_SET_SSID, @simplessid, sizeof(simplessid), true, @responseval, 4);
 
-  // probably need to register a signal for a group of events now (use a set maybe?) and then
-  // that can be matched in ine worker thread and signalled as appropriate. This would be instead
-  // of a request id as we don't have one in this instance. Could be done in the same queue
-  // if we expand the properties.
-
+  // register for join events we are interested in.
   RequestEntryP := WIFIWorkerThread.AddRequest(0, [WLC_E_SET_SSID, WLC_E_LINK, WLC_E_PSK_SUP], @JoinCallback);
 
-  // wait for 5 seconds.
+  // wait for 5 seconds or a completion signal.
   SemaphoreWaitEx(RequestEntryP^.Signal, 5000);
 
   if (RequestEntryP^.RegisteredEvents = []) then
@@ -5456,24 +5420,6 @@ begin
  WirelessSetInt(WIFI, 'roam_off', 1);
  WirelessCommandInt(WIFI, $14, 1); // set infra 1
  WirelessCommandInt(WIFI, 10, 0);  // promiscuous
-
- // set country code
-(* WIFILogDebug(nil, 'Setting country code');
-
- countrysettings.country_ie[1] := 'G';
- countrysettings.country_ie[2] := 'B';
- countrysettings.country_ie[3] := #0;
- countrysettings.country_ie[4] := #0;
- countrysettings.country_code[1] := 'G';
- countrysettings.country_code[2] := 'B';
- countrysettings.country_code[3] := #0;
- countrysettings.country_code[4] := #0;
- countrysettings.revision := -1;
-
-
- WirelessSetVar(WIFI, 'country', @countrysettings, sizeof(countrysettings));
-*)
-
 end;
 
 
@@ -5645,17 +5591,17 @@ var
   EventRecordP : pwhd_event;
   SequenceNumber : word;
   RequestEntryP : PWIFIRequestItem;
-  scanresultp : pwl_escan_result;
-  ssidstr : string;
-  s : string;
   NetworkEntryP : PNetworkEntry;
   Framelength : word;
   PacketP : PNetworkPacket;
   txlen : longword;
   i : integer;
+  BytesLeft : longword;
+  isfinished : boolean;
 
 begin
-  wifiloginfo(nil, 'WIFI Worker thread started.');
+  WIFILogDebug(nil, 'WIFI Worker thread started.');
+
   try
 
   while not terminated do
@@ -5686,6 +5632,7 @@ begin
              // Point our structure that we read data into from SDIO interface to the receive buffer
              ResponseP := NetworkEntryP^.Buffer;
              NetworkEntryP^.Count := 0;
+             BytesLeft := PCYW43455Network(FWIFI^.NetworkP)^.ReceiveRequestSize;
            end;
          end;
 
@@ -5708,7 +5655,8 @@ begin
              // receive more data in between us clearing the flag and attempting to read the
              // available data.
 
-             while (ResponseP^.Len <> 0) do
+             isfinished := false;
+             while (not isfinished) and (ResponseP^.Len <> 0) do
              begin
                if ((responsep^.len + responsep^.notlen) <> $ffff) then
                   WIFILogError(nil, 'IOCTL Header length failure: len='+inttohex(responsep^.len, 8) + ' notlen='+inttohex(responsep^.notlen, 8));
@@ -5762,23 +5710,26 @@ begin
                       end;
                    1: begin
                         EventRecordP := pwhd_event(pbyte(responsep)+responsep^.cmd.sdpcmheader.hdrlen + 4);
+
                         EventRecordP^.whd_event.status := NetSwapLong(EventRecordP^.whd_event.status);
-                        wifiloginfo(nil, 'event message received ' + inttostr(netswaplong(eventrecordp^.whd_event.event_type))
+                        EventRecordP^.whd_event.event_type := NetSwapLong(EventRecordP^.whd_event.event_type);
+
+                        wifiloginfo(nil, 'event message received ' + inttostr(eventrecordp^.whd_event.event_type)
                             + ' reponselen='+inttostr(responsep^.len) + ' hdrlen='+inttostr(responsep^.cmd.sdpcmheader.hdrlen) + ' sizeof(eventrecord)='+inttostr(sizeof(whd_event)) );
 
                         // see if there are any requests interested in this event, and if so trigger
                         // the callbacks. We only do the first one at the moment; we need a list eventually.
 
-                        RequestEntryP := WIFIWorkerThread.FindRequestByEvent(NetSwapLong(EventRecordP^.whd_event.event_type));
+                        RequestEntryP := WIFIWorkerThread.FindRequestByEvent(EventRecordP^.whd_event.event_type);
                         if (RequestEntryP <> nil) and (RequestEntryP^.Callback <> nil) then
                         begin
-                          RequestEntryP^.Callback(TWIFIEvent(NetSwapLong(EventRecordP^.whd_event.event_type)), EventRecordP, RequestEntryP);
+                          RequestEntryP^.Callback(TWIFIEvent(EventRecordP^.whd_event.event_type), EventRecordP, RequestEntryP);
                         end
                         else
-                          WIFILogDebug(nil, 'there was no interest in event ' + IntToStr(NetSwapLong(EventRecordP^.whd_event.event_type)));
+                          WIFILogDebug(nil, 'there was no interest in event ' + IntToStr(EventRecordP^.whd_event.event_type));
 
                         // note this has already been swapped above.
-                        if (NetSwapLong(EventRecordP^.whd_event.event_type) = 2) then
+                        if (EventRecordP^.whd_event.event_type = 2) then
                           case EventRecordP^.whd_event.status of
                              3 : wifiloginfo(nil, 'Could not find the network that was specified');
                              0 : wifiloginfo(nil, 'the specified network was sucessfully located');
@@ -5790,7 +5741,7 @@ begin
                    2: begin
                       try
                         // we have received a network packet.
-
+                        // add into this network entry's packet buffer.
                         {Update Entry}
                         NetworkEntryP^.Count:=NetworkEntryP^.Count+1;
 
@@ -5804,37 +5755,54 @@ begin
                         Inc(FWIFI^.NetworkP^.ReceiveCount);
                         Inc(FWIFI^.NetworkP^.ReceiveBytes,NetworkEntryP^.Packets[NetworkEntryP^.Count - 1].Length);
 
+                        // update bytesleft from current packet read
+                        bytesleft := bytesleft - ResponseP^.len;
+
+                        // check enough bytes left for a worst case packet for the next read.
+                        if (bytesleft > sizeof(IOCTL_MSG)) then
+                        begin
+                          ResponseP := PIOCTL_MSG(PByte(ResponseP)+ResponseP^.Len);
+                        end
+                        else
+                        begin
+                          // not enough bytes so drop out of loop to give time for processing.
+                          isfinished := true;
+                          break;
+                        end;
+
                         except
                           on e : exception do
                             wifiloginfo(nil, 'exception ' + e.message + ' at ' + inttohex(longword(exceptaddr), 8));
                         end;
                       end;
                  else
-                   wifiloginfo(nil,'dont know what this one is 0x'+inttohex(responseP^.cmd.sdpcmheader.chan and $f, 2));
+                   wifiloginfo(nil,'WIFIWorker: Unrecognised channel message received channel='+inttohex(responseP^.cmd.sdpcmheader.chan and $f, 2));
                  end
                end
                else
                  if (ResponseP^.Len > 0) then
-                   WIFILogError(nil, 'could not read a large message into an undersized buffer (len='+inttostr(responsep^.len)+')');
-
-               // we need to check for rx buffer overflow here before attempting to read into it.
+                   WIFILogError(nil, 'WIFIWorkern: Could not read a large message into an undersized buffer (len='+inttostr(responsep^.len)+')');
 
                // read next sdpcm header (may not be one present in which case everything will be zero including length)
-               ResponseP := ResponseP + 1;  // move the pointer by 1 "size of structure"
-               if SDIOWIFIDeviceReadWriteExtended(FWIFI, sdioRead, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, ResponseP, 0, SDPCM_HEADER_SIZE,21) <> WIFI_STATUS_SUCCESS then
+               if (not isFinished) and (SDIOWIFIDeviceReadWriteExtended(FWIFI, sdioRead, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, ResponseP, 0, SDPCM_HEADER_SIZE,21) <> WIFI_STATUS_SUCCESS) then
                begin
-                 wifilogerror(nil, 'Error trying to read SDPCM header');
+                 wifilogerror(nil, 'Error trying to read SDPCM header (repeat)');
                  exit;
                end;
              end;
            end;
+
          end;
 
+        // if we put something into the receive buffer, pass it on the network layer via the receive queue.
         if (NetworkEntryP <> nil) then
         begin
           if (NetworkEntryP^.Count > 0) then
           begin
-            FWIFI^.NetworkP^.ReceiveQueue.Entries[(FWIFI^.NetworkP^.ReceiveQueue.Start + FWIFI^.NetworkP^.ReceiveQueue.Count) mod  PCYW43455Network(FWIFI^.NetworkP)^.ReceiveEntryCount]:=NetworkEntryP;
+            FWIFI^.NetworkP^.ReceiveQueue.Entries[(FWIFI^.NetworkP^.ReceiveQueue.Start
+                                  + FWIFI^.NetworkP^.ReceiveQueue.Count)
+                                  mod  PCYW43455Network(FWIFI^.NetworkP)^.ReceiveEntryCount]
+                                    := NetworkEntryP;
             {Update Count}
             Inc(FWIFI^.NetworkP^.ReceiveQueue.Count);
             {Signal Packet Received}
@@ -5863,9 +5831,6 @@ begin
             begin
               PacketP:=@NetworkEntryP^.Packets[i];
 
-              wifiloginfo(nil,'transmit Packet Length = ' + IntToStr(PacketP^.Length) + ' networkentryp^.size='+inttostr(networkentryp^.size)
-                + ' there are ' + inttostr(networkentryp^.Count) + ' packets in the entry. queue count='+inttostr(fwifi^.networkp^.transmitqueue.count));
-
               (*
               write an sdpcm header
               add the length of the sdpcm header to the total length we need to send
@@ -5884,7 +5849,7 @@ begin
               // just having to replicate what is in circle at the moment.
               (PLongword(PacketP^.Buffer)+3)^ := NetSwapLong($20000000);
 
-              // needs thread protection.
+              // needs thread protection?
               if (txseq < 255) then
                 txseq := txseq + 1
               else
