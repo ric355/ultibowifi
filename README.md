@@ -1,4 +1,4 @@
-Ultibo WIFI Deivice Driver for onboard Cypress WIFI chips
+Ultibo WIFI Device Driver for onboard Cypress WIFI chips
 ----------------------------------------------------------
 
 Prerequisites for building and running this app:
@@ -10,7 +10,7 @@ Prerequisites for building and running this app:
 This is a very rough and ready Ultibo application which creates a wifi device and attempts
 to get the Arasan controller to talk to the Cypress WFI chip.
 
-Latest capabilities:
+Latest capabilities (in the approximate order they occur):
 - initialise Arasan controller for wifi (diconnects eMMC)
 - initialise cypress chip via SDIO
 - scan cores and ram to establish key addresses
@@ -18,37 +18,43 @@ Latest capabilities:
 - Load configuration to cypress chip
 - Load regulatory blob to cypress chip
 - Set the country code and other basic settings
-- Scan for wireless networks
+- Scan for wireless networks (optional)
 - Join a network
+- Get an IP address via DHCP
+- Full IP traffic is working (although it will fail from time to time)
 
-Last change was to introduce a worker thread which will handle all of the network
-traffic. It probably needs a bit of work yet but it supports the means to signal
-when an IOCTL response has been received, and for consumers to register interest
-in events and receive callbacks when they occur.
+At the moment I'm debugging the work done to integrate the Ultibo buffer API and
+looking out for all of the complications I haven't properly considered but as a
+concept it basically works.
 
-There is no IP layer implemented yet so no means to pass any traffic. Getting
-close to that point though. A lot of that is part of Ultibo so it's going to
-be about getting the relevant glue built to tie it all together.
+I may change the architecture a little but not sure yet. At present it uses the
+same thread for both sending and receiving traffic. This is not optimal but it
+may not actually make much difference having a thread for each.
+
 
 Running
 -------
-I have added some pre-built kernels to the repo. There is a kernel7.img and a
-kernel.img. They will run through the initialisation above and scan for networks
-displaying some information on screen about what is found.
+I have added some pre-built kernels to the repo. There is a kernel7.img (Pi3) and a
+kernel.img (Pi Zero). They will run through the initialisation above, scan for networks
+displaying some information on screen about what is found, and ultimately join the
+network you specify in the cmdline.txt file. You should see an IP address in the
+top console window once you are connected.
+
 Put the kernel on a USB drive in the usual manner and use it to boot from.
 You *must* use a USB drve; it won't work via the SD card slot at the moment
 because we haven't yet migrated the SD support to work via the other SD Host controller
-(since the Arasan is now being used for WIFI).
+(since the Arasan, normally used for SD, is now being used for WIFI).
 
 You will need to place the firmware folder into c:\ so it shows as c:\firmware
 on the usb drive as well.
 
-Finally, if you want to 'join' a network (not that it means much at present) then
-you must alter cmdline.txt to add SSID=<ssid name> and KEY=<passphrase>
-The software will execute commands to join the network but as no traffic can
-pass yet there is no way of knowing it was successful. That is kinda next on the
-list but there's a bunch of things to be built before we'll be able to test it
-properly.
+Finally, if you want to actually fully log on to a network then
+you must alter cmdline.txt to add the following:
+
+SSID=<ssid name> KEY=<passphrase> COUNTRY=<country code>
+
+You must specify the country as this determines what frequencies the WIFI chip
+will use to communicate with the router.
 
 There is a possibility it won't work on a given pi if the firmware needed is
 not present. The chip id will show what it is looking for. Let me know if there
@@ -56,42 +62,32 @@ is an id that is not supported.
 
 Compiling
 ---------
-In the overrides file, there are three overrides:
+In the overrides file, there are several overrides:
 
-MMC_AUTO_DEVICE_CREATE := False;
-MMC_AUTOSTART := False;
-BCM2710_REGISTER_SDHCI := False;
+    MMC_AUTO_DEVICE_CREATE := False;
+    MMC_AUTOSTART := False;
+    CONSOLE_REGISTER_LOGGING := True;
+    CONSOLE_LOGGING_DEFAULT := True;
+    CONSOLE_LOGGING_POSITION := CONSOLE_POSITION_BOTTOM;
 
-The first of these is a custom setting and is something that will need to be resolved
-in due course. It prevents the mmc.pas unit from creating the MMC device automatically
-as this prevents the WIFI device from working. This is needed because this code
-uses the SDHCI device code in mmc.pas, and that code automatically creates the MMC
-device by default when SDHCIHostStart is called.
-That means the mmc.pas file in this repo needs to be compiled into the RTL instead
-of the standard one.
+    WIFI_AUTO_INIT := False;
 
-You must also compile the RTL with the define IRQ_DEBUG (set in globaldefines.inc)
-otherwise the logging system will not work and the app will crash at random points
-(unless you do not compile with any of the debug logging capabilities in mmc.pas).
+To support these, there are two files in this repo that need to be compiled into
+the RTL;
 
-Within the project file you will find code that creates the wifi device, and code that
-registers and starts the SDHCI device. It won't look like this eventually; it's
-just stuff that has to be done until it is properly integrated into the core.
+    mmc.pas
+    globalconfig.pas
+
+Without these, the softare won't build. The reason they exist is temporary and is
+just because we don't have the necessary changes in the core yet. Final solutions
+may be different to those used here.
 
 The guts of what goes on in this application is in the wifidevice source file.
 It contains various functions for talking to the Cypress device including the
-rather lengthy (and not well understood if I'm honest!) initialisation process.
+rather lengthy initialisation process.
 Some of it is similar to what is being done in the mmc unit but a lot of it is
 wifi specific. The initialisation process is derived from various sources including
 the broadcom full mac driver, the plan9 driver, and the cypress wifi host driver.
 
-Note that this application changes the update path for the kernel. This is
-specific to my own development platform where I run a dual boot system sometimes
-(I just didn't want to restructure the existing files on the drive so used the same
-location).
-You will need to change this if you want to do remote kernel updates to the root folder.
-Just delete this line;
-SHELL_UPDATE_LOCAL_PATH:= 'c:\clusterkernel\';
-From the main program.
-Alternatively instead of using 'update get kernel' use 'update get file kernel7.img /c'
-when in the root directory.
+Note previous pushes to this repo changed the kernel path to a place other than
+the root folder. This is not the case anymore; the kernel is back in the root folder.
