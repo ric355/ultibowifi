@@ -5,7 +5,8 @@ Prerequisites for building and running this app:
 1. You must boot from a USB drive
 2. Pi3b+ or Pi zero i.e. Must be a device with onboard wifi support (*not* a USB wifi device)
 3. USB drive must contain c:\firmware with the correct firmware file in it
-4. You must have the custom mmc.pas file that is in this repo built in to your RTL
+4. IF you want to build the software you must have the custom RTL files from this repo
+built into your RTL.
 
 This is a very rough and ready Ultibo application which creates a wifi device and attempts
 to get the Arasan controller to talk to the Cypress WFI chip.
@@ -21,11 +22,18 @@ Latest capabilities (in the approximate order they occur):
 - Scan for wireless networks (optional)
 - Join a network
 - Get an IP address via DHCP
-- Full IP traffic is working (although it will fail from time to time)
+- Full IP traffic is working although not guaranteed totally stable.
 
-At the moment I'm debugging the work done to integrate the Ultibo buffer API and
-looking out for all of the complications I haven't properly considered but as a
-concept it basically works.
+Once up and running you should be able to ping the device and you will also be
+able to telnet to it and use Ultibo's standard set of shell commands. This includes
+the ability to upgrade the kernel if you set up a local web server and point
+your cmdline.txt to it in the usual way (see Ultibo website for details on how
+to do this).
+
+At the moment I'm verifying the work done to integrate the Ultibo buffer API is
+correct, and looking out for all of the complications I haven't properly considered
+but as a concept it basically works. The next stuff to look at is how to handle loss of
+connection and subsequent reconnection.
 
 I may change the architecture a little but not sure yet. At present it uses the
 same thread for both sending and receiving traffic. This is not optimal but it
@@ -51,10 +59,13 @@ on the usb drive as well.
 Finally, if you want to actually fully log on to a network then
 you must alter cmdline.txt to add the following:
 
-SSID=<ssid name> KEY=<passphrase> COUNTRY=<country code>
+    SSID=<ssid name> KEY=<passphrase> COUNTRY=<country code>
 
-You must specify the country as this determines what frequencies the WIFI chip
-will use to communicate with the router.
+and if you want to see a scan for base stations, add
+    WIFISCAN=1
+
+The code does not attempt to connect to open networks and is only enabled for
+WPA2/PSK.
 
 There is a possibility it won't work on a given pi if the firmware needed is
 not present. The chip id will show what it is looking for. Let me know if there

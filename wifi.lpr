@@ -36,7 +36,9 @@ uses
   Logging,
   Network,
   Winsock2,
-  font;
+  font,
+  HTTP,
+  WebStatus;
 
 const
    // copied from font as it's in the implementation section there.
@@ -310,6 +312,7 @@ var
   i : integer;
   j : integer;
   c : integer;
+  HTTPListener : THTTPListener;
 
 
 
@@ -322,6 +325,11 @@ begin
   LoggingDeviceSetDefault(LoggingDeviceFindByType(LOGGING_TYPE_CONSOLE));
 
   LoggingOutputExHandler:= @myloggingoutputhandler;
+
+  HTTPListener:=THTTPListener.Create;
+  HTTPListener.Active:=True;
+  WebStatusRegister(HTTPListener,'','',True);
+
 
 
   WIFI_LOG_ENABLED := true;
@@ -418,11 +426,15 @@ begin
           else
             s := s + ' ';
         end;
-        s := s + '  ';
+//        s := s + ' ';
       end;
       consolewindowwriteln(topwindow, s);
     end;
 
+  while (true) do
+  begin
+    sleep(1000);
+  end;
 
 
   except
