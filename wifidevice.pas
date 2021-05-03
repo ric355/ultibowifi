@@ -5194,7 +5194,7 @@ end;
 
 procedure JoinCallback(Event : TWIFIEvent; EventRecordP : pwhd_event; RequestItemP : PWIFIRequestItem);
 begin
-  wifiloginfo(nil, 'wirless join callback: removing an event ' + inttostr(ord(event)) + ' from the list (status='+inttostr(eventrecordp^.whd_event.status)+')');
+  wifiloginfo(nil, 'wireless join callback: removing an event ' + inttostr(ord(event)) + ' from the list (status='+inttostr(eventrecordp^.whd_event.status)+')');
   RequestItemP^.RegisteredEvents := RequestItemP^.RegisteredEvents - [Event];
 
   // early termination of the wait.
