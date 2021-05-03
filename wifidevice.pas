@@ -5612,7 +5612,8 @@ begin
      istatus := cfgreadl(FWIFI, FWIFI^.sdregs + IntStatus);
      while (istatus and $40 <> $40) and (FWIFI^.NetworkP^.TransmitQueue.Count = 0) do        // safe to check transmit queue here?
      begin
-       MicrosecondDelay(20);
+       // give up timeslice to other threads.
+       Yield;
        istatus := cfgreadl(FWIFI, FWIFI^.sdregs + IntStatus);
      end;
 
