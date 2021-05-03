@@ -1781,7 +1781,14 @@ begin
   begin
    {Initialize Entry}
    Entry^.Size:=PCYW43455Network(Network)^.ReceiveRequestSize;
-   Entry^.Offset:= ETHERNET_HEADER_BYTES + IOCL_LEN_BYTES; // + SDPCM_HEADER_SIZE + CDC_HEADER_SIZE;  // packet data starts after this point.
+
+   // pi zero has a different data offset as the header is 4 bytes longer.
+   // actually a firmware version thing. Other versions may be different too.
+   if (WIFI^.ChipId = $a9a6) then
+     Entry^.Offset:= ETHERNET_HEADER_BYTES + IOCL_LEN_BYTES + 4
+   else
+     Entry^.Offset:= ETHERNET_HEADER_BYTES + IOCL_LEN_BYTES; // + SDPCM_HEADER_SIZE + CDC_HEADER_SIZE;  // packet data starts after this point.
+
    Entry^.Count:=0;
 
    {Allocate Request Buffer}
@@ -5712,7 +5719,17 @@ begin
 
                       end;
                    1: begin
-                        EventRecordP := pwhd_event(pbyte(responsep)+responsep^.cmd.sdpcmheader.hdrlen + 4);
+                        if (ResponseP^.len <= responsep^.cmd.sdpcmheader.hdrlen) then
+                          break;
+
+                        // for the Pi Zero, the header structure is a different size. Don't know what the
+                        // extra 4 bytes represent yet. Note the packet data offset for channel 2 has to be
+                        // adjusted as well but this is done during init.
+
+                        if (FWIFI^.ChipId = $a9a6) then
+                          EventRecordP := pwhd_event(pbyte(responsep)+responsep^.cmd.sdpcmheader.hdrlen + 8)
+                        else
+                          EventRecordP := pwhd_event(pbyte(responsep)+responsep^.cmd.sdpcmheader.hdrlen + 4);
 
                         EventRecordP^.whd_event.status := NetSwapLong(EventRecordP^.whd_event.status);
                         EventRecordP^.whd_event.event_type := NetSwapLong(EventRecordP^.whd_event.event_type);
@@ -5749,7 +5766,13 @@ begin
                         NetworkEntryP^.Count:=NetworkEntryP^.Count+1;
 
                         {Update Packet}
-                        FrameLength := responseP^.len - 4 - ETHERNET_HEADER_BYTES;
+                        // account for different header length in pi zero
+                        if (FWIFI^.ChipId = $a9a6) then
+                          FrameLength := responseP^.len - 8 - ETHERNET_HEADER_BYTES
+                        else
+                          FrameLength := responseP^.len - 4 - ETHERNET_HEADER_BYTES;
+
+//                        wifiloginfo(nil, 'receive packet framelength='+inttostr(framelength));
                         NetworkEntryP^.Packets[NetworkEntryP^.Count - 1].Buffer:=ResponseP;
                         NetworkEntryP^.Packets[NetworkEntryP^.Count - 1].Data:=Pointer(ResponseP) + NetworkEntryP^.Offset;
                         NetworkEntryP^.Packets[NetworkEntryP^.Count - 1].Length:=FrameLength - ETHERNET_CRC_SIZE;
