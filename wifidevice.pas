@@ -5602,6 +5602,8 @@ var
 begin
   WIFILogDebug(nil, 'WIFI Worker thread started.');
 
+  ThreadSetName(ThreadGetCurrent, 'WIFI Worker Thread');
+
   try
 
   while not terminated do
