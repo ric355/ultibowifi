@@ -13,6 +13,8 @@ uses
 const
   CYW45455_NETWORK_DESCRIPTION = 'Cypress 43455 SDIO Wireless Network Adapter';
 
+  CHIP_ID_PI_ZEROW = $a9a6;
+
   IOCTL_MAX_BLKLEN = 2048;
   SDPCM_HEADER_SIZE = 8;
   CDC_HEADER_SIZE = 16;
@@ -1390,7 +1392,7 @@ var
 
 
 procedure sbenable(WIFI : PWIFIDevice); forward;
-procedure WirelessInit(WIFI : PWIFIDevice); forward;
+function WirelessInit(WIFI : PWIFIDevice) : longword; forward;
 procedure WIFILogInfo(WIFI: PWIFIDevice;const AText:String); forward;
 
 
@@ -1789,7 +1791,7 @@ begin
 
    // pi zero has a different data offset as the header is 4 bytes longer.
    // actually a firmware version thing. Other versions may be different too.
-   if (WIFI^.ChipId = $a9a6) then
+   if (WIFI^.ChipId = CHIP_ID_PI_ZEROW) then
      Entry^.Offset:= ETHERNET_HEADER_BYTES + IOCL_LEN_BYTES + 4
    else
      Entry^.Offset:= ETHERNET_HEADER_BYTES + IOCL_LEN_BYTES; // + SDPCM_HEADER_SIZE + CDC_HEADER_SIZE;  // packet data starts after this point.
@@ -2742,21 +2744,6 @@ begin
      WIFILogDebug(nil, 'Successfully enabled interrupts')
    else
      wifilogerror(nil, 'Failed  to enable interrupts');
-
-
-
-   // create the receive thread but it should be created suspended. We'll activate
-   // it once the wifi device has been initialized properly.
-   // this code is temporary - it will need to be moved into the unit initialization
-   // eventually, as will creation of the actual wifi device.
-
-(*   WIFILogInfo(nil, 'Creating WIFI Worker Thread');
-
-   WIFIWorkerThread := TWIFIWorkerThread.Create(true, WIFI);
-   WIFIWorkerThread.Start;
-
-    // again, this code does not belong here and will be moved later.
-   WirelessInit(WIFI);*)
 
    WIFILogInfo(nil, 'End of WIFIDeviceInitialize');
    Result:=WIFI_STATUS_SUCCESS;
@@ -4758,12 +4745,12 @@ begin
   WIFIWorkerThread.DoneWithRequest(WorkerRequestP);
 end;
 
-procedure WirelessGetVar(WIFI : PWIFIDevice; varname : string; ValueP : PByte; len : integer);
+function WirelessGetVar(WIFI : PWIFIDevice; varname : string; ValueP : PByte; len : integer) : longword;
 begin
   // getvar name must have a null on the end of it.
   varname := varname + #0;
 
-  WirelessIOCTLCommand(WIFI, WLC_GET_VAR, @varname[1], length(varname), false, ValueP, len);
+  Result := WirelessIOCTLCommand(WIFI, WLC_GET_VAR, @varname[1], length(varname), false, ValueP, len);
 end;
 
 function WirelessSetVar(WIFI : PWIFIDevice; varname : string; InputValueP : PByte; Inputlen : integer) : longword;
@@ -4772,9 +4759,9 @@ begin
   Result := WirelessIOCTLCommand(WIFI, WLC_SET_VAR, @varname[1], length(varname), true, InputValueP, Inputlen);
 end;
 
-procedure WirelessSetInt(WIFI : PWIFIDevice; varname : string; Value : longword);
+function WirelessSetInt(WIFI : PWIFIDevice; varname : string; Value : longword) : longword;
 begin
-  WirelessSetVar(WIFI, varname, @Value, 4);
+  Result := WirelessSetVar(WIFI, varname, @Value, 4);
 end;
 
 function WirelessCommandInt(WIFI : PWIFIDevice; wlccmd : longword; Value : longword) : longword;
@@ -4784,7 +4771,7 @@ begin
   Result := WirelessIOCTLCommand(WIFI, wlccmd, @Value, 4, true, @response[1], 4);
 end;
 
-procedure WIFIDeviceUploadRegulatoryFile(WIFI : PWIFIDevice);
+function WIFIDeviceUploadRegulatoryFile(WIFI : PWIFIDevice) : longword;
 const
   Reguhdr = 2+2+4+4;
   Regusz = 400;
@@ -4806,6 +4793,8 @@ var
  flag : word;
 
 begin
+  Result := WIFI_STATUS_SUCCESS;
+
   // locate regulatory detils based on chip id and revision
 
   WIFILogInfo(nil, 'Starting to upload regulatory file');
@@ -4823,6 +4812,7 @@ begin
 
   if (not Found) then
   begin
+    Result := WIFI_STATUS_INVALID_PARAMETER;
     WIFILogError(nil, 'Unable to find a suitable firmware file to load for chip id 0x' + inttohex(WIFI^.chipid, 4) + ' revision 0x' + inttohex(WIFI^.chipidrev, 4));
     exit;
   end;
@@ -4837,13 +4827,6 @@ begin
 
   WIFILogInfo(nil, 'Size of regulatory file is ' + inttostr(fsize) + ' bytes');
 
-  // add in header sizes
-(*  fsize := fsize + Reguhdr + 1;
-
-  // dword align to be sure
-  if (fsize mod 4 <> 0) then
-    fsize := ((fsize div 4) + 1) * 4;*)
-
   GetMem(firmwarep, Reguhdr+Regusz+1);
 
   put2(firmwarep+2, Regutyp);
@@ -4851,32 +4834,40 @@ begin
   off := 0;
   flag := Flagclm or Firstpkt;
 
-  while ((flag and Lastpkt) = 0) do
-  begin
-    // read a block of data from the file
-    BlockRead(FirmwareFile, (firmwarep+Reguhdr)^, Regusz, chunksize);
-    if (chunksize <= 0) then
-      break;
-
-    if (chunksize <> Regusz) then
+  try
+    while ((flag and Lastpkt) = 0) do
     begin
-      // fill out end of the block with zeroes.
-      while ((chunksize and 7) > 0) do
+      // read a block of data from the file
+      BlockRead(FirmwareFile, (firmwarep+Reguhdr)^, Regusz, chunksize);
+      if (chunksize <= 0) then
+        break;
+
+      if (chunksize <> Regusz) then
       begin
-        (firmwarep+Reguhdr+chunksize)^ := 0;
-        chunksize += 1;
+        // fill out end of the block with zeroes.
+        while ((chunksize and 7) > 0) do
+        begin
+          (firmwarep+Reguhdr+chunksize)^ := 0;
+          chunksize += 1;
+        end;
+        flag := flag or Lastpkt;
       end;
-      flag := flag or Lastpkt;
+
+      put2(firmwarep+0, flag);
+      put4_2(firmwarep+4, chunksize);
+
+      Result := WirelessSetVar(WIFI, 'clmload', firmwarep, Reguhdr + chunksize);
+      if (Result <> WIFI_STATUS_SUCCESS) then
+        exit;
+
+      off += chunksize;
+      flag := flag and (not Firstpkt);
     end;
 
-    put2(firmwarep+0, flag);
-    put4_2(firmwarep+4, chunksize);
-    WirelessSetVar(WIFI, 'clmload', firmwarep, Reguhdr + chunksize);
-    off += chunksize;
-    flag := flag and (not Firstpkt);
-  end;
 
-  freemem(firmwarep);
+  finally
+   freemem(firmwarep);
+  end;
 
   WIFILogInfo(nil, 'Finished transferring regulatory file');
 end;
@@ -5390,7 +5381,7 @@ begin
   WIFIWorkerThread.DoneWithRequest(RequestEntryP);
 end;
 
-procedure WirelessInit(WIFI : PWIFIDevice);
+function WirelessInit(WIFI : PWIFIDevice) : longword;
 const
   WLC_SET_PM = 86;
 
@@ -5406,6 +5397,7 @@ var
 
 
 begin
+ Result := WIFI_STATUS_INVALID_PARAMETER;
 
  // set up the event mask
  fillchar(eventmask, sizeof(eventmask), 255);           // turn everything on
@@ -5416,7 +5408,9 @@ begin
  DisableEvent(20);	// E_TXFAIL
  DisableEvent(124);	//?
 
- WirelessSetVar(WIFI, 'event_msgs', @eventmask, sizeof(eventmask));
+ Result := WirelessSetVar(WIFI, 'event_msgs', @eventmask, sizeof(eventmask));
+ if Result <> WIFI_STATUS_SUCCESS then
+   exit;
 
  // request the mac address of the wifi device
  fillchar(macaddress[0], sizeof(macaddress), 0);
@@ -5424,7 +5418,10 @@ begin
 // WIFI_DEFAULT_LOG_LEVEL:=WIFI_LOG_LEVEL_DEBUG;
 
  WIFILogInfo(nil, 'Requesting MAC address from the WIFI device...');
- WirelessGetVar(WIFI, 'cur_etheraddr', @macaddress[0], MAC_ADDRESS_LEN);
+ Result := WirelessGetVar(WIFI, 'cur_etheraddr', @macaddress[0], MAC_ADDRESS_LEN);
+ if Result <> WIFI_STATUS_SUCCESS then
+   exit;
+
 
  WIFILogInfo(nil, 'WIFI Current MAC address is '
          + IntToHex(macaddress[0], 2) + ':'
@@ -5435,28 +5432,51 @@ begin
          + IntToHex(macaddress[5], 2));
 
  // upload regulatory file - can't set country and join a network without this.
- WIFIDeviceUploadRegulatoryFile(WIFI);
+ Result := WIFIDeviceUploadRegulatoryFile(WIFI);
+ if Result <> WIFI_STATUS_SUCCESS then
+   exit;
 
  // do some further initialisation once the firmware is booted.
- WirelessSetInt(WIFI, 'assoc_listen', 10);
+ Result := WirelessSetInt(WIFI, 'assoc_listen', 10);
+ if Result <> WIFI_STATUS_SUCCESS then
+   exit;
 
  // powersave
  if (WIFI^.chipid = 43430) or (WIFI^.chipid=$4345) then
-   WirelessCommandInt(WIFI, WLC_SET_PM, 0)  // powersave off
+   Result := WirelessCommandInt(WIFI, WLC_SET_PM, 0)  // powersave off
  else
-   WirelessCommandInt(WIFI, WLC_SET_PM, 2); // powersave fast
+   Result := WirelessCommandInt(WIFI, WLC_SET_PM, 2); // powersave fast
+ if Result <> WIFI_STATUS_SUCCESS then
+   exit;
 
- WirelessSetInt(WIFI, 'bus:txglom', 0);
- WirelessSetInt(WIFI, 'bcn_timeout', 10);
- WirelessSetInt(WIFI, 'assoc_retry_max', 3);
+ Result := WirelessSetInt(WIFI, 'bus:txglom', 0);
+ if Result <> WIFI_STATUS_SUCCESS then
+  exit;
+
+ Result := WirelessSetInt(WIFI, 'bcn_timeout', 10);
+ if Result <> WIFI_STATUS_SUCCESS then
+   exit;
+
+ Result := WirelessSetInt(WIFI, 'assoc_retry_max', 3);
+ if Result <> WIFI_STATUS_SUCCESS then
+   exit;
 
  // get first 50 chars of the firmware version string
- WirelessGetVar(WIFI, 'ver', @version[1], 50);
- WIFILogDebug(nil, 'Firmware version string (partial): ' + buftostr(@version[1], 50));
+ Result := WirelessGetVar(WIFI, 'ver', @version[1], 50);
+ if Result <> WIFI_STATUS_SUCCESS then
+   exit;
 
- WirelessSetInt(WIFI, 'roam_off', 1);
- WirelessCommandInt(WIFI, $14, 1); // set infra 1
- WirelessCommandInt(WIFI, 10, 0);  // promiscuous
+ WIFILogInfo(nil, 'Firmware version string (partial): ' + buftostr(@version[1], 50));
+
+ Result := WirelessSetInt(WIFI, 'roam_off', 1);
+ if Result <> WIFI_STATUS_SUCCESS then
+   exit;
+
+ Result := WirelessCommandInt(WIFI, $14, 1); // set infra 1
+ if Result <> WIFI_STATUS_SUCCESS then
+   exit;
+
+ Result := WirelessCommandInt(WIFI, 10, 0);  // promiscuous
 end;
 
 
@@ -5757,7 +5777,7 @@ begin
                         // extra 4 bytes represent yet. Note the packet data offset for channel 2 has to be
                         // adjusted as well but this is done during init.
 
-                        if (FWIFI^.ChipId = $a9a6) then
+                        if (FWIFI^.ChipId = CHIP_ID_PI_ZEROW) then
                           EventRecordP := pwhd_event(pbyte(responsep)+responsep^.cmd.sdpcmheader.hdrlen + 8)
                         else
                           EventRecordP := pwhd_event(pbyte(responsep)+responsep^.cmd.sdpcmheader.hdrlen + 4);
@@ -5799,7 +5819,7 @@ begin
 
                         {Update Packet}
                         // account for different header length in pi zero
-                        if (FWIFI^.ChipId = $a9a6) then
+                        if (FWIFI^.ChipId = CHIP_ID_PI_ZEROW) then
                           FrameLength := responseP^.len - 8 - ETHERNET_HEADER_BYTES
                         else
                           FrameLength := responseP^.len - 4 - ETHERNET_HEADER_BYTES;
