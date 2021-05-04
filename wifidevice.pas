@@ -1006,9 +1006,9 @@ type
       WLC_E_CCX_ASSOC_ABORT=43,          // CCX association abort
       WLC_E_PROBREQ_MSG=44,              // probe request received
       WLC_E_SCAN_CONFIRM_IND=45,         //
-      WLC_E_PSK_SUP=46,                 // WPA Handshake
+      WLC_E_PSK_SUP=46,                  // WPA Handshake
       WLC_E_COUNTRY_CODE_CHANGED=47,     //
-      WLC_E_EXCEEDED_MEDIUM_TIME=48,    // WMMAC excedded medium time
+      WLC_E_EXCEEDED_MEDIUM_TIME=48,     // WMMAC excedded medium time
       WLC_E_ICV_ERROR=49,                // WEP ICV error occurred
       WLC_E_UNICAST_DECODE_ERROR=50,     // Unsupported unicast encrypted frame
       WLC_E_MULTICAST_DECODE_ERROR=51,   // Unsupported multicast encrypted frame
@@ -1121,6 +1121,56 @@ type
 
   PWIFIRequestItem = ^TWIFIRequestItem;
 
+  wl_chanspec = integer;
+
+  ether_addr = record
+    octet : array[0..ETHER_ADDR_LEN-1] of byte;
+  end;
+
+  pwl_bss_info = ^wl_bss_info;
+  wl_bss_info = record
+      version : longword;                       // version field
+      length : longword;                        // byte length of data in this record, starting at version and including IEs
+      BSSID : ether_addr;                       // Unique 6-byte MAC address
+      beacon_period : word;                     // Interval between two consecutive beacon frames. Units are Kusec
+      capability : word;                        // Capability information
+      SSID_len : byte;                          // SSID length
+      SSID : array[0..31] of char;                // Array to store SSID
+
+      // this is a sub struct in cypress driver.
+          ratecount : longword;                 // Count of rates in this set
+          rates : array[1..15] of byte;         // rates in 500kbps units, higher bit set if basic
+
+      chanspec : wl_chanspec ;                   // Channel specification for basic service set
+      atim_window : word;                       // Announcement traffic indication message window size. Units are Kusec
+      dtim_period : byte;                       // Delivery traffic indication message period
+      RSSI : integer;                           // receive signal strength (in dBm)
+      phy_noise : shortint;                     // noise (in dBm)
+
+      n_cap : byte;                             // BSS is 802.11N Capable
+      nbss_cap : longword;                      // 802.11N BSS Capabilities (based on HT_CAP_*)
+      ctl_ch : byte;                            // 802.11N BSS control channel number
+      reserved32 : array[1..1] of longword;       // Reserved for expansion of BSS properties
+      flags : byte;                             // flags
+      reserved : array[1..3] of byte;           // Reserved for expansion of BSS properties
+      basic_mcs : array[0..MCSSET_LEN-1] of byte; // 802.11N BSS required MCS set
+
+      ie_offset : word;                         // offset at which IEs start, from beginning
+      ie_length : longword;                     // byte length of Information Elements
+      SNR : integer;                            // Average SNR(signal to noise ratio) during frame reception
+  end;
+
+
+  pwl_escan_result = ^wl_escan_result;
+  wl_escan_result = record
+    buflen : longword;
+    version : longword;
+    sync_id : word;
+    bss_count : word;
+    bss_info : array [1..1] of wl_bss_info; // used as pointer to a list.
+  end;
+
+  TWIFIScanUserCallback = procedure(ssid : string; ScanResultP : pwl_escan_result);
   TWirelessEventCallback = procedure(Event : TWIFIEvent; EventRecordP : pwhd_event; RequestItemP : PWIFIRequestItem);
 
   TWIFIRequestItem = record
@@ -1129,6 +1179,7 @@ type
     MsgP : PIOCTL_MSG;
     Signal : TSemaphoreHandle;
     Callback : TWirelessEventCallback;
+    UserDataP : Pointer;
     NextP : PWIFIRequestItem;
   end;
 
@@ -1141,7 +1192,9 @@ type
     FWIFI : PWIFIDevice;
     constructor Create(CreateSuspended : Boolean; AWIFI : PWIFIDevice);
     destructor Destroy; override;
-    function AddRequest(ARequestID : word; InterestedEvents : TWIFIEventSet; Callback : TWirelessEventCallback) : PWIFIRequestItem;
+    function AddRequest(ARequestID : word; InterestedEvents : TWIFIEventSet;
+                                   Callback : TWirelessEventCallback;
+                                   UserDataP : Pointer) : PWIFIRequestItem;
     procedure DoneWithRequest(ARequestItemP : PWIFIRequestItem);
     function FindRequest(ARequestId : word) : PWIFIRequestItem;
     function FindRequestByEvent(AEvent : longword) : PWIFIRequestItem;
@@ -1205,8 +1258,8 @@ function WIFIDeviceSendApplicationCommand(WIFI:PWIFIDevice;Command:PSDIOCommand)
 procedure WIFILogError(WIFI:PWIFIDevice;const AText:String); inline;
 function WIFIDeviceSetIOS(WIFI:PWIFIDevice):LongWord;
 
-procedure WirelessScan;
-procedure WirelessJoinNetwork(ssid : string; security_key : string; countrycode : string);
+procedure WirelessScan(UserCallback : TWIFIScanUserCallback);
+function WirelessJoinNetwork(ssid : string; security_key : string; countrycode : string) : longword;
 procedure WIFIInit;
 
 
@@ -1239,10 +1292,6 @@ const
 
 type
 
-  ether_addr = record
-    octet : array[0..ETHER_ADDR_LEN-1] of byte;
-  end;
-
   wlc_ssid = record
     SSID_len : longword;
     SSID : array[0..31] of byte;
@@ -1273,50 +1322,6 @@ type
     action : word;
     sync_id : word;
     params : wl_scan_params;
-  end;
-
-  wl_chanspec = integer;
-
-  pwl_bss_info = ^wl_bss_info;
-  wl_bss_info = record
-      version : longword;                       // version field
-      length : longword;                        // byte length of data in this record, starting at version and including IEs
-      BSSID : ether_addr;                       // Unique 6-byte MAC address
-      beacon_period : word;                     // Interval between two consecutive beacon frames. Units are Kusec
-      capability : word;                        // Capability information
-      SSID_len : byte;                          // SSID length
-      SSID : array[0..31] of char;                // Array to store SSID
-
-      // this is a sub struct in cypress driver.
-          ratecount : longword;                 // Count of rates in this set
-          rates : array[1..15] of byte;         // rates in 500kbps units, higher bit set if basic
-
-      chanspec : wl_chanspec ;                   // Channel specification for basic service set
-      atim_window : word;                       // Announcement traffic indication message window size. Units are Kusec
-      dtim_period : byte;                       // Delivery traffic indication message period
-      RSSI : integer;                           // receive signal strength (in dBm)
-      phy_noise : shortint;                     // noise (in dBm)
-
-      n_cap : byte;                             // BSS is 802.11N Capable
-      nbss_cap : longword;                      // 802.11N BSS Capabilities (based on HT_CAP_*)
-      ctl_ch : byte;                            // 802.11N BSS control channel number
-      reserved32 : array[1..1] of longword;       // Reserved for expansion of BSS properties
-      flags : byte;                             // flags
-      reserved : array[1..3] of byte;           // Reserved for expansion of BSS properties
-      basic_mcs : array[0..MCSSET_LEN-1] of byte; // 802.11N BSS required MCS set
-
-      ie_offset : word;                         // offset at which IEs start, from beginning
-      ie_length : longword;                     // byte length of Information Elements
-      SNR : integer;                            // Average SNR(signal to noise ratio) during frame reception
-  end;
-
-  pwl_escan_result = ^wl_escan_result;
-  wl_escan_result = record
-    buflen : longword;
-    version : longword;
-    sync_id : word;
-    bss_count : word;
-    bss_info : array [1..1] of wl_bss_info; // used as pointer to a list.
   end;
 
 
@@ -4640,18 +4645,11 @@ var
   HeaderLen : longword;
   TransmitLen : longword;
   Res : longword;
-  i : integer;
-  ints : longword;
-  bytesleft : longword;
-  bufferp : pbyte;
-  finished : boolean = false;
-  databytesreceived : word;
-  eventrecordp : pwhd_event;
-  s : string;
-  temp : longword;
   WorkerRequestP : PWIFIRequestItem;
 
 begin
+  Result := WIFI_STATUS_INVALID_PARAMETER;
+
   if txglom then
     cmdp := @(msgp^.glom_cmd.cmd)
   else
@@ -4719,7 +4717,7 @@ begin
     move(ResponseDataP^, PByte(@(cmdp^.data[0])+InputLen)^, ResponseDataLen);
 
   // Signal to the worker thread that we need a response for this request.
-  WorkerRequestP := WIFIWorkerThread.AddRequest(ioctl_reqid, [], nil);
+  WorkerRequestP := WIFIWorkerThread.AddRequest(ioctl_reqid, [], nil, nil);
 
   // Send IOCTL command.
   // Is it safe to submit multiple ioctl commands and then see the events come through
@@ -4728,6 +4726,7 @@ begin
 
   wifilogdebug(nil, 'sending ' + inttostr(TransmitLen) + ' bytes to the wifi device');
   Res := SDIOWIFIDeviceReadWriteExtended(WIFI, sdioWrite, WLAN_FUNCTION, BAK_BASE_ADDR and $1FFFF{ SB_32BIT_WIN}, false, msgp, 0, TransmitLen, 99);
+  Result := Res;
   if (Res <> WIFI_STATUS_SUCCESS) then
     wifilogerror(nil, 'failed to send cmd53 for ioctl command ' + inttostr(res));
 
@@ -4738,7 +4737,7 @@ begin
   ResponseP := WorkerRequestP^.MsgP;
   if (ResponseP = nil) then
   begin
-    wifilogerror(nil, 'response is nil!!!!!');
+    wifilogerror(nil, 'Nil response item in WirelessIOCTLCommand');
     exit;
   end;
 
@@ -4767,10 +4766,10 @@ begin
   WirelessIOCTLCommand(WIFI, WLC_GET_VAR, @varname[1], length(varname), false, ValueP, len);
 end;
 
-procedure WirelessSetVar(WIFI : PWIFIDevice; varname : string; InputValueP : PByte; Inputlen : integer);
+function WirelessSetVar(WIFI : PWIFIDevice; varname : string; InputValueP : PByte; Inputlen : integer) : longword;
 begin
   varname := varname + #0;
-  WirelessIOCTLCommand(WIFI, WLC_SET_VAR, @varname[1], length(varname), true, InputValueP, Inputlen);
+  Result := WirelessIOCTLCommand(WIFI, WLC_SET_VAR, @varname[1], length(varname), true, InputValueP, Inputlen);
 end;
 
 procedure WirelessSetInt(WIFI : PWIFIDevice; varname : string; Value : longword);
@@ -4778,11 +4777,11 @@ begin
   WirelessSetVar(WIFI, varname, @Value, 4);
 end;
 
-procedure WirelessCommandInt(WIFI : PWIFIDevice; wlccmd : longword; Value : longword);
+function WirelessCommandInt(WIFI : PWIFIDevice; wlccmd : longword; Value : longword) : longword;
 var
   response : byte4;
 begin
-  WirelessIOCTLCommand(WIFI, wlccmd, @Value, 4, true, @response[1], 4);
+  Result := WirelessIOCTLCommand(WIFI, wlccmd, @Value, 4, true, @response[1], 4);
 end;
 
 procedure WIFIDeviceUploadRegulatoryFile(WIFI : PWIFIDevice);
@@ -5074,7 +5073,9 @@ begin
 *)
 end;
 
-procedure WirelessScanCallback(Event : TWIFIEvent; EventRecordP : pwhd_event; RequestItemP : PWIFIRequestItem);
+procedure WirelessScanCallback(Event : TWIFIEvent;
+            EventRecordP : pwhd_event;
+            RequestItemP : PWIFIRequestItem);
 var
   ScanResultP : pwl_escan_result;
   ssidstr, s : string;
@@ -5096,16 +5097,23 @@ begin
                   + inttohex(scanresultp^.bss_info[1].BSSID.octet[3], 2) + ':'
                   + inttohex(scanresultp^.bss_info[1].BSSID.octet[4], 2) + ':'
                   + inttohex(scanresultp^.bss_info[1].BSSID.octet[5], 2);
+
     if (eventrecordp^.whd_event.status = 8) then
       s := s + ' Partial scan result';
     WIFILogInfo(nil, s);
+
+    if (RequestItemP^.UserDataP <> nil) then
+    begin
+      // the user data here is a callback function. See WirelessScan.
+     TWIFIScanUserCallback(RequestItemP^.UserDataP)(ssidstr, ScanResultP);
+    end;
   end
   else
     WIFILogError(nil, 'Wireless Scan: Unexpected event received');
 
 end;
 
-procedure WirelessScan;
+procedure WirelessScan(UserCallback : TWIFIScanUserCallback);
 
 const
   SCAN_PARAMS_LEN = 4+2+2+4+32+6+1+1+4*4+2+2+14*2+32+4;
@@ -5151,18 +5159,9 @@ begin
   WirelessCommandInt(WIFI, $bb, $28); // scan unassoc time
   WirelessCommandInt(WIFI, $102, $82); // passive scan time
 
-
-//  WirelessCommandInt(WIFI, 2, 1); // up (command has no parameters)
-
-
   WIFIDeviceSetBackplaneWindow(WIFI, WIFI^.sdregs);
   cfgwritel(WIFI, WIFI^.sdregs + IntStatus, 0);
 
-
-  // we're not going to fill out the ssid or the mac or the extended parameters
-  // or the channel list
-
-  // and start the scan?
   WirelessCommandInt(WIFI, 49, 0);	// PASSIVE_SCAN */
   WirelessCommandInt(WIFI, 2, 0); // up (command has no parameters)
 
@@ -5188,12 +5187,14 @@ begin
   end;
   scanparams.params.channel_num:=14;
 
+  // add interest in the scan result event so we can get a callback. Add in the user callback too.
+  RequestItemP := WIFIWorkerThread.AddRequest(0, [WLC_E_ESCAN_RESULT], @WirelessScanCallback, UserCallback);
+
+  // it's lights out and away we go!
   WirelessSetVar(WIFI, 'escan', @scanparams, sizeof(scanparams));
 
-
-  // add interest in the scan result event so we can get a callback. Later we may pass this back
-  // to the user part of the application as it's actually no use within this code really.
-  RequestItemP := WIFIWorkerThread.AddRequest(0, [WLC_E_ESCAN_RESULT], @WirelessScanCallback);
+  // wait 10 seconds (this semaphmore won't actually be signalled although it
+  // could be in the future if we were scanning for a specific network name).
   SemaphoreWaitEx(RequestItemP^.Signal, 10000);
 
   WIFIWorkerThread.DoneWithRequest(RequestItemP);
@@ -5209,7 +5210,7 @@ begin
     SemaphoreSignal(RequestItemP^.Signal);
 end;
 
-procedure WirelessJoinNetwork(ssid : string; security_key : string; countrycode : string);
+function WirelessJoinNetwork(ssid : string; security_key : string; countrycode : string) : longword;
 const
   WPA2_SECURITY = $00400000;        // Flag to enable WPA2 Security
   AES_ENABLED   = $0004;            // Flag to enable AES Encryption
@@ -5279,44 +5280,63 @@ begin
      it supports WPA2 security
   *)
 
- // set country code
- WIFILogDebug(nil, 'Setting country code');
+  Result := WIFI_STATUS_INVALID_DATA;
 
- clen := length(countrycode);
- fillchar(countrysettings, 0, sizeof(countrysettings));
- move(countrycode[1], countrysettings.country_ie[1], clen);
- move(countrycode[1], countrysettings.country_code[1], clen);
- countrysettings.revision := -1;
+  // set country code
+  WIFILogDebug(nil, 'Setting country code');
 
- WirelessSetVar(WIFI, 'country', @countrysettings, sizeof(countrysettings));
+  clen := length(countrycode);
+  fillchar(countrysettings, 0, sizeof(countrysettings));
+  move(countrycode[1], countrysettings.country_ie[1], clen);
+  move(countrycode[1], countrysettings.country_code[1], clen);
+  countrysettings.revision := -1;
 
- // Set infrastructure mode = 0 (i think)
- WirelessCommandInt(WIFI, WLC_SET_INFRA, 1);
+  Result := WirelessSetVar(WIFI, 'country', @countrysettings, sizeof(countrysettings));
+  if Result <> WIFI_STATUS_SUCCESS then
+    exit;
 
-  WirelessCommandInt(WIFI, WLC_SET_AUTH, WL_AUTH_OPEN_SYSTEM);
+  // Set infrastructure mode = 0 (i think)
+  Result := WirelessCommandInt(WIFI, WLC_SET_INFRA, 1);
+  if (Result <> WIFI_STATUS_SUCCESS) then
+    exit;
+
+  Result := WirelessCommandInt(WIFI, WLC_SET_AUTH, WL_AUTH_OPEN_SYSTEM);
+  if (Result <> WIFI_STATUS_SUCCESS) then
+    exit;
 
   // Set Wireless Security Type
-  WirelessCommandInt(WIFI, WLC_SET_WSEC, AES_ENABLED); //WHD_SECURITY_WPA2_AES_PSK and $FF);
+  Result := WirelessCommandInt(WIFI, WLC_SET_WSEC, AES_ENABLED); //WHD_SECURITY_WPA2_AES_PSK and $FF);
+  if (Result <> WIFI_STATUS_SUCCESS) then
+    exit;
 
   data[0] := 0;  // this is the primary interface
   data[1] := 1;  // wpa security on
-  WirelessSetVar(WIFI, 'bsscfg:sup_wpa', @data[0], sizeof(data));
+  Result := WirelessSetVar(WIFI, 'bsscfg:sup_wpa', @data[0], sizeof(data));
+  if (Result <> WIFI_STATUS_SUCCESS) then
+    exit;
+
 
   // Set the EAPOL version to whatever the AP is using (-1) */
   data[0] := 0;
   data[1] := longword(-1);
-  WirelessSetVar(WIFI, 'bsscfg:sup_wpa2_eapver', @data[0], sizeof(data));
+  Result := WirelessSetVar(WIFI, 'bsscfg:sup_wpa2_eapver', @data[0], sizeof(data));
+  if (Result <> WIFI_STATUS_SUCCESS) then
+    exit;
 
   // Send WPA Key
   // Set the EAPOL key packet timeout value, otherwise unsuccessful supplicant
   // events aren't reported. If the IOVAR is unsupported then continue.
   data[0] := 0;
   data[1] := DEFAULT_EAPOL_KEY_PACKET_TIMEOUT;
-  WirelessSetVar(WIFI, 'bsscfg:sup_wpa_tmo', @data, sizeof(data));
+  Result := WirelessSetVar(WIFI, 'bsscfg:sup_wpa_tmo', @data, sizeof(data));
+  if (Result <> WIFI_STATUS_SUCCESS) then
+    exit;
 
   // Set WPA authentication mode
   wpa_auth := WPA2_AUTH_PSK;
-  WirelessIOCTLCommand(WIFI, WLC_SET_WPA_AUTH, @wpa_auth, sizeof(wpa_auth), true, @responseval, 4);
+  Result := WirelessIOCTLCommand(WIFI, WLC_SET_WPA_AUTH, @wpa_auth, sizeof(wpa_auth), true, @responseval, 4);
+  if (Result <> WIFI_STATUS_SUCCESS) then
+    exit;
 
   fillchar(psk, sizeof(psk), 0);
   move(security_key[1], psk.key[0], length(security_key));
@@ -5326,20 +5346,27 @@ begin
   // Delay required to allow radio firmware to be ready to receive PMK and avoid intermittent failure
   sleep(1);
 
-  WirelessIOCTLCommand(WIFI, WLC_SET_WSEC_PMK, @psk, sizeof(psk), true, @responseval, 4);
+  Result := WirelessIOCTLCommand(WIFI, WLC_SET_WSEC_PMK, @psk, sizeof(psk), true, @responseval, 4);
+  if (Result <> WIFI_STATUS_SUCCESS) then
+    exit;
 
   auth_mfp := 0;
-  WirelessSetVar(WIFI, 'mfp', @auth_mfp, 4);
+  Result := WirelessSetVar(WIFI, 'mfp', @auth_mfp, 4);
+  if (Result <> WIFI_STATUS_SUCCESS) then
+    exit;
 
 
-  // this is, if I understand correctly, a simpler join.
+  // simple join (no joinparams).
   fillchar(simplessid, sizeof(simplessid), 0);
   move(ssid[1], simplessid.SSID[0], length(ssid));
   simplessid.SSID_len:=length(ssid);
-  WirelessIOCTLCommand(WIFI, WLC_SET_SSID, @simplessid, sizeof(simplessid), true, @responseval, 4);
+  Result := WirelessIOCTLCommand(WIFI, WLC_SET_SSID, @simplessid, sizeof(simplessid), true, @responseval, 4);
+  if (Result <> WIFI_STATUS_SUCCESS) then
+    exit;
+
 
   // register for join events we are interested in.
-  RequestEntryP := WIFIWorkerThread.AddRequest(0, [WLC_E_SET_SSID, WLC_E_LINK, WLC_E_PSK_SUP], @JoinCallback);
+  RequestEntryP := WIFIWorkerThread.AddRequest(0, [WLC_E_SET_SSID, WLC_E_LINK, WLC_E_PSK_SUP], @JoinCallback, nil);
 
   // wait for 5 seconds or a completion signal.
   SemaphoreWaitEx(RequestEntryP^.Signal, 5000);
@@ -5355,7 +5382,10 @@ begin
     NotifierNotify(@WIFI^.NetworkP^.Device,DEVICE_NOTIFICATION_OPEN);
   end
   else
+  begin
+    Result := WIFI_STATUS_INVALID_PARAMETER;
     WIFILogInfo(nil, 'There are still some events not found after the 5 second wait');
+  end;
 
   WIFIWorkerThread.DoneWithRequest(RequestEntryP);
 end;
@@ -5475,7 +5505,7 @@ begin
  end;
 end;
 
-function TWIFIWorkerThread.AddRequest(ARequestID : word; InterestedEvents : TWIFIEventSet; Callback : TWirelessEventCallback) : PWIFIRequestItem;
+function TWIFIWorkerThread.AddRequest(ARequestID : word; InterestedEvents : TWIFIEventSet; Callback : TWirelessEventCallback; UserDataP : Pointer) : PWIFIRequestItem;
 var
   ItemP : PWIFIRequestItem;
 begin
@@ -5492,6 +5522,7 @@ begin
     ItemP^.MsgP := nil;
     ItemP^.RegisteredEvents := InterestedEvents;
     ItemP^.Callback := Callback;
+    ItemP^.UserDataP := UserDataP;
 
     //add to the end of the request list.
     if (FRequestQueueP = nil) then
@@ -5735,7 +5766,8 @@ begin
                         EventRecordP^.whd_event.event_type := NetSwapLong(EventRecordP^.whd_event.event_type);
 
                         wifiloginfo(nil, 'event message received ' + inttostr(eventrecordp^.whd_event.event_type)
-                            + ' reponselen='+inttostr(responsep^.len) + ' hdrlen='+inttostr(responsep^.cmd.sdpcmheader.hdrlen) + ' sizeof(eventrecord)='+inttostr(sizeof(whd_event)) );
+                            + ' status='+inttostr(eventrecordp^.whd_event.status)
+                            + ' reponsep len='+inttostr(responsep^.len) + ' hdrlen='+inttostr(responsep^.cmd.sdpcmheader.hdrlen));
 
                         // see if there are any requests interested in this event, and if so trigger
                         // the callbacks. We only do the first one at the moment; we need a list eventually.
