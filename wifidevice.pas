@@ -83,7 +83,7 @@ const
   WLAN_ON_PIN = GPIO_PIN_41;
   SD_32KHZ_PIN = GPIO_PIN_43;
 
-  {MMC logging}
+  {logging}
   SDHCI_LOG_LEVEL_DEBUG     = LOG_LEVEL_DEBUG;  {SDHCI debugging messages}
   SDHCI_LOG_LEVEL_INFO      = LOG_LEVEL_INFO;   {SDHCI informational messages, such as a device being attached or detached}
   SDHCI_LOG_LEVEL_WARN      = LOG_LEVEL_WARN;   {SDHCI warning messages}
@@ -2141,7 +2141,7 @@ begin
        end;
       NETWORK_CONTROL_SET_MAC:begin
         {Set the MAC for this device}
-        wifiloginfo(nil, 'set mac address to '
+        WIFILogDebug(nil, 'set mac address to '
                          + inttohex(phardwareaddress(argument1)^[0], 2) + ':'
                          + inttohex(phardwareaddress(argument1)^[1], 2) + ':'
                          + inttohex(phardwareaddress(argument1)^[2], 2) + ':'
@@ -3641,7 +3641,7 @@ var
  Timeout:LongWord;
  SDHCI:PSDHCIHost;
  blksizecnt : longword;
- SDIODataP : PSDIOData;
+// SDIODataP : PSDIOData;
 begin
  {}
  Result:=WIFI_STATUS_INVALID_PARAMETER;
@@ -3868,12 +3868,12 @@ begin
 
        // if there is txdata, it needs to be sent just after the command is sent.
        // we are going to force this shortly after here.
-       if (txdata <> nil) then
+(*       if (txdata <> nil) then
        begin
         WIFILogDebug(nil, 'Txddat is not nil - prepare sdio record');
         SDIODataP := Command^.Data;
         Command^.Data := txdata;
-       end;
+       end;*)
 
        try
         {Write Command}
@@ -4085,115 +4085,118 @@ begin
  address := (address and $7fff) or $8000;
 
  try
- // read the core info from the device
-  Result := SDIOWIFIDeviceReadWriteExtended(WIFI, sdioRead, BACKPLANE_FUNCTION, address, true, @buf[0], 8, 64, 2);
- if (Result <> WIFI_STATUS_SUCCESS) then
-   wifilogerror(nil, 'Failed to read using extended call')
- else
-   WIFILogDebug(nil, 'read block success ' + inttostr(i));
-
- // dump the block into the log so we can take a look at it during development
- // this code will be deleted later.
- str := '';
- for i := 1 to 512 do
- begin
-   str := str + ' ' + inttohex(buf[i-1], 2);
-   if i mod 20 = 0 then
+   // read the core info from the device
+   Result := SDIOWIFIDeviceReadWriteExtended(WIFI, sdioRead, BACKPLANE_FUNCTION, address, true, @buf[0], 8, 64, 2);
+   if (Result <> WIFI_STATUS_SUCCESS) then
    begin
-     WIFILogDebug(nil, str);
-     str := '';
+     WIFILogError(nil, 'Failed to read Core information from the SDIO device.');
+     exit;
    end;
- end;
- WIFILogDebug(nil, str);
 
-
- coreid := 0;
- corerev := 0;
-
- i := 0;
-
-  while i < Corescansz do
-  begin
-     case buf[i] and $0f of
- 	  $0F: begin
-                 WIFILogDebug(nil, 'Reached end of descriptor');
-                 break;
-               end;
-          $01:	// core info */
-               begin
- 		  if((buf[i+4] and $F) <> $01) then
- 			  break;
- 		  coreid := buf[i+1] or (buf[i+2] shl 8) and $FFF;
- 		  i += 4;
- 		  corerev := buf[i+3];
-               end;
-          $05:	// address */
-               begin
- 		  addr := (buf[i+1] shl 8) or (buf[i+2] shl 16) or (buf[i+3]<<24);
- 		  addr := addr and (not $FFF);
-  		  case coreid of
-  		    $800:
-                    begin
-                       WIFI^.chipcommon := addr;
-                    end;
-                    ARMcm3,
-  		    ARM7tdmi,
-  		    ARMcr4:
-                    begin
-                       WIFI^.armcore := coreid;
-                       if ((buf[i] and $c0) > 0) then
-                       begin
-                         if (WIFI^.armctl = 0) then
-                           WIFI^.armctl := addr;
-                       end
-                       else
-                       if (WIFI^.armregs = 0) then
-                          WIFI^.armregs := addr;
-                    end;
-
-  		    $80E:
-                    begin
-                       if ((buf[i] and $c0) > 0) then
-                         WIFI^.socramctl := addr
-                       else
-                       if (WIFI^.socramregs = 0) then
-                         WIFI^.socramregs := addr;
-                       WIFI^.socramrev := corerev;
-                    end;
-
-                    $829:
-                    begin
-                       if ((buf[i] and $c0) = 0) then
-                         WIFI^.sdregs := addr;
-                       WIFI^.sdiorev := corerev;
-                    end;
-
-                    $812:
-                    begin
-                       if ((buf[i] and $c0) > 0) then
-                         WIFI^.dllctl := addr;
-                    end;
-                  end;
-               end;
+   // dump the block into the log so we can take a look at it during development
+   // this code will be deleted later.
+   str := '';
+   for i := 1 to 512 do
+   begin
+     str := str + ' ' + inttohex(buf[i-1], 2);
+     if i mod 20 = 0 then
+     begin
+       WIFILogDebug(nil, str);
+       str := '';
      end;
-    i := i + 4;
-  end;
+   end;
+   WIFILogDebug(nil, str);
 
-  wifiloginfo(nil, 'Corescan completed.');
-  WIFILogDebug(nil,'chipcommon=0x' + inttohex(WIFI^.chipcommon,8));
-  WIFILogDebug(nil,'armcore=0x' + inttohex(WIFI^.armcore,8));
-  WIFILogDebug(nil,'armctl=0x' + inttohex(WIFI^.armctl,8));
-  WIFILogDebug(nil,'armregs=0x' + inttohex(WIFI^.armregs,8));
-  WIFILogDebug(nil,'socramctl=0x' + inttohex(WIFI^.socramctl,8));
-  WIFILogDebug(nil,'socramregs=0x' + inttohex(WIFI^.socramregs,8));
-  WIFILogDebug(nil,'socramrev=0x' + inttohex(WIFI^.socramrev,8));
-  WIFILogDebug(nil,'sdregs=0x' + inttohex(WIFI^.sdregs,8));
-  WIFILogDebug(nil,'sdiorev=0x' + inttohex(WIFI^.sdiorev,8));
-  WIFILogDebug(nil,'dllctl=0x' + inttohex(WIFI^.dllctl,8));
+
+   coreid := 0;
+   corerev := 0;
+
+   i := 0;
+
+    while i < Corescansz do
+    begin
+       case buf[i] and $0f of
+ 	    $0F: begin
+                   WIFILogDebug(nil, 'Reached end of descriptor');
+                   break;
+                 end;
+            $01:	// core info */
+                 begin
+ 		    if((buf[i+4] and $F) <> $01) then
+ 			    break;
+ 		    coreid := buf[i+1] or (buf[i+2] shl 8) and $FFF;
+ 		    i += 4;
+ 		    corerev := buf[i+3];
+                 end;
+            $05:	// address */
+                 begin
+ 		    addr := (buf[i+1] shl 8) or (buf[i+2] shl 16) or (buf[i+3]<<24);
+ 		    addr := addr and (not $FFF);
+  		    case coreid of
+  		      $800:
+                      begin
+                         WIFI^.chipcommon := addr;
+                      end;
+                      ARMcm3,
+  		      ARM7tdmi,
+  		      ARMcr4:
+                      begin
+                         WIFI^.armcore := coreid;
+                         if ((buf[i] and $c0) > 0) then
+                         begin
+                           if (WIFI^.armctl = 0) then
+                             WIFI^.armctl := addr;
+                         end
+                         else
+                         if (WIFI^.armregs = 0) then
+                            WIFI^.armregs := addr;
+                      end;
+
+  		      $80E:
+                      begin
+                         if ((buf[i] and $c0) > 0) then
+                           WIFI^.socramctl := addr
+                         else
+                         if (WIFI^.socramregs = 0) then
+                           WIFI^.socramregs := addr;
+                         WIFI^.socramrev := corerev;
+                      end;
+
+                      $829:
+                      begin
+                         if ((buf[i] and $c0) = 0) then
+                           WIFI^.sdregs := addr;
+                         WIFI^.sdiorev := corerev;
+                      end;
+
+                      $812:
+                      begin
+                         if ((buf[i] and $c0) > 0) then
+                           WIFI^.dllctl := addr;
+                      end;
+                    end;
+                 end;
+       end;
+      i := i + 4;
+    end;
+
+    WIFILogInfo(nil, 'Corescan completed.');
+    WIFILogDebug(nil,'chipcommon=0x' + inttohex(WIFI^.chipcommon,8));
+    WIFILogDebug(nil,'armcore=0x' + inttohex(WIFI^.armcore,8));
+    WIFILogDebug(nil,'armctl=0x' + inttohex(WIFI^.armctl,8));
+    WIFILogDebug(nil,'armregs=0x' + inttohex(WIFI^.armregs,8));
+    WIFILogDebug(nil,'socramctl=0x' + inttohex(WIFI^.socramctl,8));
+    WIFILogDebug(nil,'socramregs=0x' + inttohex(WIFI^.socramregs,8));
+    WIFILogDebug(nil,'socramrev=0x' + inttohex(WIFI^.socramrev,8));
+    WIFILogDebug(nil,'sdregs=0x' + inttohex(WIFI^.sdregs,8));
+    WIFILogDebug(nil,'sdiorev=0x' + inttohex(WIFI^.sdiorev,8));
+    WIFILogDebug(nil,'dllctl=0x' + inttohex(WIFI^.dllctl,8));
+
+    Result := WIFI_STATUS_SUCCESS;
 
  except
    on e : exception do
-     wifilogerror(nil, 'exception in corescan: ' + e.message);
+     WIFILogError(nil, 'exception in corescan: ' + e.message);
  end;
 
 end;
@@ -4854,7 +4857,7 @@ begin
   // works out header length by subtracting addresses
   // this might look wrong but cmdp is a pointer to msgp's cmd and msgp is
   // a pointer to ioctl_txmsg. therefore the address are from the same instance.
-  HeaderLen := @cmdp^.data - @ioctl_txmsg;
+  HeaderLen := longword(@cmdp^.data) - longword(@ioctl_txmsg);
   TransmitLen := ((HeaderLen + TransmitDataLen + 3) div 4) * 4;
 
     // Prepare IOCTL command
@@ -4988,7 +4991,6 @@ var
  chunksize : longword;
  Found : boolean;
  RegulatoryFilename : string;
- // s : string;
  flag : word;
 
 begin
@@ -5032,6 +5034,7 @@ begin
   put2(firmwarep+8, 0);
   off := 0;
   flag := Flagclm or Firstpkt;
+  chunksize := 0;
 
   try
     while ((flag and Lastpkt) = 0) do
@@ -5102,165 +5105,6 @@ begin
     message += current_tlv_length;
     message_length -= current_tlv_length;
   end;
-end;
-
-procedure CheckSecurity(WIFI : PWIFIDevice; scanresultp : pwl_escan_result);
-var
-  ie_offset : word;
-  cp : pwhd_tlv8_header;
-  len : longword;
-  bssinfoP : pwl_bss_info;
-  bssinfolength : longword;
-  rsnie : prsn_ie_fixed_portion;
-begin
- // Determine the network security of the scan result
- // this procedure is sort of experimental at the moment.
- // we are going to need to build up some internal structures like
- // the cypress driver does in the end (I suspect)
-
-
-  bssinfoP := @scanresultp^.bss_info[1];
-  ie_offset := bssinfoP^.ie_offset;
-  cp := pwhd_tlv8_header(pbyte(bssinfop) + ie_offset );
-  len := bssinfop^.ie_length;
-  bssinfolength := bssinfop^.length;
-
-  wifiloginfo(nil, 'checksecurity ieoffset='+inttostr(ie_offset) + ' len='+inttostr(len) + ' bssinfolength='+inttostr(bssinfolength));
-
-// record->ie_ptr = (uint8_t *)cp;
-// record->ie_len = len;
-
-  // Validate the length of the IE section
-  if ((ie_offset > bssinfolength) or (len > bssinfolength - ie_offset) ) then
-  begin
-    wifilogerror(nil, 'Invalid IE length');
-    exit;
-  end;
-
-  // Find an RSN IE (Robust-Security-Network Information-Element)
-  rsnie := prsn_ie_fixed_portion(whd_tlv_find_tlv8(pbyte(cp), len, DOT11_IE_ID_RSN));
-(*
-  // Find a WPA IE
-  if (rsnie == NULL)
-  {
-     whd_tlv8_header_t *parse = cp;
-     uint32_t parse_len = len;
-     while ( (wpaie =
-                  (wpa_ie_fixed_portion_t * )whd_parse_tlvs(parse, parse_len, DOT11_IE_ID_VENDOR_SPECIFIC) ) != 0 )
-     {
-         if (whd_is_wpa_ie( (vendor_specific_ie_header_t * )wpaie, &parse, &parse_len ) != WHD_FALSE)
-         {
-             break;
-         }
-     }
- }
-
- temp16 = WHD_READ_16(&bss_info->capability);
-
- /* Check if AP is configured for RSN */
- if ( (rsnie != NULL) &&
-      (rsnie->tlv_header.length >= RSN_IE_MINIMUM_LENGTH + rsnie->pairwise_suite_count * sizeof(uint32_t) ) )
- {
-     uint16_t a;
-     uint32_t group_key_suite;
-     akm_suite_portion_t *akm_suites;
-     DISABLE_COMPILER_WARNING(diag_suppress = Pa039)
-     akm_suites = (akm_suite_portion_t * )&(rsnie->pairwise_suite_list[rsnie->pairwise_suite_count]);
-     ENABLE_COMPILER_WARNING(diag_suppress = Pa039)
-     for (a = 0; a < akm_suites->akm_suite_count; ++a)
-     {
-         uint32_t akm_suite_list_item = ntoh32(akm_suites->akm_suite_list[a]) & 0xFF;
-         if (akm_suite_list_item == (uint32_t)WHD_AKM_PSK)
-         {
-             record->security |= WPA2_SECURITY;
-         }
-         if (akm_suite_list_item == (uint32_t)WHD_AKM_SAE_SHA256)
-         {
-             record->security |= WPA3_SECURITY;
-         }
-         if (akm_suite_list_item == (uint32_t)WHD_AKM_8021X)
-         {
-             record->security |= WPA2_SECURITY;
-             record->security |= ENTERPRISE_ENABLED;
-         }
-         if (akm_suite_list_item == (uint32_t)WHD_AKM_FT_8021X)
-         {
-             record->security |= WPA2_SECURITY;
-             record->security |= FBT_ENABLED;
-             record->security |= ENTERPRISE_ENABLED;
-         }
-         if (akm_suite_list_item == (uint32_t)WHD_AKM_FT_PSK)
-         {
-             record->security |= WPA2_SECURITY;
-             record->security |= FBT_ENABLED;
-         }
-     }
-
-     group_key_suite = ntoh32(rsnie->group_key_suite) & 0xFF;
-     /* Check the RSN contents to see if there are any references to TKIP cipher (2) in the group key or pairwise keys, */
-     /* If so it must be mixed mode. */
-     if (group_key_suite == (uint32_t)WHD_CIPHER_TKIP)
-     {
-         record->security |= TKIP_ENABLED;
-     }
-     if (group_key_suite == (uint32_t)WHD_CIPHER_CCMP_128)
-     {
-         record->security |= AES_ENABLED;
-     }
-
-     for (a = 0; a < rsnie->pairwise_suite_count; ++a)
-     {
-         uint32_t pairwise_suite_list_item = ntoh32(rsnie->pairwise_suite_list[a]) & 0xFF;
-         if (pairwise_suite_list_item == (uint32_t)WHD_CIPHER_TKIP)
-         {
-             record->security |= TKIP_ENABLED;
-         }
-
-         if (pairwise_suite_list_item == (uint32_t)WHD_CIPHER_CCMP_128)
-         {
-             record->security |= AES_ENABLED;
-         }
-     }
- }
- /* Check if AP is configured for WPA */
- else if ( (wpaie != NULL) &&
-           (wpaie->vendor_specific_header.tlv_header.length >=
-            WPA_IE_MINIMUM_LENGTH + wpaie->unicast_suite_count * sizeof(uint32_t) ) )
- {
-     uint16_t a;
-     uint32_t group_key_suite;
-     akm_suite_portion_t *akm_suites;
-
-     record->security = (whd_security_t)WPA_SECURITY;
-     group_key_suite = ntoh32(wpaie->multicast_suite) & 0xFF;
-     if (group_key_suite == (uint32_t)WHD_CIPHER_TKIP)
-     {
-         record->security |= TKIP_ENABLED;
-     }
-     if (group_key_suite == (uint32_t)WHD_CIPHER_CCMP_128)
-     {
-         record->security |= AES_ENABLED;
-     }
-
-     akm_suites = (akm_suite_portion_t * )&(wpaie->unicast_suite_list[wpaie->unicast_suite_count]);
-     for (a = 0; a < akm_suites->akm_suite_count; ++a)
-     {
-         uint32_t akm_suite_list_item = ntoh32(akm_suites->akm_suite_list[a]) & 0xFF;
-         if (akm_suite_list_item == (uint32_t)WHD_AKM_8021X)
-         {
-             record->security |= ENTERPRISE_ENABLED;
-         }
-     }
-
-     for (a = 0; a < wpaie->unicast_suite_count; ++a)
-     {
-         if (wpaie->unicast_suite_list[a][3] == (uint32_t)WHD_CIPHER_CCMP_128)
-         {
-             record->security |= AES_ENABLED;
-         }
-     }
- }
-*)
 end;
 
 procedure WirelessScanCallback(Event : TWIFIEvent;
@@ -5495,7 +5339,7 @@ begin
     exit;
 
   // Set Wireless Security Type
-  Result := WirelessCommandInt(WIFI, WLC_SET_WSEC, AES_ENABLED); //WHD_SECURITY_WPA2_AES_PSK and $FF);
+  Result := WirelessCommandInt(WIFI, WLC_SET_WSEC, AES_ENABLED);
   if (Result <> WIFI_STATUS_SUCCESS) then
     exit;
 
