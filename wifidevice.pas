@@ -5978,6 +5978,11 @@ begin
                 blockcount := txlen div 512;
                 remainder := txlen mod 512;
 
+                //Update Statistics
+                Inc(FWIFI^.NetworkP^.TransmitCount);
+                Inc(FWIFI^.NetworkP^.TransmitBytes, txlen);
+
+                //send data
                 if (blockcount > 0) then
                   if (SDIOWIFIDeviceReadWriteExtended(FWIFI, sdioWrite, WLAN_FUNCTION,
                         BAK_BASE_ADDR and $1ffff, false, PacketP^.Buffer, blockcount, 512)) <> WIFI_STATUS_SUCCESS then
