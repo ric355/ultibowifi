@@ -5857,10 +5857,8 @@ begin
                       try
                         // we have received a network packet.
                         // add into this network entry's packet buffer.
-                        {Update Entry}
                         NetworkEntryP^.Count:=NetworkEntryP^.Count+1;
 
-                        {Update Packet}
                         // account for different header length in pi zero
                         if (FWIFI^.ChipId = CHIP_ID_PI_ZEROW) then
                           FrameLength := responseP^.len - 8 - ETHERNET_HEADER_BYTES
@@ -5951,48 +5949,46 @@ begin
             for i := 0 to NetworkEntryP^.Count - 1 do
             begin
               PacketP:=@NetworkEntryP^.Packets[i];
+              //write an sdpcm header
+              if (PacketP <> nil) then
+              begin
+                PSDPCM_HEADER(PacketP^.Buffer+4)^.chan:=2;
+                PSDPCM_HEADER(PacketP^.Buffer+4)^.nextlen := 0;
+                PSDPCM_HEADER(PacketP^.Buffer+4)^.hdrlen:=sizeof(SDPCM_HEADER)+4;
+                PSDPCM_HEADER(PacketP^.Buffer+4)^.credit := 0;
+                PSDPCM_HEADER(PacketP^.Buffer+4)^.flow := 0;
+                PSDPCM_HEADER(PacketP^.Buffer+4)^.seq:=txseq;
+                PSDPCM_HEADER(PacketP^.Buffer+4)^.reserved := 0;
 
-              (*
-              write an sdpcm header
-              add the length of the sdpcm header to the total length we need to send
-              so that means we need space in the packet buffer to populate i.e. we need that overhead.
+                // we still don't know what this part of the header is.
+                // just having to replicate what is in circle at the moment.
+                (PLongword(PacketP^.Buffer)+3)^ := NetSwapLong($20000000);
 
-              *)
-              PSDPCM_HEADER(PacketP^.Buffer+4)^.chan:=2;
-              PSDPCM_HEADER(PacketP^.Buffer+4)^.nextlen := 0;
-              PSDPCM_HEADER(PacketP^.Buffer+4)^.hdrlen:=sizeof(SDPCM_HEADER)+4;
-              PSDPCM_HEADER(PacketP^.Buffer+4)^.credit := 0;
-              PSDPCM_HEADER(PacketP^.Buffer+4)^.flow := 0;
-              PSDPCM_HEADER(PacketP^.Buffer+4)^.seq:=txseq;
-              PSDPCM_HEADER(PacketP^.Buffer+4)^.reserved := 0;
+                // needs thread protection?
+                if (txseq < 255) then
+                  txseq := txseq + 1
+                else
+                  txseq := 0;
 
-              // we still don't know what this part of the header is.
-              // just having to replicate what is in circle at the moment.
-              (PLongword(PacketP^.Buffer)+3)^ := NetSwapLong($20000000);
+                PIOCTL_MSG(PacketP^.Buffer)^.len := PacketP^.length+sizeof(SDPCM_HEADER)+4+4;  // 4 for end of sdpcm header, 4 for length itself?
+                PIOCTL_MSG(PacketP^.Buffer)^.notlen := not PIOCTL_MSG(PacketP^.Buffer)^.len;
 
-              // needs thread protection?
-              if (txseq < 255) then
-                txseq := txseq + 1
-              else
-                txseq := 0;
+                // calculate transmission sizes
+                txlen := PIOCTL_MSG(PacketP^.Buffer)^.len;
+                blockcount := txlen div 512;
+                remainder := txlen mod 512;
 
-              PIOCTL_MSG(PacketP^.Buffer)^.len := PacketP^.length+sizeof(SDPCM_HEADER)+4+4;  // 4 for end of sdpcm header, 4 for length itself?
-              PIOCTL_MSG(PacketP^.Buffer)^.notlen := not PIOCTL_MSG(PacketP^.Buffer)^.len;
+                if (blockcount > 0) then
+                  if (SDIOWIFIDeviceReadWriteExtended(FWIFI, sdioWrite, WLAN_FUNCTION,
+                        BAK_BASE_ADDR and $1ffff, false, PacketP^.Buffer, blockcount, 512)) <> WIFI_STATUS_SUCCESS then
+                          WIFILogError(nil, 'Failed to transmit packet data');
 
-              // calculate transmission sizes
-              txlen := PIOCTL_MSG(PacketP^.Buffer)^.len;
-              blockcount := txlen div 512;
-              remainder := txlen mod 512;
+                if (remainder > 0) then
+                  if (SDIOWIFIDeviceReadWriteExtended(FWIFI, sdioWrite, WLAN_FUNCTION,
+                        BAK_BASE_ADDR and $1ffff, false, PacketP^.Buffer + blockcount*512, 0, remainder)) <> WIFI_STATUS_SUCCESS then
+                          WIFILogError(nil, 'Failed to transmit packet data');
 
-              if (blockcount > 0) then
-                if (SDIOWIFIDeviceReadWriteExtended(FWIFI, sdioWrite, WLAN_FUNCTION,
-                      BAK_BASE_ADDR and $1ffff, false, PacketP^.Buffer, blockcount, 512)) <> WIFI_STATUS_SUCCESS then
-                        WIFILogError(nil, 'Failed to transmit packet data');
-
-              if (remainder > 0) then
-                if (SDIOWIFIDeviceReadWriteExtended(FWIFI, sdioWrite, WLAN_FUNCTION,
-                      BAK_BASE_ADDR and $1ffff, false, PacketP^.Buffer + blockcount*512, 0, remainder)) <> WIFI_STATUS_SUCCESS then
-                        WIFILogError(nil, 'Failed to transmit packet data');
+              end;
             end;
           end;
 
