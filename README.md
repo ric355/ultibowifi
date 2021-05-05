@@ -5,8 +5,6 @@ Prerequisites for building and running this app:
 1. You must boot from a USB drive
 2. Pi3b+ or Pi zero i.e. Must be a device with onboard wifi support (*not* a USB wifi device)
 3. USB drive must contain c:\firmware with the correct firmware file in it
-4. IF you want to build the software you must have the custom RTL files from this repo
-built into your RTL.
 
 This is a very rough and ready Ultibo application which creates a wifi device and attempts
 to get the Arasan controller to talk to the Cypress WFI chip.
@@ -32,12 +30,8 @@ to do this).
 
 At the moment I'm verifying the work done to integrate the Ultibo buffer API is
 correct, and looking out for all of the complications I haven't properly considered
-but as a concept it basically works. The next stuff to look at is how to handle loss of
+but as a concept it basically works. The next items to look at are how to handle loss of
 connection and subsequent reconnection.
-
-I may change the architecture a little but not sure yet. At present it uses the
-same thread for both sending and receiving traffic. This is not optimal but it
-may not actually make much difference having a thread for each.
 
 
 Running
@@ -64,6 +58,8 @@ you must alter cmdline.txt to add the following:
 and if you want to see a scan for base stations, add
     WIFISCAN=1
 
+Note that the SSID is most likely case sensitive so copy your router's ID exactly.
+
 The code does not attempt to connect to open networks and is only enabled for
 WPA2/PSK.
 
@@ -73,25 +69,13 @@ is an id that is not supported.
 
 Compiling
 ---------
-In the overrides file, there are several overrides:
 
-    MMC_AUTO_DEVICE_CREATE := False;
-    MMC_AUTOSTART := False;
-    CONSOLE_REGISTER_LOGGING := True;
-    CONSOLE_LOGGING_DEFAULT := True;
-    CONSOLE_LOGGING_POSITION := CONSOLE_POSITION_BOTTOM;
+Previous versions of this repo had some custom RTL files. These can now be removed.
+If you previously compiled the RTL with the custom mmc.pas and globalconfig.pas
+files that were in this repo (now deleted) then put the RTL back to standard and
+recompile it to remove those customisations.
 
-    WIFI_AUTO_INIT := False;
-
-To support these, there are two files in this repo that need to be compiled into
-the RTL;
-
-    mmc.pas
-    globalconfig.pas
-
-Without these, the softare won't build. The reason they exist is temporary and is
-just because we don't have the necessary changes in the core yet. Final solutions
-may be different to those used here.
+The application should compile in Ultibo Lazarus if you open the wifi project.
 
 The guts of what goes on in this application is in the wifidevice source file.
 It contains various functions for talking to the Cypress device including the
