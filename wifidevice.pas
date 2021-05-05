@@ -1221,9 +1221,12 @@ type
    TransmitEntryCount:LongWord;                  {Number of entries in the transmit queue}
    ReceivePacketCount:LongWord;                  {Maximum number of packets per receive entry}
    TransmitPacketCount:LongWord;                 {Maximum number of packets per transmit entry}
+   
+   OriginalHostStart:TSDHCIHostStart; 
   end;
 
 
+function WIFIHostStart(SDHCI: PSDHCIHost): LongWord;
 
 function WIFIDeviceCreate:PWIFIDevice;
 function WIFIDeviceCreateEx(Size:LongWord):PWIFIDevice;
@@ -1277,6 +1280,9 @@ var
   // better in due course.
   WIFIIsReady : boolean = false;
 
+var
+  // Auto init variable, move to GlobalConfig or restructure during integration
+  WIFI_AUTO_INIT : Boolean = False; //True; // Don't auto init during development
 
 
 implementation
@@ -1383,7 +1389,7 @@ var
 
   SDIOProtect : TSpinHandle;
 
-  FoundSDHCI : PSDHCIHost = nil; // don't really like this but only way at the moment.
+  //FoundSDHCI : PSDHCIHost = nil; // don't really like this but only way at the moment.
   WIFI:PWIFIDevice;
   macaddress : array[0..MAC_ADDRESS_LEN-1] of byte;
 
@@ -1591,6 +1597,159 @@ begin
     wifiloginfo(nil, 'capabilities part 2 0x'+ inttohex(r^[16], 8));
 end;
 
+{==============================================================================}
+
+function WIFIHostStart(SDHCI: PSDHCIHost): LongWord;
+// Overwridden SDHCIHostStart method for the Arasan SDHCI controller
+var
+  Network: PCYW43455Network;
+  
+  Capabilities:LongWord;
+begin
+  Result := ERROR_INVALID_PARAMETER;
+  
+  // Check SDHCI
+  if SDHCI = nil then
+    Exit;
+   
+  // Check Device Data 
+  if SDHCI^.Device.DeviceData = nil then
+    Exit;
+   
+  // Get Network   
+  Network := PCYW43455Network(SDHCI^.Device.DeviceData);
+  
+  // Call original Host Start
+  if Assigned(Network^.OriginalHostStart) then
+  begin
+    Result := Network^.OriginalHostStart(SDHCI);
+    if Result <> ERROR_SUCCESS then
+      Exit;
+  end;  
+
+  // Perform operations normally done by SDHCIHostStart
+  {Get Capabilities}
+  Capabilities:=SDHCIHostReadLong(SDHCI,SDHCI_CAPABILITIES);
+  {$IFDEF MMC_DEBUG}
+  if MMC_LOG_ENABLED then MMCLogDebug(nil,'SDHCI Capabilities = ' + IntToHex(Capabilities,8));
+  {$ENDIF}
+                          
+  {Check DMA Support}
+  if ((Capabilities and SDHCI_CAN_DO_SDMA) = 0) and ((SDHCI^.Quirks and SDHCI_QUIRK_MISSING_CAPS) = 0) then
+   begin
+    if MMC_LOG_ENABLED then MMCLogError(nil,'SDHCI Host does not support SDMA');
+    
+    SDHCI^.HostStop(SDHCI);
+    Exit;
+   end;
+  
+  {Check Clock Maximum}
+  if SDHCI^.ClockMaximum <> 0 then
+   begin
+    SDHCI^.MaximumFrequency:=SDHCI^.ClockMaximum;
+   end
+  else
+   begin
+    if SDHCIGetVersion(SDHCI) >= SDHCI_SPEC_300 then
+     begin
+      SDHCI^.MaximumFrequency:=((Capabilities and SDHCI_CLOCK_V3_BASE_MASK) shr SDHCI_CLOCK_BASE_SHIFT);
+     end
+    else
+     begin
+      SDHCI^.MaximumFrequency:=((Capabilities and SDHCI_CLOCK_BASE_MASK) shr SDHCI_CLOCK_BASE_SHIFT);
+     end;    
+    SDHCI^.MaximumFrequency:=(SDHCI^.MaximumFrequency * SDHCI_CLOCK_BASE_MULTIPLIER);
+   end;
+  if SDHCI^.MaximumFrequency = 0 then
+   begin
+    if MMC_LOG_ENABLED then MMCLogError(nil,'SDHCI Host does not specify a maximum clock frequency');
+    
+    SDHCI^.HostStop(SDHCI);
+    Exit;
+   end;
+  {$IFDEF MMC_DEBUG}
+  if MMC_LOG_ENABLED then MMCLogDebug(nil,'SDHCI Host maximum frequency = ' + IntToStr(SDHCI^.MaximumFrequency));
+  {$ENDIF}
+   
+  {Check Clock Minimum}
+  if SDHCI^.ClockMinimum <> 0 then
+   begin
+    SDHCI^.MinimumFrequency:=SDHCI^.ClockMinimum;
+   end
+  else
+   begin
+    if SDHCIGetVersion(SDHCI) >= SDHCI_SPEC_300 then
+     begin
+      SDHCI^.MinimumFrequency:=SDHCI^.MaximumFrequency div SDHCI_MAX_CLOCK_DIV_SPEC_300;
+     end
+    else
+     begin
+      SDHCI^.MinimumFrequency:=SDHCI^.MaximumFrequency div SDHCI_MAX_CLOCK_DIV_SPEC_300;
+     end;    
+   end;  
+  {$IFDEF MMC_DEBUG}
+  if MMC_LOG_ENABLED then MMCLogDebug(nil,'SDHCI Host minimum frequency = ' + IntToStr(SDHCI^.MinimumFrequency));
+  {$ENDIF}
+  
+  {Determine Voltages}
+  SDHCI^.Voltages:=0;
+  if (Capabilities and SDHCI_CAN_VDD_330) <> 0 then
+   begin
+    SDHCI^.Voltages:=SDHCI^.Voltages or MMC_VDD_32_33 or MMC_VDD_33_34;
+   end;
+  if (Capabilities and SDHCI_CAN_VDD_300) <> 0 then
+   begin
+    SDHCI^.Voltages:=SDHCI^.Voltages or MMC_VDD_29_30 or MMC_VDD_30_31;
+   end;
+  if (Capabilities and SDHCI_CAN_VDD_180) <> 0 then
+   begin
+    SDHCI^.Voltages:=SDHCI^.Voltages or MMC_VDD_165_195;
+   end;
+  {Check Presets}
+  if SDHCI^.PresetVoltages <> 0 then
+   begin
+    SDHCI^.Voltages:=SDHCI^.Voltages or SDHCI^.PresetVoltages;
+   end;
+  {$IFDEF MMC_DEBUG}
+  if MMC_LOG_ENABLED then MMCLogDebug(nil,'SDHCI Host voltages = ' + IntToHex(SDHCI^.Voltages,8));
+  {$ENDIF}
+   
+  {Determine Capabilities}
+  SDHCI^.Capabilities:=MMC_MODE_HS or MMC_MODE_HS_52MHz or MMC_MODE_4BIT;
+  if SDHCIGetVersion(SDHCI) >= SDHCI_SPEC_300 then
+   begin
+    if (Capabilities and SDHCI_CAN_DO_8BIT) <> 0 then
+     begin
+      SDHCI^.Capabilities:=SDHCI^.Capabilities or MMC_MODE_8BIT;
+     end;
+   end;
+  {Check Presets}
+  if SDHCI^.PresetCapabilities <> 0 then
+   begin
+    SDHCI^.Capabilities:=SDHCI^.Capabilities or SDHCI^.PresetCapabilities;
+   end;
+  {$IFDEF MMC_DEBUG}
+  if MMC_LOG_ENABLED then MMCLogDebug(nil,'SDHCI Host capabilities = ' + IntToHex(SDHCI^.Capabilities,8));
+  {$ENDIF}
+  
+  {Determine Maximum Blocks}
+  SDHCI^.MaximumBlockCount:=MMC_MAX_BLOCK_COUNT;
+  {$IFDEF MMC_DEBUG}
+  if MMC_LOG_ENABLED then MMCLogDebug(nil,'SDHCI Host maximum blocks = ' + IntToStr(SDHCI^.MaximumBlockCount));
+  {$ENDIF}
+  
+  {Host reset done by host start}
+    
+  {Enable Host}
+  SDHCI^.SDHCIState:=SDHCI_STATE_ENABLED;
+   
+  {Notify Enable}
+  NotifierNotify(@SDHCI^.Device,DEVICE_NOTIFICATION_ENABLE);
+    
+  Result:=ERROR_SUCCESS;  
+end;
+
+{==============================================================================}
 
 
 function WIFIDeviceCreate:PWIFIDevice;
@@ -1707,9 +1866,33 @@ begin
 end;
 
 function SDHCIEnum(SDHCI:PSDHCIHost;Data:Pointer):LongWord;
+
+const
+  {$IFDEF RPI}
+  SDHCI_DESCRIPTION = 'BCM2835 Arasan SD Host';
+  {$ENDIF}
+  {$IFDEF RPI3}
+  SDHCI_DESCRIPTION = 'BCM2837 Arasan SD Host';
+  {$ENDIF}
+ 
 begin
-  if FoundSDHCI = nil then
-    FoundSDHCI := SDHCI;
+  Result := ERROR_INVALID_PARAMETER;
+  
+  if SDHCI = nil then
+    Exit;
+    
+  if Data = nil then
+    Exit;
+  
+  Result := ERROR_SUCCESS;
+  
+  if SDHCI^.Device.DeviceDescription = SDHCI_DESCRIPTION then
+  begin
+    PCYW43455Network(Data)^.Network.Device.DeviceData := SDHCI;
+  end;
+  
+  //if FoundSDHCI = nil then
+  //  FoundSDHCI := SDHCI;
 end;
 
 function CYW43455DeviceOpen(Network:PNetworkDevice):LongWord;
@@ -1728,7 +1911,7 @@ begin
 
  WIFILogInfo(nil,'Update WIFI Device');
 
- if (FoundSDHCI = nil) then
+ if Network^.Device.DeviceData = nil then //if (FoundSDHCI = nil) then
  begin
    WIFILogError(nil,'There was no SDHCI Device to initialise the WIFI device with');
    exit;
@@ -1737,7 +1920,7 @@ begin
  WIFI^.Device.DeviceBus:=DEVICE_BUS_SD;
  WIFI^.Device.DeviceType:=WIFI_TYPE_SDIO;
  WIFI^.Device.DeviceFlags:=WIFI_FLAG_NONE;
- WIFI^.Device.DeviceData:= FoundSDHCI;
+ WIFI^.Device.DeviceData:= Network^.Device.DeviceData; // FoundSDHCI;
  WIFI^.Device.DeviceDescription:='Cypress CYW34355 WIFI Device';
 
  WIFI^.DeviceInitialize:=nil;
@@ -1896,7 +2079,7 @@ end;
 
 function CYW43455DeviceControl(Network:PNetworkDevice;Request:Integer;Argument1:PtrUInt;var Argument2:PtrUInt):LongWord;
  var
-  Value:Word;
+  // Value:Word;
   Status:LongWord;
   Device:PSDHCIHost;
 begin
@@ -2257,6 +2440,7 @@ procedure WIFIInit;
 var
   i : integer;
   Network:PCYW43455Network;
+  SDHCI : PSDHCIHost;
 begin
  {Check Initialized}
  if WIFIInitialized then Exit;
@@ -2301,24 +2485,12 @@ begin
    Exit;
   end;
 
- // We need to get an SDHCI Host to assign for the device data
- SDHCIHostEnumerate(@SDHCIEnum, nil);
-
- if (FoundSDHCI <> nil) then
-   SDHCIHostStart(FoundSDHCI)
- else
- begin
-   WIFILogError(nil, 'Could not find an SDHCI host to initialize');
-   exit;
- end;
-
-
  {Update Network}
  {Device}
  Network^.Network.Device.DeviceBus:=DEVICE_BUS_SD;
  Network^.Network.Device.DeviceType:=NETWORK_TYPE_ETHERNET;
  Network^.Network.Device.DeviceFlags:=NETWORK_FLAG_RX_BUFFER or NETWORK_FLAG_TX_BUFFER or NETWORK_FLAG_RX_MULTIPACKET;
- Network^.Network.Device.DeviceData:=FoundSDHCI;
+ Network^.Network.Device.DeviceData:=nil; //FoundSDHCI;
  Network^.Network.Device.DeviceDescription:=CYW45455_NETWORK_DESCRIPTION;
  {Network}
  Network^.Network.NetworkState:=NETWORK_STATE_CLOSED;
@@ -2340,6 +2512,33 @@ begin
    NetworkDeviceDestroy(@Network^.Network);
    Exit;
   end;
+
+ // We need to get an SDHCI Host to assign for the device data
+ SDHCIHostEnumerate(@SDHCIEnum, Network);
+ 
+ SDHCI := PSDHCIHost(Network^.Network.Device.DeviceData);
+ if (SDHCI <> nil) then // if (FoundSDHCI <> nil) then
+ begin
+   // Save Network to Device Data
+   SDHCI^.Device.DeviceData := Network;
+   
+   // Update host flags to include non standard
+   SDHCI^.Device.DeviceFlags := SDHCI^.Device.DeviceFlags or SDHCI_FLAG_NON_STANDARD;
+   
+   // Insert new HostStart method and save original method
+   Network^.OriginalHostStart := SDHCI^.HostStart;
+   SDHCI^.HostStart := @WIFIHostStart;
+   
+   SDHCIHostStart(SDHCI);
+ end  
+ else
+ begin
+   WIFILogError(nil, 'Could not find an SDHCI host to initialize');
+   
+   {Destroy Network}
+   NetworkDeviceDestroy(@Network^.Network);
+   exit;
+ end;
 
 
  // original code below
@@ -3311,7 +3510,7 @@ var
  SDHCI:PSDHCIHost;
  Command:TSDIOCommand;
  SDIOData : TSDIOData;
- TxSDIOData : TSDIOData;
+ // TxSDIOData : TSDIOData;
 begin
  {}
  SpinLock(SDIOProtect);
@@ -4213,7 +4412,7 @@ var
  p, ep, lp, op : pchar;
  c : char;
  skipping : boolean;
- i : integer;
+ // i : integer;
 begin
 
   Result := 0;
@@ -4298,7 +4497,7 @@ end;
 function WIFIDeviceDownloadFirmware(WIFI : PWIFIDevice) : Longword;
 
 var
- rambase : longword;
+ // rambase : longword;
  FirmwareFile : file of byte;
  firmwarep : pbyte;
  comparebuf : pbyte;
@@ -4312,9 +4511,9 @@ var
  Found : boolean;
  ConfigFilename : string;
  FirmwareFilename : string;
- s : string;
+ // s : string;
  bytebuf : array[1..4] of byte;
- flag : word;
+ //flag : word;
 begin
  try
   Result := WIFI_STATUS_INVALID_PARAMETER;
@@ -4789,7 +4988,7 @@ var
  chunksize : longword;
  Found : boolean;
  RegulatoryFilename : string;
- s : string;
+ // s : string;
  flag : word;
 
 begin
@@ -5108,7 +5307,7 @@ procedure WirelessScan(UserCallback : TWIFIScanUserCallback);
 
 const
   SCAN_PARAMS_LEN = 4+2+2+4+32+6+1+1+4*4+2+2+14*2+32+4;
-  oldscanparams : array[0..SCAN_PARAMS_LEN-1] of byte =
+  (*oldscanparams : array[0..SCAN_PARAMS_LEN-1] of byte =
     (
       1,0,0,0,
       1,0,
@@ -5120,7 +5319,7 @@ const
       0,
       $ff,$ff,$ff,$ff,
       $ff,$ff,$ff,$ff,
-      $00,$00,$10,$00,//$ff,$ff,$ff,$ff,
+      $00,$00,$10,$00, // $ff,$ff,$ff,$ff,
       $ff,$ff,$ff,$ff,
       14,0,
       1,0,
@@ -5128,7 +5327,7 @@ const
       $08,$2b,$09,$2b,$0a,$2b,$0b,$2b,$0c,$2b,$0d,$2b,$0e,$2b,
       0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
         0,0,0,0  // I had to add these four zeros.
-  );
+  );*)
 
 var
   scanparams : wl_escan_params;
@@ -5387,7 +5586,7 @@ const
 
 var
   version : array[1..250] of byte;
-  countrysettings : countryparams;
+  // countrysettings : countryparams;
   eventmask : array[0..WL_EVENTING_MASK_LEN] of byte;
 
   procedure DisableEvent(id : integer);

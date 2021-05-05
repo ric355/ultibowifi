@@ -19,8 +19,8 @@ uses
   Platform;
 
 procedure Log(str : string);
-var
-  s : string;
+//var
+//  s : string;
 begin
     try
       SpinLockIRQ(writelock);

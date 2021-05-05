@@ -20,7 +20,9 @@ end;
 
 
 initialization
-  MMC_AUTO_DEVICE_CREATE := False;
+  
+  //MMC_AUTO_DEVICE_CREATE := False; // No longer required, overwride the SDHCI initializatoin instead
+  
   MMC_AUTOSTART := False;
   CONSOLE_REGISTER_LOGGING := True;
   CONSOLE_LOGGING_DEFAULT := True;
@@ -29,7 +31,7 @@ initialization
   // at the moment we don't want auto init because the USB device where the firmware
   // is loaded from is not available until after initialisation.
 
-  WIFI_AUTO_INIT := False;
+  //WIFI_AUTO_INIT := False; // Moved to WifiDevice unit during development
 
 end.
 
