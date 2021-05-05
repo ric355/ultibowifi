@@ -360,10 +360,7 @@ begin
     // There is the option of adding the files as binary blobs to be compiled into
     // the kernel, but that would need to be an option I think really (easily done
     // by choosing to add a specific unit to the uses clause)
-    // We'll need to work out what the best solution is later. For now the overrides.pas
-    // file turns off auto WIFI init so we can call it from here. Note in order to
-    // do that we had to add a new global const, so now that has to be rebuilt
-    // into the RTL.
+    // We'll need to work out what the best solution is later.
 
     WIFIInit;
 
@@ -374,10 +371,6 @@ begin
     // but hopefully we can change it to a proper 'link is up' check once the
     // whole network device integration stuff is complete.
     // Certainly can't stay the way it is.
-
-    // Actually, maybe the join call should not be here at all. It should just
-    // be part of the initialisation. The scan function does need to know if
-    // the link is up though.
 
     // spin until the wifi device is actually ready to do stuff.
 
@@ -450,13 +443,6 @@ begin
       else
         ConsoleWindowWriteLn(topwindow,'Failed to join the WIFI network. Status='+inttostr(status));
     end;
-
-    // spin and do nothing
-    while (true) do
-    begin
-      sleep(1000);
-    end;
-
 
   except
     on e : exception do
