@@ -83,13 +83,6 @@ const
   WLAN_ON_PIN = GPIO_PIN_41;
   SD_32KHZ_PIN = GPIO_PIN_43;
 
-  {logging}
-  SDHCI_LOG_LEVEL_DEBUG     = LOG_LEVEL_DEBUG;  {SDHCI debugging messages}
-  SDHCI_LOG_LEVEL_INFO      = LOG_LEVEL_INFO;   {SDHCI informational messages, such as a device being attached or detached}
-  SDHCI_LOG_LEVEL_WARN      = LOG_LEVEL_WARN;   {SDHCI warning messages}
-  SDHCI_LOG_LEVEL_ERROR     = LOG_LEVEL_ERROR;  {SDHCI error messages}
-  SDHCI_LOG_LEVEL_NONE      = LOG_LEVEL_NONE;   {No SDHCI messages}
-
   {SDIO Device States}
   SDIO_STATE_EJECTED  = 0;
   SDIO_STATE_INSERTED = 1;
@@ -1890,9 +1883,6 @@ begin
   begin
     PCYW43455Network(Data)^.Network.Device.DeviceData := SDHCI;
   end;
-  
-  //if FoundSDHCI = nil then
-  //  FoundSDHCI := SDHCI;
 end;
 
 function CYW43455DeviceOpen(Network:PNetworkDevice):LongWord;
@@ -1900,8 +1890,6 @@ var
  Status : longword;
  Entry:PNetworkEntry;
 begin
-// wifiloginfo(nil, 'call to cypress wifi opendevice');
-
  WIFI:=WIFIDeviceCreate;
  if WIFI = nil then
   begin
@@ -1911,7 +1899,7 @@ begin
 
  WIFILogInfo(nil,'Update WIFI Device');
 
- if Network^.Device.DeviceData = nil then //if (FoundSDHCI = nil) then
+ if Network^.Device.DeviceData = nil then
  begin
    WIFILogError(nil,'There was no SDHCI Device to initialise the WIFI device with');
    exit;
@@ -1920,7 +1908,7 @@ begin
  WIFI^.Device.DeviceBus:=DEVICE_BUS_SD;
  WIFI^.Device.DeviceType:=WIFI_TYPE_SDIO;
  WIFI^.Device.DeviceFlags:=WIFI_FLAG_NONE;
- WIFI^.Device.DeviceData:= Network^.Device.DeviceData; // FoundSDHCI;
+ WIFI^.Device.DeviceData:= Network^.Device.DeviceData;
  WIFI^.Device.DeviceDescription:='Cypress CYW34355 WIFI Device';
 
  WIFI^.DeviceInitialize:=nil;
@@ -2079,7 +2067,6 @@ end;
 
 function CYW43455DeviceControl(Network:PNetworkDevice;Request:Integer;Argument1:PtrUInt;var Argument2:PtrUInt):LongWord;
  var
-  // Value:Word;
   Status:LongWord;
   Device:PSDHCIHost;
 begin
@@ -3510,7 +3497,6 @@ var
  SDHCI:PSDHCIHost;
  Command:TSDIOCommand;
  SDIOData : TSDIOData;
- // TxSDIOData : TSDIOData;
 begin
  {}
  SpinLock(SDIOProtect);
@@ -3641,7 +3627,6 @@ var
  Timeout:LongWord;
  SDHCI:PSDHCIHost;
  blksizecnt : longword;
-// SDIODataP : PSDIOData;
 begin
  {}
  Result:=WIFI_STATUS_INVALID_PARAMETER;
@@ -3839,9 +3824,7 @@ begin
          {Write Block Size}
          if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command SDHCI_BLOCK_SIZE (Value=' + IntToStr(Command^.Data^.BlockSize) + ') makeblocksize='+inttohex(SDHCIMakeBlockSize(SDHCI_DEFAULT_BOUNDARY_ARG,Command^.Data^.BlockSize), 8));
 
-//         SDHCIHostWriteWord(SDHCI,SDHCI_BLOCK_SIZE,SDHCIMakeBlockSize(SDHCI_DEFAULT_BOUNDARY_ARG,Command^.Data^.BlockSize));
-         SDHCIHostWriteWord(SDHCI,SDHCI_BLOCK_SIZE,SDHCIMakeBlockSize(SDHCI_DEFAULT_BOUNDARY_ARG,Command^.Data^.BlockSize)); //Command^.Data^.BlockSize);
-//         WIFILogDebug(nil, 'actually wrote 0x' + inttohex(command^.data^.blocksize, 8) + ' to block size register');
+         SDHCIHostWriteWord(SDHCI,SDHCI_BLOCK_SIZE,SDHCIMakeBlockSize(SDHCI_DEFAULT_BOUNDARY_ARG,Command^.Data^.BlockSize));
 
          {Write Block Count}
          if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command SDHCI_BLOCK_COUNT (Value=' + IntToStr(Command^.Data^.BlockCount) + ')');
@@ -3865,15 +3848,6 @@ begin
        // not be persisted. The only 'easy' solution is to use the mmc command for all.
        // but I don't like that as it is not an mmc command.
        SDHCI^.Command:=PMMCCommand(Command);
-
-       // if there is txdata, it needs to be sent just after the command is sent.
-       // we are going to force this shortly after here.
-(*       if (txdata <> nil) then
-       begin
-        WIFILogDebug(nil, 'Txddat is not nil - prepare sdio record');
-        SDIODataP := Command^.Data;
-        Command^.Data := txdata;
-       end;*)
 
        try
         {Write Command}
@@ -5457,8 +5431,6 @@ begin
 
  // request the mac address of the wifi device
  fillchar(macaddress[0], sizeof(macaddress), 0);
-
-// WIFI_DEFAULT_LOG_LEVEL:=WIFI_LOG_LEVEL_DEBUG;
 
  WIFILogInfo(nil, 'Requesting MAC address from the WIFI device...');
  Result := WirelessGetVar(WIFI, 'cur_etheraddr', @macaddress[0], MAC_ADDRESS_LEN);
