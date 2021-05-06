@@ -1351,7 +1351,7 @@ type
 
 
 var
-  WIFI_DEFAULT_LOG_LEVEL:LongWord = WIFI_LOG_LEVEL_DEBUG; {Minimum level for WIFI messages.  Only messages with level greater than or equal to this will be printed}
+  WIFI_DEFAULT_LOG_LEVEL:LongWord = WIFI_LOG_LEVEL_INFO; {Minimum level for WIFI messages.  Only messages with level greater than or equal to this will be printed}
   WIFIDeviceTableLock:TCriticalSectionHandle = INVALID_HANDLE_VALUE;
 
   WIFIDeviceTable:PWIFIDevice;
@@ -1435,16 +1435,16 @@ begin
   rows := len div 16;
   remainder := len mod 16;
 
-  wifiloginfo(nil, 'hexdump address 0x'+inttohex(longword(p),8) + ' for ' + inttostr(len) + ' bytes');
+  WIFILogInfo(nil, 'hexdump address 0x'+inttohex(longword(p),8) + ' for ' + inttostr(len) + ' bytes');
   for i := 0 to rows-1 do
   begin
-     wifiloginfo(nil, line(16));
+     WIFILogInfo(nil, line(16));
   end;
 
   if (remainder > 0) then
   begin
     i:= rows;
-    wifiloginfo(nil, line(remainder));
+    WIFILogInfo(nil, line(remainder));
   end;
 end;
 
@@ -1480,7 +1480,7 @@ begin
 
  except
    on e : exception do
-     wifiloginfo(nil, 'exception in buftostr ' + e.message + ' i='+inttostr(i));
+     WIFILogInfo(nil, 'exception in buftostr ' + e.message + ' i='+inttostr(i));
  end;
 end;
 
@@ -1557,37 +1557,37 @@ begin
     rb := arrayptrbytes(SDHCI^.address);
 
 
-    wifiloginfo(nil, '32 bit block count 0x'+ inttohex(r^[0], 8));
-    wifiloginfo(nil, 'blocksize and count 0x'+ inttohex(r^[1], 8));
-    wifiloginfo(nil, 'arg 0x%x'+ inttohex(r^[2], 8));
-    wifiloginfo(nil, 'transfermode and command 0x'+ inttohex(r^[3], 8));
-    wifiloginfo(nil, 'response0 0x'+ inttohex(r^[4], 8));
-    wifiloginfo(nil, 'response1 0x'+ inttohex(r^[5], 8));
-    wifiloginfo(nil, 'response2 0x'+ inttohex(r^[6], 8));
-    wifiloginfo(nil, 'response3 0x'+ inttohex(r^[7], 8));
+    WIFILogInfo(nil, '32 bit block count 0x'+ inttohex(r^[0], 8));
+    WIFILogInfo(nil, 'blocksize and count 0x'+ inttohex(r^[1], 8));
+    WIFILogInfo(nil, 'arg 0x%x'+ inttohex(r^[2], 8));
+    WIFILogInfo(nil, 'transfermode and command 0x'+ inttohex(r^[3], 8));
+    WIFILogInfo(nil, 'response0 0x'+ inttohex(r^[4], 8));
+    WIFILogInfo(nil, 'response1 0x'+ inttohex(r^[5], 8));
+    WIFILogInfo(nil, 'response2 0x'+ inttohex(r^[6], 8));
+    WIFILogInfo(nil, 'response3 0x'+ inttohex(r^[7], 8));
 
-    wifiloginfo(nil, 'present state 0x'+ inttohex(r^[9], 8));
-    wifiloginfo(nil, 'host ctrl1, pwr ctrl, block gap ctrl, wakeup ctrl0x'+ inttohex(r^[10], 8));
-
-
-    wifiloginfo(nil, 'host ctrl1 0x' +inttohex(rb^[SDHCI_HOST_CONTROL], 2));
-    wifiloginfo(nil, 'pwr ctrl 0x' +inttohex(rb^[SDHCI_POWER_CONTROL], 2));
-    wifiloginfo(nil, 'block gap ctrl 0x' +inttohex(rb^[SDHCI_BLOCK_GAP_CONTROL], 2));
-    wifiloginfo(nil, 'wakeup ctrl 0x' +inttohex(rb^[SDHCI_WAKE_UP_CONTROL], 2));
-
-    wifiloginfo(nil, 'clock ctrl, timeout ctrl, sw reset 0x'+ inttohex(r^[11], 8));
-
-    wifiloginfo(nil, 'clock ctrl byte 1 0x' +inttohex(rb^[SDHCI_CLOCK_CONTROL], 2));
-    wifiloginfo(nil, 'clock ctrl byte 2 0x' +inttohex(rb^[SDHCI_CLOCK_CONTROL+1], 2));
-    wifiloginfo(nil, 'timeout ctrl 0x' +inttohex(rb^[SDHCI_TIMEOUT_CONTROL], 2));
-    wifiloginfo(nil, 'sw reset 0x' +inttohex(rb^[SDHCI_SOFTWARE_RESET], 2));
+    WIFILogInfo(nil, 'present state 0x'+ inttohex(r^[9], 8));
+    WIFILogInfo(nil, 'host ctrl1, pwr ctrl, block gap ctrl, wakeup ctrl0x'+ inttohex(r^[10], 8));
 
 
-    wifiloginfo(nil, 'normal interrupt status, error interrupt status 0x'+ inttohex(r^[12], 8));
-    wifiloginfo(nil, 'normal interr enable, error interr enable 0x'+ inttohex(r^[13], 8));
-    wifiloginfo(nil, 'auto cmd status, host ctrl 2 0x'+ inttohex(r^[14], 8));
-    wifiloginfo(nil, 'capabilities part 1 0x'+ inttohex(r^[15], 8));
-    wifiloginfo(nil, 'capabilities part 2 0x'+ inttohex(r^[16], 8));
+    WIFILogInfo(nil, 'host ctrl1 0x' +inttohex(rb^[SDHCI_HOST_CONTROL], 2));
+    WIFILogInfo(nil, 'pwr ctrl 0x' +inttohex(rb^[SDHCI_POWER_CONTROL], 2));
+    WIFILogInfo(nil, 'block gap ctrl 0x' +inttohex(rb^[SDHCI_BLOCK_GAP_CONTROL], 2));
+    WIFILogInfo(nil, 'wakeup ctrl 0x' +inttohex(rb^[SDHCI_WAKE_UP_CONTROL], 2));
+
+    WIFILogInfo(nil, 'clock ctrl, timeout ctrl, sw reset 0x'+ inttohex(r^[11], 8));
+
+    WIFILogInfo(nil, 'clock ctrl byte 1 0x' +inttohex(rb^[SDHCI_CLOCK_CONTROL], 2));
+    WIFILogInfo(nil, 'clock ctrl byte 2 0x' +inttohex(rb^[SDHCI_CLOCK_CONTROL+1], 2));
+    WIFILogInfo(nil, 'timeout ctrl 0x' +inttohex(rb^[SDHCI_TIMEOUT_CONTROL], 2));
+    WIFILogInfo(nil, 'sw reset 0x' +inttohex(rb^[SDHCI_SOFTWARE_RESET], 2));
+
+
+    WIFILogInfo(nil, 'normal interrupt status, error interrupt status 0x'+ inttohex(r^[12], 8));
+    WIFILogInfo(nil, 'normal interr enable, error interr enable 0x'+ inttohex(r^[13], 8));
+    WIFILogInfo(nil, 'auto cmd status, host ctrl 2 0x'+ inttohex(r^[14], 8));
+    WIFILogInfo(nil, 'capabilities part 1 0x'+ inttohex(r^[15], 8));
+    WIFILogInfo(nil, 'capabilities part 2 0x'+ inttohex(r^[16], 8));
 end;
 
 {==============================================================================}
@@ -2128,7 +2128,8 @@ begin
        end;
       NETWORK_CONTROL_SET_MAC:begin
         {Set the MAC for this device}
-        WIFILogDebug(nil, 'set mac address to '
+        {$ifdef CYW43455_DEBUG}
+        if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'set mac address to '
                          + inttohex(phardwareaddress(argument1)^[0], 2) + ':'
                          + inttohex(phardwareaddress(argument1)^[1], 2) + ':'
                          + inttohex(phardwareaddress(argument1)^[2], 2) + ':'
@@ -2136,6 +2137,7 @@ begin
                          + inttohex(phardwareaddress(argument1)^[4], 2) + ':'
                          + inttohex(phardwareaddress(argument1)^[5], 2)
                          );
+        {$endif}
         Status := WIFI_STATUS_SUCCESS;
        end;
       NETWORK_CONTROL_GET_MAC:begin
@@ -2245,10 +2247,13 @@ begin
    Entry^.Packets[0].Length:=Entry^.Size - Entry^.Offset;
 
    {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'CYW43455:  Entry.Size = ' + IntToStr(Entry^.Size));
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'CYW43455:  Entry.Offset = ' + IntToStr(Entry^.Offset));
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'CYW43455:  Entry.Count = ' + IntToStr(Entry^.Count));
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'CYW43455:  Entry.Packets[0].Length = ' + IntToStr(Entry^.Packets[0].Length));
+   if WIFI_LOG_ENABLED then
+   begin
+     WIFILogDebug(nil,'CYW43455:  Entry.Size = ' + IntToStr(Entry^.Size));
+     WIFILogDebug(nil,'CYW43455:  Entry.Offset = ' + IntToStr(Entry^.Offset));
+     WIFILogDebug(nil,'CYW43455:  Entry.Count = ' + IntToStr(Entry^.Count));
+     WIFILogDebug(nil,'CYW43455:  Entry.Packets[0].Length = ' + IntToStr(Entry^.Packets[0].Length));
+   end;
    {$ENDIF}
 
    {Return Result}
@@ -2268,7 +2273,7 @@ begin
  if Network = nil then Exit;
  if Network^.Device.Signature <> DEVICE_SIGNATURE then Exit;
 
- {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+ {$IFDEF CYW43455_DEBUG}
  if WIFI_LOG_ENABLED then WIFILogDebug(nil,'CYW43455: Buffer Release');
  {$ENDIF}
 
@@ -2308,7 +2313,7 @@ begin
  if Network = nil then Exit;
  if Network^.Device.Signature <> DEVICE_SIGNATURE then Exit;
 
- {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+ {$IFDEF CYW43455_DEBUG}
  if WIFI_LOG_ENABLED then WIFILogDebug(nil,'CYW43455: Buffer Receive');
  {$ENDIF}
 
@@ -2361,7 +2366,7 @@ begin
   if Network = nil then Exit;
   if Network^.Device.Signature <> DEVICE_SIGNATURE then Exit;
 
-  {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+  {$IFDEF CYW43455_DEBUG}
   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'CYW43455: Buffer Transmit');
   {$ENDIF}
 
@@ -2540,7 +2545,9 @@ begin
    if WIFI_LOG_ENABLED then WIFILogError(nil,'Failed to create WIFI device table lock');
   end;
 
- WIFILogDebug(nil, 'WIFIInit Complete');
+ {$ifdef CYW43455_DEBUG}
+ if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'WIFIInit Complete');
+ {$endif}
 
  WIFIInitialized:=True;
 end;
@@ -2561,7 +2568,9 @@ begin
  SDHCI:=PSDHCIHost(WIFI^.Device.DeviceData);
  if SDHCI = nil then Exit;
 
- WIFILogDebug(nil, 'clock='+inttostr(clock) + ' max freq='+inttostr(sdhci^.MaximumFrequency));
+ {$ifdef CYW43455_DEBUG}
+ if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'clock='+inttostr(clock) + ' max freq='+inttostr(sdhci^.MaximumFrequency));
+ {$endif}
  {Check Clock}
  if Clock > SDHCI^.MaximumFrequency then
   begin
@@ -2600,8 +2609,6 @@ var
 begin
  {}
  try
- WIFI_DEFAULT_LOG_LEVEL:=WIFI_LOG_LEVEL_INFO;
-
  if WIFI_LOG_ENABLED then WIFILogInfo(nil,'WIFIDeviceInitialize');
 
  Result:=WIFI_STATUS_INVALID_PARAMETER;
@@ -2612,14 +2619,18 @@ begin
  {Check Initialize}
  if Assigned(WIFI^.DeviceInitialize) then
   begin
-   WIFILogDebug(nil,'WIFI^.DeviceInitialize');
+   {$ifdef CYW43455_DEBUG}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI^.DeviceInitialize');
+   {$endif}
    Result:=WIFI^.DeviceInitialize(WIFI);
   end
  else
   begin
    {Default Method}
    {Get SDHCI}
-   WIFILogDebug(nil,'Default initialize method');
+   {$ifdef CYW43455_DEBUG}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'Default initialize method');
+   {$endif}
 
    SDHCI:=PSDHCIHost(WIFI^.Device.DeviceData);
    if SDHCI = nil then
@@ -2632,7 +2643,9 @@ begin
 
    // should already have been done elsewhere.
    {Set Initial Power}
-   WIFILogDebug(nil, 'sdhci^.voltages is ' + inttostr(sdhci^.voltages) + 'firstbitsetof()='+inttostr(firstbitset(sdhci^.voltages)));
+   {$ifdef CYW43455_DEBUG}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'sdhci^.voltages is ' + inttostr(sdhci^.voltages) + 'firstbitsetof()='+inttostr(firstbitset(sdhci^.voltages)));
+   {$endif}
    Result:=SDHCIHostSetPower(SDHCI,FirstBitSet(SDHCI^.Voltages) - 1);
    if Result <> WIFI_STATUS_SUCCESS then
     begin
@@ -2646,33 +2659,39 @@ begin
    Result:=WIFIDeviceSetClock(WIFI,SDIO_BUS_SPEED_DEFAULT);
    if Result <> WIFI_STATUS_SUCCESS then
      WIFILogError(nil, 'failed to set the clock speed to default')
+   {$ifdef CYW43455_DEBUG}
    else
-     WIFILogDebug(nil, 'Set device clock succeeded');
+     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Set device clock succeeded');
+   {$else} ; {$endif}
 
    {Perform an SDIO Reset}
-   if WIFI_LOG_ENABLED then wifiloginfo(nil, 'SDIO WIFI Device Reset');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'SDIO WIFI Device Reset');
    SDIOWIFIDeviceReset(WIFI);
 
-   if WIFI_LOG_ENABLED then wifiloginfo(nil, 'WIFI Device Go Idle');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'WIFI Device Go Idle');
    {Set the Card to Idle State}
    Result:= WIFIDeviceGoIdle(WIFI);
    if Result <> WIFI_STATUS_SUCCESS then
     begin
      WIFILogError(nil, 'go idle returned fail but this is expected...');
     end
+   {$ifdef CYW43455_DEBUG}
    else
-     WIFILogDebug(nil, 'Go Idle succeeded');
+     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Go Idle succeeded');
+   {$else};{$endif}
 
 
-   if WIFI_LOG_ENABLED then wifiloginfo(nil, 'send interface condition request');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'send interface condition request');
    {Get the Interface Condition}
    SDWIFIDeviceSendInterfaceCondition(WIFI);
 
-   if WIFI_LOG_ENABLED then wifiloginfo(nil, 'send operation condition');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'send operation condition');
    {Check for an SDIO Card}
    if SDIOWIFIDeviceSendOperationCondition(WIFI,True) = WIFI_STATUS_SUCCESS then
     begin
-     WIFILogDebug(nil, 'send operation condition successful');
+     {$ifdef CYW43455_DEBUG}
+     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'send operation condition successful');
+     {$endif}
     end
     else
       WIFILogError(nil, 'send operation condition failed');
@@ -2682,13 +2701,13 @@ begin
    WIFI^.RelativeCardAddress:=0;
    WIFI^.OperationCondition := $200000;
 
-   {$IFDEF MMC_DEBUG}
+   {$ifdef CYW43455_DEBUG}
    if WIFI_LOG_ENABLED then WIFILogDebug(nil,'MMC Initialize Card Type is SDIO');
    {$ENDIF}
 
 
    {Get the Operation Condition}
-   if WIFI_LOG_ENABLED then wifiloginfo(nil, 'Get operation condition');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Get operation condition');
    Result:=SDIOWIFIDeviceSendOperationCondition(WIFI,False);
    if Result <> WIFI_STATUS_SUCCESS then
     begin
@@ -2711,7 +2730,7 @@ begin
    if (Result = WIFI_STATUS_SUCCESS) then
    begin
       if WIFI_LOG_ENABLED then
-         wifiloginfo(nil,' Card relative address is ' + inttohex((rcaraw shr 16) and $ff, 2))
+         WIFILogInfo(nil,' Card relative address is ' + inttohex((rcaraw shr 16) and $ff, 2))
    end
    else
      WIFILogError(nil, 'Could not set relative card address; error='+inttostr(Result));
@@ -2729,10 +2748,16 @@ begin
 
    if (Result = WIFI_STATUS_SUCCESS) then
    begin
-     WIFILogDebug(nil, 'Device successfully selected response[0]=' + inttohex(command.response[0], 8));
+    {$ifdef CYW43455_DEBUG}
+     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Device successfully selected response[0]=' + inttohex(command.response[0], 8));
+    {$endif}
      // for an I/O only card, the status bits are fixed at 0x0f (bits 12:9 of response[0])
      if (((command.response[0] shr 9) and $f) = $f) then
-       WIFILogDebug(nil, 'The card correctly reads as I/O only')
+     begin
+     {$ifdef CYW43455_DEBUG}
+       if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'The card correctly reads as I/O only')
+     {$endif}
+     end
      else
        WIFILogError(nil, 'Something went wrong with the status bits');
    end
@@ -2745,13 +2770,21 @@ begin
    if Result <> WIFI_STATUS_SUCCESS then
      WIFILogError(nil, 'failed to set the clock speed to default')
    else
-     WIFILogDebug(nil, 'Set device clock succeeded');
+   begin
+     {$ifdef CYW43455_DEBUG}
+     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Set device clock succeeded');
+     {$endif}
+   end;
 
    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'setting bus speed via common control registers');
 
    Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite,BUS_FUNCTION,SDIO_CCCR_SPEED,3,nil);            // emmc sets this to 2.
    if (Result = WIFI_STATUS_SUCCESS) then
-     WIFILogDebug(nil, 'Successfully updated bus speed register')
+   begin
+     {$ifdef CYW43455_DEBUG}
+     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Successfully updated bus speed register');
+     {$endif}
+   end
    else
      WIFILogError(nil, 'Failed to update bus speed register');
 
@@ -2760,7 +2793,11 @@ begin
 
    Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite,BUS_FUNCTION,SDIO_CCCR_IF, $2,nil);
    if (Result = WIFI_STATUS_SUCCESS) then
-     WIFILogDebug(nil, 'Successfully updated bus interface control')
+   begin
+     {$ifdef CYW43455_DEBUG}
+     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Successfully updated bus interface control');
+     {$endif}
+   end
    else
      WIFILogError(nil, 'Failed to update bus interface control');
 
@@ -2796,7 +2833,11 @@ begin
 
    // we only check the last result here. Needs changing really.
    if (Result = WIFI_STATUS_SUCCESS) then
-     WIFILogDebug(nil, 'Successfully updated backplane block sizes')
+   begin
+     {$ifdef CYW43455_DEBUG}
+     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Successfully updated backplane block sizes');
+     {$endif}
+   end
    else
      WIFILogError(nil, 'Failed to update backplane block sizes');
 
@@ -2804,7 +2845,11 @@ begin
    ioreadyvalue := 0;
    Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite,BUS_FUNCTION,SDIO_CCCR_IOEx, 1 shl 1,nil);
    if (Result = WIFI_STATUS_SUCCESS) then
-     WIFILogDebug(nil, 'io enable successfully set for function 1')
+   begin
+     {$ifdef CYW43455_DEBUG}
+     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'io enable successfully set for function 1');
+     {$endif}
+   end
    else
      WIFILogError(nil, 'io enable could not be set for function 1');
 
@@ -2823,7 +2868,10 @@ begin
      sleep(10);
    end;
 
-   WIFILogDebug(nil, 'Reading the Chip ID');
+   {$ifdef CYW43455_DEBUG}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Reading the Chip ID');
+   {$endif}
+
    chipid := 0;
    Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioRead,BACKPLANE_FUNCTION,0,  0, @chipid);
    Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioRead,BACKPLANE_FUNCTION,1,  0, pbyte(@chipid)+1);
@@ -2848,15 +2896,24 @@ begin
    end;
 
 
-   WIFILogDebug(nil, 'Disable core');
+   {$ifdef CYW43455_DEBUG}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Disable core');
+   {$endif}
+
    if (WIFI^.armcore = ARMcr4) then
    begin
-     WIFILogDebug(nil, 'sbreset armcr4 core');
+     {$ifdef CYW43455_DEBUG}
+     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'sbreset armcr4 core');
+     {$endif}
+
      sbreset(WIFI, WIFI^.armctl, Cr4Cpuhalt, Cr4CpuHalt)
    end
    else
    begin
-     WIFILogDebug(nil, 'sbdisable armctl core');
+     {$ifdef CYW43455_DEBUG}
+     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'sbdisable armctl core');
+     {$endif}
+
      sbdisable(WIFI, WIFI^.armctl, 0, 0);
    end;
 
@@ -2889,7 +2946,9 @@ begin
      MicrosecondDelay(10);
    end;
 
-   WIFILogDebug(nil, 'Clock availability is 0x' + inttohex(bytevalue, 2));
+   {$ifdef CYW43455_DEBUG}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Clock availability is 0x' + inttohex(bytevalue, 2));
+   {$endif}
 
    // finally we can clear active low power request. Not sure if any of this is needed to be honest.
    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'clearing active low power clock request');
@@ -2902,13 +2961,21 @@ begin
   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Disable pullups');
   Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BACKPLANE_FUNCTION, gpiopullup, 0, nil);
   if (Result = WIFI_STATUS_SUCCESS) then
-    WIFILogDebug(nil, 'Successfully disabled SDIO extra pullups')
+  begin
+   {$ifdef CYW43455_DEBUG}
+    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Successfully disabled SDIO extra pullups');
+   {$endif}
+  end
   else
     WIFILogError(nil, 'Failed to disable SDIO extra pullups');
 
   Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BACKPLANE_FUNCTION, Gpiopulldown, 0, nil);
   if (Result = WIFI_STATUS_SUCCESS) then
-    WIFILogDebug(nil, 'Successfully disabled SDIO extra pulldowns')
+  begin
+   {$ifdef CYW43455_DEBUG}
+    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Successfully disabled SDIO extra pulldowns');
+    {$endif}
+  end
   else
     WIFILogError(nil, 'Failed to disable SDIO extra pulldowns');
 
@@ -2931,7 +2998,11 @@ begin
    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Enabling interrupts for all functions');
    Result := SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BUS_FUNCTION, SDIO_CCCR_IENx, (INTR_CTL_MASTER_EN or INTR_CTL_FUNC1_EN or INTR_CTL_FUNC2_EN), nil );
    if (Result = WIFI_STATUS_SUCCESS) then
-     WIFILogDebug(nil, 'Successfully enabled interrupts')
+   begin
+     {$ifdef CYW43455_DEBUG}
+     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Successfully enabled interrupts');
+     {$endif}
+   end
    else
      WIFILogError(nil, 'Failed  to enable interrupts');
 
@@ -2949,16 +3020,22 @@ function WIFIDeviceSetBackplaneWindow(WIFI : PWIFIDevice; addr : longword) : lon
 begin
  addr := addr and (not $7fff);
 
- WIFILogDebug(nil, 'setting backplane address to ' + inttohex((addr shr 8) and $ff, 8) + ' '
+ {$ifdef CYW43455_DEBUG}
+ if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'setting backplane address to ' + inttohex((addr shr 8) and $ff, 8) + ' '
                   + inttohex((addr shr 16) and $ff, 8) + ' '
                   + inttohex((addr shr 24) and $ff, 8));
+ {$endif}
 
  Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BACKPLANE_FUNCTION, BAK_WIN_ADDR_REG, (addr shr 8) and $ff,nil);
  Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BACKPLANE_FUNCTION, BAK_WIN_ADDR_REG+1,(addr shr 16) and $ff,nil);
  Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BACKPLANE_FUNCTION, BAK_WIN_ADDR_REG+2,(addr shr 24) and $ff,nil);
 
  if (Result = WIFI_STATUS_SUCCESS) then
-   WIFILogDebug(nil, 'function ' + inttostr(1) + ' backplanewindow updated to ' + inttohex(addr, 8))
+ begin
+  {$ifdef CYW43455_DEBUG}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'function ' + inttostr(1) + ' backplanewindow updated to ' + inttohex(addr, 8));
+  {$endif}
+ end
  else
    WIFILogError(nil, 'something went wrong in setbackplanewindow');
 end;
@@ -3081,7 +3158,9 @@ var
  Status:LongWord;
 begin
  {}
- WIFILogDebug(WIFI, 'SDIO WIFI Reset');
+ {$ifdef CYW43455_DEBUG}
+ if WIFI_LOG_ENABLED then WIFILogDebug(WIFI, 'SDIO WIFI Reset');
+ {$endif}
 
  Result:=WIFI_STATUS_INVALID_PARAMETER;
 
@@ -3089,27 +3168,39 @@ begin
  if WIFI = nil then Exit;
 
  {Get Abort Value}
- WIFILogDebug(WIFI, 'get abort value');
+ {$ifdef CYW43455_DEBUG}
+ if WIFI_LOG_ENABLED then WIFILogDebug(WIFI, 'get abort value');
+ {$endif}
 
  Status:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioRead,BUS_FUNCTION,SDIO_CCCR_ABORT,0,@Abort);
  MicrosecondDelay(20000);
  if Status <> WIFI_STATUS_SUCCESS then
   begin
-   WIFILogDebug(WIFI, 'WIFI Device Reset - SDIO_CCR_ABORT returned non zero result of ' + inttostr(status));
+   {$ifdef CYW43455_DEBUG}
+   if WIFI_LOG_ENABLED then WIFILogDebug(WIFI, 'WIFI Device Reset - SDIO_CCR_ABORT returned non zero result of ' + inttostr(status));
+   {$endif}
 
    Abort:=$08;
   end
  else
   begin
-   WIFILogDebug(nil, 'abort value success status');
+   {$ifdef CYW43455_DEBUG}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'abort value success status');
+   {$endif}
    Abort:=Abort or $08;
   end;
 
  {Set Abort Value}
- WIFILogDebug(WIFI, 'Set abort value');
+ {$ifdef CYW43455_DEBUG}
+ if WIFI_LOG_ENABLED then WIFILogDebug(WIFI, 'Set abort value');
+ {$endif}
+
  Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite,BUS_FUNCTION,SDIO_CCCR_ABORT,Abort,nil);
  MicrosecondDelay(20000);
- WIFILogDebug(WIFI, 'Result of setting abort='+inttostr(Result));
+
+ {$ifdef CYW43455_DEBUG}
+ if WIFI_LOG_ENABLED then WIFILogDebug(WIFI, 'Result of setting abort='+inttostr(Result));
+ {$endif}
 
  //See: sdio_reset in \linux-rpi-3.18.y\drivers\mmc\core\sdio_ops.c
  //
@@ -3126,7 +3217,9 @@ begin
  {Check WIFI}
  if WIFI = nil then Exit;
 
- WIFILogDebug(nil,'WIFI Go Idle');
+ {$ifdef CYW43455_DEBUG}
+ if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Go Idle');
+ {$endif}
 
  {Delay 1ms}
  MicrosecondDelay(1000);
@@ -3142,13 +3235,17 @@ begin
  Status:=WIFIDeviceSendCommand(WIFI,@Command);
  if Status <> WIFI_STATUS_SUCCESS then
   begin
-   WIFILogDebug(nil,'WIFI failed to go idle');
+   {$ifdef CYW43455_DEBUG}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI failed to go idle');
+   {$endif}
 
    Result:=Status;
    Exit;
   end;
 
- WIFILogDebug(nil, 'WIFI successfully went idle');
+ {$ifdef CYW43455_DEBUG}
+ if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'WIFI successfully went idle');
+ {$endif}
 
  {Delay 2ms}
  MicrosecondDelay(2000);
@@ -3178,7 +3275,9 @@ begin
  {Check WIFI}
  if WIFI = nil then Exit;
 
- WIFILogDebug(nil,'SD Send Interface Condition');
+ {$ifdef CYW43455_DEBUG}
+ if WIFI_LOG_ENABLED then WIFILogDebug(nil,'SD Send Interface Condition');
+ {$endif}
 
  {Get SDHCI}
  SDHCI:=PSDHCIHost(WIFI^.Device.DeviceData);
@@ -3211,11 +3310,18 @@ begin
      Exit;
     end
     else
-      WIFILogDebug(nil, 'WIFI Send interface condition check pattern matches');
+    begin
+      {$ifdef CYW43455_DEBUG}
+      if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'WIFI Send interface condition check pattern matches');
+      {$endif}
+    end;
 
    {Get Response}
-   WIFILogDebug(nil,'WIFI Send Interface Condition Response0=' + IntToHex(Command.Response[0] and $FF,8)
+   {$ifdef CYW43455_DEBUG}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Interface Condition Response0=' + IntToHex(Command.Response[0] and $FF,8)
      + 'Response1=' + IntToHex(Command.Response[1] and $FF,8));
+   {$endif}
+
    WIFI^.InterfaceCondition:=Command.Response[0];
 
  Result:=WIFI_STATUS_SUCCESS;
@@ -3238,7 +3344,7 @@ begin
  {Check WIFI}
  if WIFI = nil then Exit;
 
- {$IFDEF MMC_DEBUG}
+ {$ifdef CYW43455_DEBUG}
  if WIFI_LOG_ENABLED then WIFILogDebug(nil,'SDIO Send Operation Condition');
  {$ENDIF}
 
@@ -3258,7 +3364,10 @@ begin
 
  {Setup Timeout}
  Timeout:=100;
- WIFILogDebug(nil, 'waiting for non-busy signal from wifi device');
+ {$ifdef CYW43455_DEBUG}
+ if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'waiting for non-busy signal from wifi device');
+ {$endif}
+
  while Timeout > 0 do
   begin
    {Send Command}
@@ -3284,11 +3393,16 @@ begin
    MillisecondDelay(10);
   end;
 
- WIFILogDebug(nil, 'wifi device is ready for action');
+ {$ifdef CYW43455_DEBUG}
+ if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'wifi device is ready for action');
+ {$endif}
 
 
  {Get Response}
-  WIFILogDebug(nil, 'operation condition returned as ' + inttostr(command.response[0]));
+ {$ifdef CYW43455_DEBUG}
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'operation condition returned as ' + inttostr(command.response[0]));
+ {$endif}
+
   WIFI^.OperationCondition:=Command.Response[0];
   //To Do //SD_OCR_CCS etc (see: MMC/SD)
 
@@ -3308,7 +3422,9 @@ begin
  {Check WIFI}
  if WIFI = nil then Exit;
 
- WIFILogDebug(nil,'WIFI Set IOS');
+ {$ifdef CYW43455_DEBUG}
+ if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Set IOS');
+ {$endif}
 
  {Check Set IOS}
  if Assigned(WIFI^.DeviceSetIOS) then
@@ -3350,18 +3466,27 @@ begin
     begin*)
      if SDHCIGetVersion(SDHCI) >= SDHCI_SPEC_300 then
       begin
-       WIFILogDebug(nil, 'turn off 8 bit bus');
+       {$ifdef CYW43455_DEBUG}
+       if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'turn off 8 bit bus');
+       {$endif}
+
        Value:=Value and not(SDHCI_CTRL_8BITBUS);
       end;
 
      if WIFI^.BusWidth = WIFI_BUS_WIDTH_4 then
       begin
-       WIFILogDebug(nil, 'set 4 bit bus');
+       {$ifdef CYW43455_DEBUG}
+       if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'set 4 bit bus');
+       {$endif}
+
        Value:=Value or SDHCI_CTRL_4BITBUS;
       end
      else
       begin
-       WIFILogDebug(nil, 'turn off 4 bit bus');
+       {$ifdef CYW43455_DEBUG}
+       if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'turn off 4 bit bus');
+       {$endif}
+
        Value:=Value and not(SDHCI_CTRL_4BITBUS);
       end;
     (*end;*)
@@ -3412,15 +3537,12 @@ begin
    {Check WIFI}
    if WIFI = nil then Exit;
 
-   WIFILogDebug(nil,'sdio read write direct address='+inttohex(address, 8) + ' value='+inttohex(input, 2));
-
-   {$IFDEF MMC_DEBUG}
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'SDIO Read Write Direct');
-   {$ENDIF}
+   {$ifdef CYW43455_DEBUG}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'sdio read write direct address='+inttohex(address, 8) + ' value='+inttohex(input, 2)
+       + ' direction='+inttostr(ord(direction)) +' [0=read, 1=write]');
+   {$endif}
 
    {Get SDHCI}
-   WIFILogDebug(nil,'get sdhci');
-
    SDHCI:=PSDHCIHost(WIFI^.Device.DeviceData);
    if SDHCI = nil then Exit;
 
@@ -3430,16 +3552,12 @@ begin
    {Check Address}
    if (Address and not($0001FFFF)) <> 0 then Exit;
 
-   WIFILogDebug(nil,'setup command');
-
    {Setup Command}
    FillChar(Command,SizeOf(TSDIOCommand),0);
    Command.Command:=SDIO_CMD_RW_DIRECT;
    Command.Argument:=0;
    Command.ResponseType:=SDIO_RSP_R5;
    Command.Data:=nil;
-
-   WIFILogDebug(nil,'setup argument. direction='+inttostr(ord(direction)) +'[0=read, 1=write]');
 
    {Setup Argument}
    if Direction = sdioWrite then Command.Argument:=$80000000;
@@ -3448,20 +3566,22 @@ begin
    Command.Argument:=Command.Argument or (Address shl 9);
    Command.Argument:=Command.Argument or Input;
 
-   WIFILogDebug(nil,'send command. argument ended up being ' + inttohex(command.argument, 8));
-
    {Send Command}
    Status:=WIFIDeviceSendCommand(WIFI,@Command);
    if Status <> WIFI_STATUS_SUCCESS then
     begin
-     WIFILogDebug(nil,'status is not success (=' + inttostr(result) + ')');
+     {$ifdef CYW43455_DEBUG}
+     if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFIDeviceCommand returne fail status of ' + inttostr(result));
+     {$endif}
 
      Result:=Status;
      Exit;
     end;
 
    {Check Result}
-   WIFILogDebug(nil,'check result (response[0]='+inttostr(command.response[0]));
+   {$ifdef CYW43455_DEBUG}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'check result (response[0]='+inttostr(command.response[0]));
+   {$endif}
 
    if (Command.Response[0] and SDIO_RSP_R5_ERROR) <> 0 then Exit;
    if (Command.Response[0] and SDIO_RSP_R5_FUNCTION_NUMBER) <> 0 then Exit;
@@ -3469,10 +3589,7 @@ begin
 
    {Get Output}
    if Output <> nil then
-    begin
-       WIFILogDebug(nil,'get output');
        Output^:=Command.Response[0] and $FF;
-    end;
 
    Result:=WIFI_STATUS_SUCCESS;
 
@@ -3510,26 +3627,28 @@ begin
    {Check WIFI}
    if WIFI = nil then Exit;
 
-   WIFILogDebug(nil,'SDIOReadWriteExtended ' + inttostr(ord(direction)) + '[0=read, 1=write] ' + inttostr(operation)
+   {$ifdef CYW43455_DEBUG}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'SDIOReadWriteExtended ' + inttostr(ord(direction)) + ' [0=read, 1=write] ' + inttostr(operation)
      + ' address=0x' + inttohex(address, 8)
      + ' buf=0x'+inttohex(longword(buffer), 8)
      + ' blockcount='+inttostr(blockcount)
      + ' blocksize='+inttostr(blocksize)
      + ' callerid='+inttostr(callerid));
+   {$endif}
 
    {Get SDHCI}
    SDHCI:=PSDHCIHost(WIFI^.Device.DeviceData);
    if SDHCI = nil then Exit;
 
-   WIFILogDebug(nil, 'check operation; operation='+inttostr(operation));
    {Check Operation}
    if Operation > 7 then Exit;
 
-   WIFILogDebug(nil, 'check address='+inttohex(address, 8));
+   {$ifdef CYW43455_DEBUG}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'check address='+inttohex(address, 8));
+   {$endif}
+
    {Check Address}
    if (Address and not($0001FFFF)) <> 0 then Exit;
-
-   WIFILogDebug(nil,'setup command');
 
    {Setup Command}
    FillChar(Command,SizeOf(TSDIOCommand),0);
@@ -3549,8 +3668,6 @@ begin
    else
      SDIOData.Flags := WIFI_DATA_READ;
 
-   WIFILogDebug(nil,'setup argument. write='+inttostr(ord(direction)) + '0=read, 1=write');
-
    {SDIO_CMD_RW_EXTENDED argument format:
          [31] R/W flag
          [30:28] Function number
@@ -3560,10 +3677,6 @@ begin
          [8:0] Byte/block count}
 
    {Setup Argument}
-   if (direction = sdioWrite) then
-      WIFILogDebug(nil, 'adding write but to argument')
-   else
-     WIFILogDebug(nil, 'the argument is configured as a read');
    if (direction = sdioWrite) then Command.Argument:=$80000000;
    Command.Argument:=Command.Argument or (Operation shl 28);   // adds in function number
    if increment then
@@ -3578,38 +3691,55 @@ begin
      Command.Argument := Command.Argument or BlockCount;
    end;
 
-   WIFILogDebug(nil,'send command. argument ended up being ' + inttohex(command.argument, 8));
+   {$ifdef CYW43455_DEBUG}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'send command. argument ended up being ' + inttohex(command.argument, 8));
+   {$endif}
 
    Status:=WIFIDeviceSendCommand(WIFI,@Command);  // send command
 
    if Status <> WIFI_STATUS_SUCCESS then
     begin
-     WIFILogDebug(nil,'status is not success (=' + inttostr(result) + ')');
+     {$ifdef CYW43455_DEBUG}
+     if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFIDeviceSendCommand returned status of ' + inttostr(result));
+     {$endif}
 
      Result:=Status;
      Exit;
     end;
 
    {Check Result}
-   WIFILogDebug(nil,'check result command.response[0]='+inttohex(command.response[0], 8));
+   {$ifdef CYW43455_DEBUG}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'check result command.response[0]='+inttohex(command.response[0], 8));
+   {$endif}
 
    if (Command.Response[0] and SDIO_RSP_R5_ERROR) <> 0 then
     begin
-     WIFILogDebug(nil, 'command response contains R5 Error');
+     {$ifdef CYW43455_DEBUG}
+     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'command response contains R5 Error');
+     {$endif}
+
      Exit;
     end;
    if (Command.Response[0] and SDIO_RSP_R5_FUNCTION_NUMBER) <> 0 then
     begin
-     WIFILogDebug(nil, 'command response contains R5 function number');
+     {$ifdef CYW43455_DEBUG}
+     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'command response contains R5 function number');
+     {$endif}
+
      Exit;
     end;
    if (Command.Response[0] and SDIO_RSP_R5_OUT_OF_RANGE) <> 0 then
     begin
-     WIFILogDebug(nil, 'command response contains R5 out of range');
+     {$ifdef CYW43455_DEBUG}
+     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'command response contains R5 out of range');
+     {$endif}
+
      Exit;
     end;
 
-   WIFILogDebug(nil,'returning success');
+   {$ifdef CYW43455_DEBUG}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'returning success');
+   {$endif}
 
    Result:=WIFI_STATUS_SUCCESS;
 
@@ -3638,13 +3768,13 @@ begin
  {Check WIFI}
  if WIFI = nil then Exit;
 
- WIFILogDebug(nil,'WIFI Send Command ' + inttostr(command^.Command) + ' status='+inttostr(command^.Status));
+ {$ifdef CYW43455_DEBUG}
+ if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command ' + inttostr(command^.Command) + ' status='+inttostr(command^.Status));
+ {$endif}
 
  {Check Send Command}
  if Assigned(WIFI^.DeviceSendCommand) then
   begin
-   WIFILogDebug(nil,'Assigned wifi sendcommand true');
-
    Result:=WIFI^.DeviceSendCommand(WIFI,Command);
   end
  else
@@ -3729,15 +3859,18 @@ begin
        {CMD19 is special in that the Data Present Select should be set}
        if (Command^.Data <> nil) or (Command^.Command = SDIO_CMD_SEND_TUNING_BLOCK) or (Command^.Command = SDIO_CMD_SEND_TUNING_BLOCK_HS200) then
         begin
-         WIFILogDebug(nil, 'adding sdhci_cmd_data flag to the flags for this command');
+         {$ifdef CYW43455_DEBUG}
+         if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'adding sdhci_cmd_data flag to the flags for this command');
+         {$endif}
+
          Flags:=Flags or SDHCI_CMD_DATA;
         end;
 
        {Write Timeout Control}
        if (Command^.Data <> nil) or ((Command^.ResponseType and SDIO_RSP_BUSY) <> 0) then
         begin
-         {$IFDEF MMC_DEBUG}
-         if WIFI_LOG_ENABLED then WIFILogDebug(nil,'MMC Send Command SDHCI_TIMEOUT_CONTROL (Value=' + IntToHex(SDHCI_TIMEOUT_VALUE,8) + ')');
+         {$ifdef CYW43455_DEBUG}
+         if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFISendCommand SDHCI_TIMEOUT_CONTROL (Value=' + IntToHex(SDHCI_TIMEOUT_VALUE,8) + ')');
          {$ENDIF}
          SDHCIHostWriteByte(SDHCI,SDHCI_TIMEOUT_CONTROL,SDHCI_TIMEOUT_VALUE);
         end;
@@ -3745,7 +3878,9 @@ begin
        {Check Data}
        if (command^.data = nil) then
         begin
-         WIFILogDebug(nil, 'writing a standard command; status='+inttostr(command^.status));
+         {$ifdef CYW43455_DEBUG}
+         if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'writing a standard command; status='+inttostr(command^.status));
+         {$endif}
 
          {Setup Transfer Mode}
          TransferMode:=SDHCIHostReadWord(SDHCI,SDHCI_TRANSFER_MODE);
@@ -3757,15 +3892,15 @@ begin
          TransferMode:=TransferMode and not(SDHCI_TRNS_BLK_CNT_EN or SDHCI_TRNS_MULTI or SDHCI_TRNS_READ or SDHCI_TRNS_DMA);
 
          {Write Argument}
-         {$IFDEF MMC_DEBUG}
-         if WIFI_LOG_ENABLED then WIFILogDebug(nil,'MMC Send Command SDHCI_ARGUMENT (Value=' + IntToHex(Command^.Argument,8) + ')');
+         {$ifdef CYW43455_DEBUG}
+         if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command SDHCI_ARGUMENT (Value=' + IntToHex(Command^.Argument,8) + ')');
          {$ENDIF}
 
          SDHCIHostWriteLong(SDHCI,SDHCI_ARGUMENT,Command^.Argument);
 
          {Write Transfer TransferMode}
-         {$IFDEF MMC_DEBUG}
-         if WIFI_LOG_ENABLED then WIFILogDebug(nil,'MMC Send Command SDHCI_TRANSFER_MODE (Value=' + IntToHex(TransferMode,8) + ')');
+         {$ifdef CYW43455_DEBUG}
+         if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command SDHCI_TRANSFER_MODE (Value=' + IntToHex(TransferMode,8) + ')');
          {$ENDIF}
 
          SDHCIHostWriteWord(SDHCI,SDHCI_TRANSFER_MODE,TransferMode);
@@ -3780,13 +3915,17 @@ begin
            Command^.Data^.BlocksRemaining:=Command^.Data^.BlockCount;  // not sure if code expects there always to be a block count
          Command^.Data^.BytesTransfered:=0;
 
-         WIFILogDebug(nil, 'blockcount='+inttostr(command^.data^.blockcount) + ' blocksize='+inttostr(command^.data^.blocksize));
+         {$ifdef CYW43455_DEBUG}
+         if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'blockcount='+inttostr(command^.data^.blockcount) + ' blocksize='+inttostr(command^.data^.blocksize));
+         {$endif}
 
          {Setup Transfer TransferMode}
          TransferMode := 0;
          if (Command^.Data^.BlockCount > 0) then
           begin
-           WIFILogDebug(nil, 'enabling block transfer TransferMode');
+           {$ifdef CYW43455_DEBUG}
+           if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'enabling block transfer TransferMode');
+           {$endif}
            TransferMode:=SDHCI_TRNS_BLK_CNT_EN;
            TransferMode:=TransferMode or SDHCI_TRNS_MULTI;
 
@@ -3803,7 +3942,10 @@ begin
          else
          if (Command^.Data^.Flags and WIFI_DATA_READ) <> 0 then
           begin
-           WIFILogDebug(nil, 'Add read flag to transfer mode');
+           {$ifdef CYW43455_DEBUG}
+           if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Add read flag to transfer mode');
+           {$endif}
+
            TransferMode:=TransferMode or SDHCI_TRNS_READ;
           end;
 
@@ -3826,23 +3968,36 @@ begin
          //SDHCIHostWriteLong(SDHCI,SDHCI_DMA_ADDRESS,Address);
 
          {Write Block Size}
+         {$ifdef CYW43455_DEBUG}
          if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command SDHCI_BLOCK_SIZE (Value=' + IntToStr(Command^.Data^.BlockSize) + ') makeblocksize='+inttohex(SDHCIMakeBlockSize(SDHCI_DEFAULT_BOUNDARY_ARG,Command^.Data^.BlockSize), 8));
+         {$endif}
 
          SDHCIHostWriteWord(SDHCI,SDHCI_BLOCK_SIZE,SDHCIMakeBlockSize(SDHCI_DEFAULT_BOUNDARY_ARG,Command^.Data^.BlockSize));
 
          {Write Block Count}
+         {$ifdef CYW43455_DEBUG}
          if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command SDHCI_BLOCK_COUNT (Value=' + IntToStr(Command^.Data^.BlockCount) + ')');
+         {$endif}
+
          SDHCIHostWriteWord(SDHCI,SDHCI_BLOCK_COUNT,Command^.Data^.BlockCount);
 
          blksizecnt := SDHCIHostReadLong(SDHCI, SDHCI_BLOCK_SIZE);
-         WIFILogDebug(nil, 'reading back blksizecnt to match circle=0x'+inttohex(blksizecnt, 8));
+         {$ifdef CYW43455_DEBUG}
+         if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'reading back blksizecnt to match circle=0x'+inttohex(blksizecnt, 8));
+         {$endif}
 
          {Write Argument}
+         {$ifdef CYW43455_DEBUG}
          if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command SDHCI_ARGUMENT (Value=' + IntToHex(Command^.Argument,8) + ')');
+         {$endif}
+
          SDHCIHostWriteLong(SDHCI,SDHCI_ARGUMENT,Command^.Argument);
 
          {Write Transfer TransferMode}
+         {$ifdef CYW43455_DEBUG}
          if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command SDHCI_TRANSFER_MODE (Value=' + IntToHex(TransferMode,8) + ')');
+         {$endif}
+
          SDHCIHostWriteWord(SDHCI,SDHCI_TRANSFER_MODE,TransferMode);
         end;
 
@@ -3856,7 +4011,9 @@ begin
        try
         {Write Command}
 
-        WIFILogDebug(nil,'WIFI Send Command SDHCI_COMMAND cmd=' + inttostr(command^.command) + '  value written to cmd register=' + IntToHex(SDHCIMakeCommand(Command^.Command,Flags),8) + ') status='+inttostr(command^.status));
+        {$ifdef CYW43455_DEBUG}
+        if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command SDHCI_COMMAND cmd=' + inttostr(command^.command) + '  value written to cmd register=' + IntToHex(SDHCIMakeCommand(Command^.Command,Flags),8) + ') status='+inttostr(command^.status));
+        {$endif}
 
         if (dodumpregisters) and (command^.Command = SDIO_CMD_RW_EXTENDED) then
         begin
@@ -3865,9 +4022,6 @@ begin
         end;
 
         SDHCIHostWriteWord(SDHCI,SDHCI_COMMAND,SDHCIMakeCommand(Command^.Command,Flags));
-
-        // restore command data for the response?
-//        Command^.Data := SDIODataP;
 
         {Wait for Completion}   // short timeout for a read command.
         if SDHCI^.Command^.Data = nil then // need to go back to test for data=nil
@@ -3878,28 +4032,34 @@ begin
            begin
             if Status = ERROR_WAIT_TIMEOUT then
              begin
-              WIFILogDebug(nil,'WIFI Send Command Response (short) Timeout');
+              {$ifdef CYW43455_DEBUG}
+              if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command Response (short) Timeout');
+              {$endif}
+
               Command^.Status:=SDHCI_STATUS_TIMEOUT;
               Exit;
              end
             else
              begin
-              WIFILogDebug(nil,'WIFI Send Command Response (short) Failure semaphorewaitexresult='+inttostr(status));
+              {$ifdef CYW43455_DEBUG}
+              if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command Response (short) Failure, result='+inttostr(status));
+              {$endif}
+
               Command^.Status:=SDHCI_STATUS_HARDWARE_ERROR;
               Exit;
              end;
            end
           else
           begin
-           WIFILogDebug(nil, 'semaphore wait succeeded command=' + inttostr(command^.Command) + ' status=' + inttostr(command^.Status));
+           {$ifdef CYW43455_DEBUG}
+           if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'semaphore wait succeeded command=' + inttostr(command^.Command) + ' status=' + inttostr(command^.Status));
+           {$endif}
           end;
          end
         else
          begin
           {Wait for Signal with Timeout (5000ms)}
-          WIFILogDebug(nil, 'wait for semaphore 5000');
           Status:=SemaphoreWaitEx(SDHCI^.Wait,5000);
-          WIFILogDebug(nil, 'semaphore returned');
           if Status <> ERROR_SUCCESS then
            begin
             if Status = ERROR_WAIT_TIMEOUT then
@@ -3916,7 +4076,11 @@ begin
              end;
            end
            else
-            WIFILogDebug(nil, 'wait returned success');
+           begin
+            {$ifdef CYW43455_DEBUG}
+            if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'wait returned success');
+            {$endif}
+           end;
          end;
 
        finally
@@ -3938,7 +4102,10 @@ begin
      end;
     end;
 
-   WIFILogDebug(nil,'WIFI Send Command completed: ' + MMCStatusToString(Command^.Status));
+   {$ifdef CYW43455_DEBUG}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command completed: ' + MMCStatusToString(Command^.Status));
+   {$endif}
+
    if Command^.Status = WIFI_STATUS_SUCCESS then Result:=WIFI_STATUS_SUCCESS;
   end;
 
@@ -3961,7 +4128,7 @@ begin
  {Check MMC}
  if WIFI = nil then Exit;
 
- {$IFDEF MMC_DEBUG}
+ {$ifdef CYW43455_DEBUG}
  if WIFI_LOG_ENABLED then WIFILogDebug(nil,'SD Send Application Command');
  {$ENDIF}
 
@@ -4027,7 +4194,7 @@ var
  chiprev : word;
  socitype : word;
 begin
- if WIFI_LOG_ENABLED then wifiloginfo(nil, 'Starting WIFI core scan');
+ if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Starting WIFI core scan');
 
  Result := WIFI_STATUS_INVALID_PARAMETER;
 
@@ -4048,14 +4215,18 @@ begin
  chipid := chipidbuf  and CID_ID_MASK;
  chiprev := (chipidbuf and CID_REV_MASK) shr CID_REV_SHIFT;
  socitype := (chipidbuf and CID_TYPE_MASK) shr CID_TYPE_SHIFT;
- WIFILogDebug(nil, 'chipid ' + inttohex(chipid,4) + ' chiprev ' + inttohex(chiprev, 4) + ' socitype ' + inttohex(socitype,4));
+ {$ifdef CYW43455_DEBUG}
+ if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'chipid ' + inttohex(chipid,4) + ' chiprev ' + inttohex(chiprev, 4) + ' socitype ' + inttohex(socitype,4));
+ {$endif}
 
  // read pointer to core info structure.
  // 63*4 is yucky. Could do with a proper address definition for it.
  Result := SDIOWIFIDeviceReadWriteExtended(WIFI, sdioRead, BACKPLANE_FUNCTION, 63*4, true, @addressbytes[1], 0, 4, 1);
  address := plongint(@addressbytes[1])^;
 
- WIFILogDebug(nil, 'Core info pointer is read as ' + inttohex(address, 8));
+ {$ifdef CYW43455_DEBUG}
+ if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Core info pointer is read as ' + inttohex(address, 8));
+ {$endif}
 
  // we must get the top 15 bits from the address and set the bakplane window to it
  WIFIDeviceSetBackplaneWindow(WIFI, address);
@@ -4071,6 +4242,7 @@ begin
      exit;
    end;
 
+   {$ifdef CYW43455_DEBUG}
    // dump the block into the log so we can take a look at it during development
    // this code will be deleted later.
    str := '';
@@ -4079,12 +4251,12 @@ begin
      str := str + ' ' + inttohex(buf[i-1], 2);
      if i mod 20 = 0 then
      begin
-       WIFILogDebug(nil, str);
+       if WIFI_LOG_ENABLED then WIFILogDebug(nil, str);
        str := '';
      end;
    end;
-   WIFILogDebug(nil, str);
-
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil, str);
+   {$endif}
 
    coreid := 0;
    corerev := 0;
@@ -4095,7 +4267,10 @@ begin
     begin
        case buf[i] and $0f of
  	    $0F: begin
-                   WIFILogDebug(nil, 'Reached end of descriptor');
+                   {$ifdef CYW43455_DEBUG}
+                   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Reached end of descriptor');
+                   {$endif}
+
                    break;
                  end;
             $01:	// core info */
@@ -4159,16 +4334,22 @@ begin
     end;
 
     if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Corescan completed.');
-    WIFILogDebug(nil,'chipcommon=0x' + inttohex(WIFI^.chipcommon,8));
-    WIFILogDebug(nil,'armcore=0x' + inttohex(WIFI^.armcore,8));
-    WIFILogDebug(nil,'armctl=0x' + inttohex(WIFI^.armctl,8));
-    WIFILogDebug(nil,'armregs=0x' + inttohex(WIFI^.armregs,8));
-    WIFILogDebug(nil,'socramctl=0x' + inttohex(WIFI^.socramctl,8));
-    WIFILogDebug(nil,'socramregs=0x' + inttohex(WIFI^.socramregs,8));
-    WIFILogDebug(nil,'socramrev=0x' + inttohex(WIFI^.socramrev,8));
-    WIFILogDebug(nil,'sdregs=0x' + inttohex(WIFI^.sdregs,8));
-    WIFILogDebug(nil,'sdiorev=0x' + inttohex(WIFI^.sdiorev,8));
-    WIFILogDebug(nil,'dllctl=0x' + inttohex(WIFI^.dllctl,8));
+
+    {$ifdef CYW43455_DEBUG}
+    if WIFI_LOG_ENABLED then
+    begin
+      WIFILogDebug(nil,'chipcommon=0x' + inttohex(WIFI^.chipcommon,8));
+      WIFILogDebug(nil,'armcore=0x' + inttohex(WIFI^.armcore,8));
+      WIFILogDebug(nil,'armctl=0x' + inttohex(WIFI^.armctl,8));
+      WIFILogDebug(nil,'armregs=0x' + inttohex(WIFI^.armregs,8));
+      WIFILogDebug(nil,'socramctl=0x' + inttohex(WIFI^.socramctl,8));
+      WIFILogDebug(nil,'socramregs=0x' + inttohex(WIFI^.socramregs,8));
+      WIFILogDebug(nil,'socramrev=0x' + inttohex(WIFI^.socramrev,8));
+      WIFILogDebug(nil,'sdregs=0x' + inttohex(WIFI^.sdregs,8));
+      WIFILogDebug(nil,'sdiorev=0x' + inttohex(WIFI^.sdiorev,8));
+      WIFILogDebug(nil,'dllctl=0x' + inttohex(WIFI^.dllctl,8));
+    end;
+    {$endif}
 
     Result := WIFI_STATUS_SUCCESS;
 
@@ -4261,7 +4442,10 @@ begin
   if (n = 0) then
     n := Sbwsize;
 
-  WIFILogDebug(nil, 'sbmem len='+inttostr(len) + ' n=' + inttostr(n) + ' offset=0x'+inttohex(off,8) + ' off&(sbwsize-1)=0x' + inttohex(off and (Sbwsize-1), 8));
+  {$ifdef CYW43455_DEBUG}
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'sbmem len='+inttostr(len) + ' n=' + inttostr(n) + ' offset=0x'+inttohex(off,8) + ' off&(sbwsize-1)=0x' + inttohex(off and (Sbwsize-1), 8));
+  {$endif}
+
   while (len > 0) do
   begin
     if (n > len) then
@@ -4298,9 +4482,12 @@ procedure sbreset(WIFI : PWIFIDevice; regs : longword; pre : word; ioctl : word)
 begin
  sbdisable(WIFI, regs, pre, ioctl);
  WIFIDeviceSetBackplaneWindow(WIFI, regs);
- WIFILogDebug(nil, 'sbreset entry regs 0x' + inttohex(regs, 8) + ' regs+ioctrl val 0x'
+ {$ifdef CYW43455_DEBUG}
+ if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'sbreset entry regs 0x' + inttohex(regs, 8) + ' regs+ioctrl val 0x'
                    + inttohex(cfgreadl(WIFI, regs + IOCtrl), 8)
                    + ' regs+resetctrl val 0x ' + inttohex(cfgreadl(WIFI, regs + Resetctrl), 8));
+ {$endif}
+
   while ((cfgreadl(WIFI, regs + Resetctrl) and 1) <> 0) do
   begin
     cfgwritel(WIFI, regs + Resetctrl, 0);
@@ -4310,8 +4497,10 @@ begin
   cfgwritel(WIFI, regs + Ioctrl, 1 or ioctl);
   cfgreadl(WIFI, regs + Ioctrl);
 
-  WIFILogDebug(nil, 'sbreset exit regs+ioctrl val 0x' + inttohex(cfgreadl(WIFI, regs + IOCtrl), 8)
+  {$ifdef CYW43455_DEBUG}
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'sbreset exit regs+ioctrl val 0x' + inttohex(cfgreadl(WIFI, regs + IOCtrl), 8)
                     + ' regs+resetctrl val 0x ' + inttohex(cfgreadl(WIFI, regs + Resetctrl), 8));
+  {$endif}
 end;
 
 procedure WIFIDeviceRamScan(WIFI : PWIFIDevice);
@@ -4323,28 +4512,41 @@ begin
   if (WIFI^.armcore = ARMcr4) then
   begin
     r := WIFI^.armregs;
-    WIFILogDebug(nil, 'ramscan armcr4 0x' + inttohex(r, 8));
+    {$ifdef CYW43455_DEBUG}
+    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'ramscan armcr4 0x' + inttohex(r, 8));
+    {$endif}
+
     WIFIDeviceSetBackplaneWindow(WIFI, r);
     r := (r and $7fff) or $8000;
     n := cfgreadl(WIFI, r + Cr4Cap);
 
-    WIFILogDebug(nil, 'cr4 banks 0x' + inttohex(n, 8));
+    {$ifdef CYW43455_DEBUG}
+    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'cr4 banks 0x' + inttohex(n, 8));
+    {$endif}
 
     banks := ((n shr 4) and $F) + (n and $F);
     size := 0;
 
-    WIFILogDebug(nil, 'banks='+inttostr(banks));
+    {$ifdef CYW43455_DEBUG}
+    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'banks='+inttostr(banks));
+    {$endif}
 
     for i := 0 to banks - 1 do
     begin
        cfgwritel(WIFI, r + Cr4Bankidx, i);
        n := cfgreadl(WIFI, r + Cr4Bankinfo);
-       WIFILogDebug(nil, 'bank ' + inttostr(i) + ' reg 0x' + inttohex(n, 2) + ' size 0x' + inttohex(8192 * ((n and $3F) + 1), 8));
+       {$ifdef CYW43455_DEBUG}
+       if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'bank ' + inttostr(i) + ' reg 0x' + inttohex(n, 2) + ' size 0x' + inttohex(8192 * ((n and $3F) + 1), 8));
+       {$endif}
+
        size += 8192 * ((n and $3F) + 1);
     end;
     WIFI^.socramsize := size;
     WIFI^.rambase := $198000;
-    WIFILogDebug(nil, 'Socram size=0x'+inttohex(size, 8) + ' rambase=0x'+inttohex(WIFI^.rambase, 8));
+    {$ifdef CYW43455_DEBUG}
+    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Socram size=0x'+inttohex(size, 8) + ' rambase=0x'+inttohex(WIFI^.rambase, 8));
+    {$endif}
+
     exit;
   end;
 
@@ -4353,7 +4555,9 @@ begin
   WIFIDeviceSetBackplaneWindow(WIFI, r);
   n := cfgreadl(WIFI, r + Coreinfo);
 
-  WIFILogDebug(nil ,'socramrev ' + inttostr(WIFI^.socramrev) + ' coreinfo 0x' + inttohex(n, 8));
+  {$ifdef CYW43455_DEBUG}
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil ,'socramrev ' + inttostr(WIFI^.socramrev) + ' coreinfo 0x' + inttohex(n, 8));
+  {$endif}
 
   banks := (n>>4) and $F;
   size := 0;
@@ -4361,20 +4565,27 @@ begin
   begin
     cfgwritel(WIFI, r + Bankidx, i);
     n := cfgreadl(WIFI, r + Bankinfo);
-    WIFILogDebug(nil, 'bank ' + inttostr(i) + ' reg 0x' + inttohex(n, 2) + ' size 0x' + inttohex(8192 * ((n and $3F) + 1), 8));
+    {$ifdef CYW43455_DEBUG}
+    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'bank ' + inttostr(i) + ' reg 0x' + inttohex(n, 2) + ' size 0x' + inttohex(8192 * ((n and $3F) + 1), 8));
+    {$endif}
+
     size += 8192 * ((n and $3F) + 1);
   end;
   WIFI^.socramsize := size;
   WIFI^.rambase := 0;
   if(WIFI^.chipid = 43430) then
   begin
-    WIFILogDebug(nil, 'updating bankidx values for 43430');
+    {$ifdef CYW43455_DEBUG}
+    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'updating bankidx values for 43430');
+    {$endif}
+
     cfgwritel(WIFI, r + Bankidx, 3);
     cfgwritel(WIFI, r + Bankpda, 0);
   end;
 
-  WIFILogDebug(nil, 'Socram size=0x'+inttohex(size, 8) + ' rambase=0x'+inttohex(WIFI^.rambase, 8));
-
+  {$ifdef CYW43455_DEBUG}
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Socram size=0x'+inttohex(size, 8) + ' rambase=0x'+inttohex(WIFI^.rambase, 8));
+  {$endif}
 end;
 
 
@@ -4545,7 +4756,10 @@ begin
   // Not needed on a Pi Zero as the firmware loads at addres 0 by default - needs updating to suit.
 
   move(firmwarep^, WIFI^.resetvec, 4);
-  WIFILogDebug(nil, 'Reset vector of 0x' + inttohex(WIFI^.resetvec, 8) + ' copied out of firmware');
+  {$ifdef CYW43455_DEBUG}
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Reset vector of 0x' + inttohex(WIFI^.resetvec, 8) + ' copied out of firmware');
+  {$endif}
+
 
   off := 0;
   if (fsize > FIRMWARE_CHUNK_SIZE) then
@@ -4559,7 +4773,10 @@ begin
 
   getmem(comparebuf, fsize);
 
-  WIFILogDebug(nil, 'Bytes to transfer: ' + inttostr(fsize));
+  {$ifdef CYW43455_DEBUG}
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Bytes to transfer: ' + inttostr(fsize));
+  {$endif}
+
   bytestransferred := 0;
   dodumpregisters := false;
 
@@ -4591,7 +4808,9 @@ begin
   Reset(FirmwareFile);
   FSize := FileSize(FirmwareFile);
 
-  WIFILogDebug(nil, 'Size of firmware config file is ' + inttostr(fsize) + ' bytes');
+  {$ifdef CYW43455_DEBUG}
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Size of firmware config file is ' + inttostr(fsize) + ' bytes');
+  {$endif}
 
   // dword align to be sure
   if (fsize mod 4 <> 0) then
@@ -4612,7 +4831,10 @@ begin
   // and perhaps in the past it was smaller so would fit in the 2048 byte read.
 
   off := WIFI^.rambase + WIFI^.socramsize - fsize - 4;
-  WIFILogDebug(nil, 'Tansferring config file to socram at offset 0x' + inttohex(off, 8));
+  {$ifdef CYW43455_DEBUG}
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Tansferring config file to socram at offset 0x' + inttohex(off, 8));
+  {$endif}
+
   bytestransferred := 0;
 
   if (fsize > FIRMWARE_CHUNK_SIZE) then
@@ -4652,7 +4874,10 @@ begin
      // write reset vector to bottom of RAM
      if (WIFI^.resetvec <> 0) then
      begin
-       WIFILogDebug(nil, 'Firmware upload: Writing reset vector to address 0');
+       {$ifdef CYW43455_DEBUG}
+       if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Firmware upload: Writing reset vector to address 0');
+       {$endif}
+
        sbmem(WIFI, true, @WIFI^.resetvec, sizeof(WIFI^.resetvec), 0);
      end;
 
@@ -4697,7 +4922,9 @@ begin
   cfgw(WIFI, BAK_CHIP_CLOCK_CSR_REG, cfgr(WIFI, BAK_CHIP_CLOCK_CSR_REG) or ForceHT);
   sleep(10);
 
-  WIFILogDebug(nil, 'After request for HT clock, CSR_REG=0x' + inttohex(cfgr(WIFI, BAK_CHIP_CLOCK_CSR_REG), 4));
+  {$ifdef CYW43455_DEBUG}
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'After request for HT clock, CSR_REG=0x' + inttohex(cfgr(WIFI, BAK_CHIP_CLOCK_CSR_REG), 4));
+  {$endif}
 
   WIFIDeviceSetBackplaneWindow(WIFI, WIFI^.sdregs);
 
@@ -4754,9 +4981,13 @@ begin
   // It seems like we need to execute a read first to kick things off. If we don't do this the first
   // IOCTL command response will be an empty one rather than the one for the IOCTL we sent.
   if (SDIOWIFIDeviceReadWriteExtended(WIFI, sdioRead, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, @ioctl_rxmsg, 0, 64,8) <> WIFI_STATUS_SUCCESS) then
-     WIFILogDebug(nil, 'There seems to be nothing to read from function 2')
+     WIFILogError(nil, 'Unsuccessful initial read from WIFI function 2 (packets)')
   else
-    WIFILogDebug(nil, 'Successfully read function 2 first empty response.');
+  begin
+   {$ifdef CYW43455_DEBUG}
+    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Successfully read function 2 first empty response.');
+   {$endif}
+  end;
 
 
   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'WIFI Device Enabled');
@@ -4789,10 +5020,12 @@ begin
   else
     cmdp := @(msgp^.cmd);
 
-  WIFILogDebug(nil, 'wirelessioctlcmd write='+booltostr(write, true)
+  {$ifdef CYW43455_DEBUG}
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'wirelessioctlcmd write='+booltostr(write, true)
                    + ' cmd='+inttostr(cmd)
                    + ' InputLen='+inttostr(InputLen)
                    + ' datalen='+inttostr(responsedatalen));
+  {$endif}
 
   if (write) then
     TransmitDataLen := InputLen + ResponseDataLen
@@ -4858,7 +5091,10 @@ begin
   // out of order? I think so but needs testing and investigating.
   // requests are safe because the sdio read write functions have a spinlock.
 
-  WIFILogDebug(nil, 'sending ' + inttostr(TransmitLen) + ' bytes to the wifi device');
+  {$ifdef CYW43455_DEBUG}
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'sending ' + inttostr(TransmitLen) + ' bytes to the wifi device');
+  {$endif}
+
   Res := SDIOWIFIDeviceReadWriteExtended(WIFI, sdioWrite, WLAN_FUNCTION, BAK_BASE_ADDR and $1FFFF{ SB_32BIT_WIN}, false, msgp, 0, TransmitLen, 99);
   Result := Res;
   if (Res <> WIFI_STATUS_SUCCESS) then
@@ -5181,7 +5417,7 @@ end;
 
 procedure JoinCallback(Event : TWIFIEvent; EventRecordP : pwhd_event; RequestItemP : PWIFIRequestItem);
 begin
-  if WIFI_LOG_ENABLED then wifiloginfo(nil, 'wireless join callback: removing an event ' + inttostr(ord(event)) + ' from the list (status='+inttostr(eventrecordp^.whd_event.status)+')');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'wireless join callback: removing an event ' + inttostr(ord(event)) + ' from the list (status='+inttostr(eventrecordp^.whd_event.status)+')');
   RequestItemP^.RegisteredEvents := RequestItemP^.RegisteredEvents - [Event];
 
   // early termination of the wait.
@@ -5262,7 +5498,10 @@ begin
   Result := WIFI_STATUS_INVALID_DATA;
 
   // set country code
-  WIFILogDebug(nil, 'Setting country code');
+  {$ifdef CYW43455_DEBUG}
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Setting country code');
+  {$endif}
+
 
   clen := length(countrycode);
   fillchar(countrysettings, 0, sizeof(countrysettings));
@@ -5499,7 +5738,7 @@ begin
    count := 0;
    while (entryp <> nil) do
    begin
-     wifiloginfo(nil, inttostr(count) + ' 0x' + inttohex(longword(entryp), 8)
+     WIFILogInfo(nil, inttostr(count) + ' 0x' + inttohex(longword(entryp), 8)
           + ' 0x' + inttohex(psemaphoreentry(entryp^.signal)^.Signature, 8)
           + ' handle ' + inttostr(entryp^.signal)
           + ' request id ' + inttostr(entryp^.RequestID)
@@ -5645,7 +5884,9 @@ var
   isfinished : boolean;
 
 begin
-  WIFILogDebug(nil, 'WIFI Worker thread started.');
+  {$ifdef CYW43455_DEBUG}
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'WIFI Worker thread started.');
+  {$endif}
 
   ThreadSetName(ThreadGetCurrent, 'WIFI Worker Thread');
 
@@ -5772,7 +6013,7 @@ begin
                         EventRecordP^.whd_event.status := NetSwapLong(EventRecordP^.whd_event.status);
                         EventRecordP^.whd_event.event_type := NetSwapLong(EventRecordP^.whd_event.event_type);
 
-                        if WIFI_LOG_ENABLED then wifiloginfo(nil, 'event message received ' + inttostr(eventrecordp^.whd_event.event_type)
+                        if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'event message received ' + inttostr(eventrecordp^.whd_event.event_type)
                             + ' status='+inttostr(eventrecordp^.whd_event.status)
                             + ' reponsep len='+inttostr(responsep^.len) + ' hdrlen='+inttostr(responsep^.cmd.sdpcmheader.hdrlen));
 
@@ -5785,7 +6026,11 @@ begin
                           RequestEntryP^.Callback(TWIFIEvent(EventRecordP^.whd_event.event_type), EventRecordP, RequestEntryP);
                         end
                         else
-                          WIFILogDebug(nil, 'there was no interest in event ' + IntToStr(EventRecordP^.whd_event.event_type));
+                        begin
+                          {$ifdef CYW43455_DEBUG}
+                          if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'there was no interest in event ' + IntToStr(EventRecordP^.whd_event.event_type));
+                          {$endif}
+                        end;
                    end;
                    2: begin
                       try
