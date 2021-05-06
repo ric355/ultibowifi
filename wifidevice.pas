@@ -1897,7 +1897,7 @@ begin
    Exit;
   end;
 
- WIFILogInfo(nil,'Update WIFI Device');
+ if WIFI_LOG_ENABLED then WIFILogInfo(nil,'Update WIFI Device');
 
  if Network^.Device.DeviceData = nil then
  begin
@@ -1913,7 +1913,7 @@ begin
 
  WIFI^.DeviceInitialize:=nil;
 
- WIFILogInfo(nil,'WIFIDeviceInitialize');
+ if WIFI_LOG_ENABLED then WIFILogInfo(nil,'WIFIDeviceInitialize');
 
  {Initialize WIFI}
  Status:=WIFIDeviceInitialize(WIFI);
@@ -2044,7 +2044,7 @@ begin
 
  // create the receive thread
 
- WIFILogInfo(nil, 'Creating WIFI Worker Thread');
+ if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Creating WIFI Worker Thread');
 
  WIFIWorkerThread := TWIFIWorkerThread.Create(true, WIFI);
  WIFIWorkerThread.Start;
@@ -2435,7 +2435,7 @@ begin
  {Initialize Logging}
  WIFI_LOG_ENABLED:=(WIFI_DEFAULT_LOG_LEVEL <> WIFI_LOG_LEVEL_NONE);
 
- WIFILogInfo(nil, 'WIFI Initialize');
+ if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'WIFI Initialize');
 
 
  // disconnect emmc from SD card (connect sdhost instead)
@@ -2477,7 +2477,7 @@ begin
  Network^.Network.Device.DeviceBus:=DEVICE_BUS_SD;
  Network^.Network.Device.DeviceType:=NETWORK_TYPE_ETHERNET;
  Network^.Network.Device.DeviceFlags:=NETWORK_FLAG_RX_BUFFER or NETWORK_FLAG_TX_BUFFER or NETWORK_FLAG_RX_MULTIPACKET;
- Network^.Network.Device.DeviceData:=nil; //FoundSDHCI;
+ Network^.Network.Device.DeviceData:=nil;
  Network^.Network.Device.DeviceDescription:=CYW45455_NETWORK_DESCRIPTION;
  {Network}
  Network^.Network.NetworkState:=NETWORK_STATE_CLOSED;
@@ -2555,13 +2555,13 @@ begin
  {Check MMC}
  if WIFI = nil then Exit;
 
- WIFILogInfo(nil,'WIFI Set Clock (Clock=' + IntToStr(Clock) + ')');
+ if WIFI_LOG_ENABLED then WIFILogInfo(nil,'WIFI Set Clock (Clock=' + IntToStr(Clock) + ')');
 
  {Get SDHCI}
  SDHCI:=PSDHCIHost(WIFI^.Device.DeviceData);
  if SDHCI = nil then Exit;
 
- wifilogdebug(nil, 'clock='+inttostr(clock) + ' max freq='+inttostr(sdhci^.MaximumFrequency));
+ WIFILogDebug(nil, 'clock='+inttostr(clock) + ' max freq='+inttostr(sdhci^.MaximumFrequency));
  {Check Clock}
  if Clock > SDHCI^.MaximumFrequency then
   begin
@@ -2602,7 +2602,7 @@ begin
  try
  WIFI_DEFAULT_LOG_LEVEL:=WIFI_LOG_LEVEL_INFO;
 
- WIFILogInfo(nil,'WIFI Initialize');
+ if WIFI_LOG_ENABLED then WIFILogInfo(nil,'WIFIDeviceInitialize');
 
  Result:=WIFI_STATUS_INVALID_PARAMETER;
 
@@ -2628,11 +2628,11 @@ begin
     Exit;
    end;
 
-   WIFILogInfo(nil,'Set initial power');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil,'Set initial power');
 
    // should already have been done elsewhere.
    {Set Initial Power}
-   wifilogDebug(nil, 'sdhci^.voltages is ' + inttostr(sdhci^.voltages) + 'firstbitsetof()='+inttostr(firstbitset(sdhci^.voltages)));
+   WIFILogDebug(nil, 'sdhci^.voltages is ' + inttostr(sdhci^.voltages) + 'firstbitsetof()='+inttostr(firstbitset(sdhci^.voltages)));
    Result:=SDHCIHostSetPower(SDHCI,FirstBitSet(SDHCI^.Voltages) - 1);
    if Result <> WIFI_STATUS_SUCCESS then
     begin
@@ -2642,40 +2642,40 @@ begin
     end;
 
    {Set Initial Clock}
-   WIFILogInfo(nil,'Set device clock');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil,'Set device clock');
    Result:=WIFIDeviceSetClock(WIFI,SDIO_BUS_SPEED_DEFAULT);
    if Result <> WIFI_STATUS_SUCCESS then
-     wifilogError(nil, 'failed to set the clock speed to default')
+     WIFILogError(nil, 'failed to set the clock speed to default')
    else
-     wifilogdebug(nil, 'Set device clock succeeded');
+     WIFILogDebug(nil, 'Set device clock succeeded');
 
    {Perform an SDIO Reset}
-   wifiloginfo(nil, 'SDIO WIFI Device Reset');
+   if WIFI_LOG_ENABLED then wifiloginfo(nil, 'SDIO WIFI Device Reset');
    SDIOWIFIDeviceReset(WIFI);
 
-   wifiloginfo(nil, 'WIFI Device Go Idle');
+   if WIFI_LOG_ENABLED then wifiloginfo(nil, 'WIFI Device Go Idle');
    {Set the Card to Idle State}
    Result:= WIFIDeviceGoIdle(WIFI);
    if Result <> WIFI_STATUS_SUCCESS then
     begin
-     wifilogerror(nil, 'go idle returned fail but this is expected...');
+     WIFILogError(nil, 'go idle returned fail but this is expected...');
     end
    else
-     wifilogdebug(nil, 'Go Idle succeeded');
+     WIFILogDebug(nil, 'Go Idle succeeded');
 
 
-   wifiloginfo(nil, 'send interface condition req');
+   if WIFI_LOG_ENABLED then wifiloginfo(nil, 'send interface condition request');
    {Get the Interface Condition}
    SDWIFIDeviceSendInterfaceCondition(WIFI);
 
-   wifiloginfo(nil, 'send operation condition');
+   if WIFI_LOG_ENABLED then wifiloginfo(nil, 'send operation condition');
    {Check for an SDIO Card}
    if SDIOWIFIDeviceSendOperationCondition(WIFI,True) = WIFI_STATUS_SUCCESS then
     begin
-     wifilogdebug(nil, 'send operation condition successful');
+     WIFILogDebug(nil, 'send operation condition successful');
     end
     else
-      wifilogerror(nil, 'send operation condition failed');
+      WIFILogError(nil, 'send operation condition failed');
 
    WIFI^.Device.DeviceBus:=DEVICE_BUS_SD;
    WIFI^.Device.DeviceType:=WIFI_TYPE_SDIO;
@@ -2688,7 +2688,7 @@ begin
 
 
    {Get the Operation Condition}
-   wifiloginfo(nil, 'get operation condition');
+   if WIFI_LOG_ENABLED then wifiloginfo(nil, 'Get operation condition');
    Result:=SDIOWIFIDeviceSendOperationCondition(WIFI,False);
    if Result <> WIFI_STATUS_SUCCESS then
     begin
@@ -2696,7 +2696,8 @@ begin
     end;
 
 
-   wifiloginfo(nil, 'Set card relative address');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Set card relative address');
+
    {send CMD3 get relative address}
    FillChar(Command,SizeOf(TSDIOCommand),0);
    Command.Command:=SDIO_CMD_SET_RELATIVE_ADDR;
@@ -2708,12 +2709,15 @@ begin
    rcaraw := command.response[0];
    WIFI^.RelativeCardAddress := (rcaraw shr 16) and $ff;
    if (Result = WIFI_STATUS_SUCCESS) then
-      wifiloginfo(nil,' Card relative address is ' + inttohex((rcaraw shr 16) and $ff, 2))
+   begin
+      if WIFI_LOG_ENABLED then
+         wifiloginfo(nil,' Card relative address is ' + inttohex((rcaraw shr 16) and $ff, 2))
+   end
    else
-     wifilogerror(nil, 'Could not set relative card address; error='+inttostr(Result));
+     WIFILogError(nil, 'Could not set relative card address; error='+inttostr(Result));
 
 
-   wifiloginfo(nil, 'Selecting wifi device with cmd7');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Selecting wifi device with cmd7');
 
    FillChar(Command,SizeOf(TSDIOCommand),0);
    Command.Command:= SDIO_CMD_SELECT_CARD;
@@ -2725,42 +2729,42 @@ begin
 
    if (Result = WIFI_STATUS_SUCCESS) then
    begin
-     wifilogdebug(nil, 'Device successfully selected response[0]=' + inttohex(command.response[0], 8));
+     WIFILogDebug(nil, 'Device successfully selected response[0]=' + inttohex(command.response[0], 8));
      // for an I/O only card, the status bits are fixed at 0x0f (bits 12:9 of response[0])
      if (((command.response[0] shr 9) and $f) = $f) then
-       wifilogdebug(nil, 'The card correctly reads as I/O only')
+       WIFILogDebug(nil, 'The card correctly reads as I/O only')
      else
-       wifilogerror(nil, 'Something went wrong with the status bits');
+       WIFILogError(nil, 'Something went wrong with the status bits');
    end
    else
-     wifilogerror(nil, 'Failed to select the card at rca='+inttohex((rcaraw shr 16) and $ff, 8));
+     WIFILogError(nil, 'Failed to select the card at rca='+inttohex((rcaraw shr 16) and $ff, 8));
 
    {Set Clock to high speed}
-   WIFILogInfo(nil,'Set device clock');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil,'Set device clock');
    Result:=WIFIDeviceSetClock(WIFI,SDIO_BUS_SPEED_HS);
    if Result <> WIFI_STATUS_SUCCESS then
-     wifilogError(nil, 'failed to set the clock speed to default')
+     WIFILogError(nil, 'failed to set the clock speed to default')
    else
-     wifilogdebug(nil, 'Set device clock succeeded');
+     WIFILogDebug(nil, 'Set device clock succeeded');
 
-   wifiloginfo(nil, 'setting bus speed via common control registers');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'setting bus speed via common control registers');
 
    Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite,BUS_FUNCTION,SDIO_CCCR_SPEED,3,nil);            // emmc sets this to 2.
    if (Result = WIFI_STATUS_SUCCESS) then
-     wifilogdebug(nil, 'Successfully updated bus speed register')
+     WIFILogDebug(nil, 'Successfully updated bus speed register')
    else
-     wifilogerror(nil, 'Failed to update bus speed register');
+     WIFILogError(nil, 'Failed to update bus speed register');
 
 
-   wifiloginfo(nil, 'setting bus interface via common control registers');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'setting bus interface via common control registers');
 
    Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite,BUS_FUNCTION,SDIO_CCCR_IF, $2,nil);
    if (Result = WIFI_STATUS_SUCCESS) then
-     wifilogdebug(nil, 'Successfully updated bus interface control')
+     WIFILogDebug(nil, 'Successfully updated bus interface control')
    else
-     wifilogerror(nil, 'Failed to update bus interface control');
+     WIFILogError(nil, 'Failed to update bus interface control');
 
-   wifiloginfo(nil,'Waiting until the backplane is ready');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil,'Waiting until the backplane is ready');
    blocksize := 0;
    retries := 0;
    repeat
@@ -2772,54 +2776,54 @@ begin
    until ((result1 = WIFI_STATUS_SUCCESS) and (result2 = WIFI_STATUS_SUCCESS) and (blocksize = WIFI_BAK_BLK_BYTES)) or (retries > 500);
 
    if (retries > 500) then
-     wifilogerror(nil, 'the backplane was not ready');
+     WIFILogError(nil, 'the backplane was not ready');
 
    // if we get here we have successfully set the fn0 block size in CCCR and therefore the backplane is up.
 
-   wifiloginfo(nil, 'setting backplane block size');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'setting backplane block size');
 
    // set block sizes for fn1 and fn2 in their respective function registers.
    // note these are still writes to the common IO area (function 0).
    updatevalue := WIFI_BAK_BLK_BYTES;
-   wifiloginfo(nil, 'setting backplane fn1 block size to 64');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'setting backplane fn1 block size to 64');
    Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BUS_FUNCTION, BUS_BAK_BLKSIZE_REG, updatevalue and $ff,nil);
    Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BUS_FUNCTION, BUS_BAK_BLKSIZE_REG+1,(updatevalue shr 8) and $ff,nil);
 
-   wifiloginfo(nil, 'setting backplane fn2 (radio) block size to 512');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'setting backplane fn2 (radio) block size to 512');
    updatevalue := 512;
    Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BUS_FUNCTION, BUS_RAD_BLKSIZE_REG, updatevalue and $ff,nil);
    Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BUS_FUNCTION, BUS_RAD_BLKSIZE_REG+1,(updatevalue shr 8) and $ff,nil);
 
    // we only check the last result here. Needs changing really.
    if (Result = WIFI_STATUS_SUCCESS) then
-     wifilogdebug(nil, 'Successfully updated backplane block sizes')
+     WIFILogDebug(nil, 'Successfully updated backplane block sizes')
    else
-     wifilogerror(nil, 'Failed to update backplane block sizes');
+     WIFILogError(nil, 'Failed to update backplane block sizes');
 
-   wifiloginfo(nil, 'IO Enable backplane function 1');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'IO Enable backplane function 1');
    ioreadyvalue := 0;
    Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite,BUS_FUNCTION,SDIO_CCCR_IOEx, 1 shl 1,nil);
    if (Result = WIFI_STATUS_SUCCESS) then
-     wifilogdebug(nil, 'io enable successfully set for function 1')
+     WIFILogDebug(nil, 'io enable successfully set for function 1')
    else
-     wifilogerror(nil, 'io enable could not be set for function 1');
+     WIFILogError(nil, 'io enable could not be set for function 1');
 
    // at this point ether4330.c turns off all interrupts and then does to ioready check below.
 
-   WIFILogInfo(nil, 'Waiting for IOReady function 1');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Waiting for IOReady function 1');
    ioreadyvalue := 0;
    while (ioreadyvalue and (1 shl 1)) = 0 do
    begin
      Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioRead,BUS_FUNCTION, SDIO_CCCR_IORx,  0, @ioreadyvalue);
      if (Result <> WIFI_STATUS_SUCCESS) then
      begin
-       wifilogerror(nil, 'Could not read IOReady value');
+       WIFILogError(nil, 'Could not read IOReady value');
        exit;
      end;
      sleep(10);
    end;
 
-   wifilogdebug(nil, 'Reading the Chip ID');
+   WIFILogDebug(nil, 'Reading the Chip ID');
    chipid := 0;
    Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioRead,BACKPLANE_FUNCTION,0,  0, @chipid);
    Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioRead,BACKPLANE_FUNCTION,1,  0, pbyte(@chipid)+1);
@@ -2827,7 +2831,7 @@ begin
    chipidrev := chipidrev and $f;
    if (Result = WIFI_STATUS_SUCCESS) then
    begin
-     wifiloginfo(nil, 'WIFI Chip ID is 0x'+inttohex(chipid, 4) + ' rev ' + inttostr(chipidrev));
+     if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'WIFI Chip ID is 0x'+inttohex(chipid, 4) + ' rev ' + inttostr(chipidrev));
      WIFI^.chipid := chipid;
      WIFI^.chipidrev := chipidrev;
    end;
@@ -2847,18 +2851,18 @@ begin
    WIFILogDebug(nil, 'Disable core');
    if (WIFI^.armcore = ARMcr4) then
    begin
-     wifilogdebug(nil, 'sbreset armcr4 core');
+     WIFILogDebug(nil, 'sbreset armcr4 core');
      sbreset(WIFI, WIFI^.armctl, Cr4Cpuhalt, Cr4CpuHalt)
    end
    else
    begin
-     wifilogdebug(nil, 'sbdisable armctl core');
+     WIFILogDebug(nil, 'sbdisable armctl core');
      sbdisable(WIFI, WIFI^.armctl, 0, 0);
    end;
 
    sbreset(WIFI, WIFI^.dllctl, 8 or 4, 4);
 
-   WIFILogInfo(nil, 'Device RAM scan');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'WIFI Device RAM scan');
 
    WIFIDeviceRamScan(WIFI);
 
@@ -2881,32 +2885,32 @@ begin
    begin
      Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioRead, BACKPLANE_FUNCTION, BAK_CHIP_CLOCK_CSR_REG, 0, @bytevalue);
      if (Result <> WIFI_STATUS_SUCCESS) then
-       wifilogerror(nil, 'failed to read clock settings');
+       WIFILogError(nil, 'failed to read clock settings');
      MicrosecondDelay(10);
    end;
 
    WIFILogDebug(nil, 'Clock availability is 0x' + inttohex(bytevalue, 2));
 
    // finally we can clear active low power request. Not sure if any of this is needed to be honest.
-   wifiloginfo(nil, 'clearing active low power clock request');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'clearing active low power clock request');
    Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BACKPLANE_FUNCTION, BAK_CHIP_CLOCK_CSR_REG, Nohwreq or ForceALP, nil);
 
    MicrosecondDelay(65);
 
   WIFIDeviceSetBackplaneWindow(WIFI, WIFI^.chipcommon);
 
-  WIFILogInfo(nil, 'Disable pullups');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Disable pullups');
   Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BACKPLANE_FUNCTION, gpiopullup, 0, nil);
   if (Result = WIFI_STATUS_SUCCESS) then
     WIFILogDebug(nil, 'Successfully disabled SDIO extra pullups')
   else
-    wifilogerror(nil, 'Failed to disable SDIO extra pullups');
+    WIFILogError(nil, 'Failed to disable SDIO extra pullups');
 
   Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BACKPLANE_FUNCTION, Gpiopulldown, 0, nil);
   if (Result = WIFI_STATUS_SUCCESS) then
-    wifilogDebug(nil, 'Successfully disabled SDIO extra pulldowns')
+    WIFILogDebug(nil, 'Successfully disabled SDIO extra pulldowns')
   else
-    wifilogerror(nil, 'Failed to disable SDIO extra pulldowns');
+    WIFILogError(nil, 'Failed to disable SDIO extra pulldowns');
 
 
    if (WIFI^.chipid = $4330) or (WIFI^.chipid = 43362) then
@@ -2918,26 +2922,26 @@ begin
    end;
 
 
-   WIFILogInfo(nil, 'Download WIFI firmware');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Download WIFI firmware to Cypress SOC');
    Result := WIFIDeviceDownloadFirmware(WIFI);
 
    // Enable the device. This should boot the firmware we just loaded to the chip
    sbenable(WIFI);
 
-   wifiloginfo(nil, 'Enabling interrupts for all functions');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Enabling interrupts for all functions');
    Result := SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BUS_FUNCTION, SDIO_CCCR_IENx, (INTR_CTL_MASTER_EN or INTR_CTL_FUNC1_EN or INTR_CTL_FUNC2_EN), nil );
    if (Result = WIFI_STATUS_SUCCESS) then
      WIFILogDebug(nil, 'Successfully enabled interrupts')
    else
-     wifilogerror(nil, 'Failed  to enable interrupts');
+     WIFILogError(nil, 'Failed  to enable interrupts');
 
-   WIFILogInfo(nil, 'End of WIFIDeviceInitialize');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'End of WIFIDeviceInitialize');
    Result:=WIFI_STATUS_SUCCESS;
   end;
 
  except
    on e : exception do
-   wifilogerror(nil, 'Exception ' + e.message + ' at ' + inttohex(longword(exceptaddr), 8) + ' during wifiinitialize');
+   WIFILogError(nil, 'Exception ' + e.message + ' at ' + inttohex(longword(exceptaddr), 8) + ' during wifiinitialize');
  end;
 end;
 
@@ -2956,7 +2960,7 @@ begin
  if (Result = WIFI_STATUS_SUCCESS) then
    WIFILogDebug(nil, 'function ' + inttostr(1) + ' backplanewindow updated to ' + inttohex(addr, 8))
  else
-   wifilogerror(nil, 'something went wrong in setbackplanewindow');
+   WIFILogError(nil, 'something went wrong in setbackplanewindow');
 end;
 
 function WIFIDeviceRegister(WIFI:PWIFIDevice):LongWord;
@@ -3203,7 +3207,7 @@ begin
  {Check Response}
    if (Command.Response[0] and $FF) <> SDIO_SEND_IF_COND_CHECK_PATTERN then
     begin
-     wifilogError(nil,'SD Send Interface Condition failure (Response=' + IntToHex(Command.Response[0] and $FF,8) + ')');
+     WIFILogError(nil,'SD Send Interface Condition failure (Response=' + IntToHex(Command.Response[0] and $FF,8) + ')');
      Exit;
     end
     else
@@ -3261,7 +3265,7 @@ begin
    Status:=WIFIDeviceSendCommand(WIFI,@Command);
    if Status <> WIFI_STATUS_SUCCESS then
     begin
-     wifilogerror(nil, 'sendoperationcondition devicesendcommand returned failed status ' + inttostr(status));
+     WIFILogError(nil, 'sendoperationcondition devicesendcommand returned failed status ' + inttostr(status));
      Result:=Status;
      Exit;
     end;
@@ -3274,7 +3278,7 @@ begin
    Dec(Timeout);
    if Timeout = 0 then
     begin
-     if WIFI_LOG_ENABLED then WifiLogError(nil,'SDIO Send Operation Condition Busy Status Timeout');
+     if WIFI_LOG_ENABLED then WIFILogError(nil,'SDIO Send Operation Condition Busy Status Timeout');
      Exit;
     end;
    MillisecondDelay(10);
@@ -3346,18 +3350,18 @@ begin
     begin*)
      if SDHCIGetVersion(SDHCI) >= SDHCI_SPEC_300 then
       begin
-       wifilogdebug(nil, 'turn off 8 bit bus');
+       WIFILogDebug(nil, 'turn off 8 bit bus');
        Value:=Value and not(SDHCI_CTRL_8BITBUS);
       end;
 
      if WIFI^.BusWidth = WIFI_BUS_WIDTH_4 then
       begin
-       wifilogdebug(nil, 'set 4 bit bus');
+       WIFILogDebug(nil, 'set 4 bit bus');
        Value:=Value or SDHCI_CTRL_4BITBUS;
       end
      else
       begin
-       wifilogdebug(nil, 'turn off 4 bit bus');
+       WIFILogDebug(nil, 'turn off 4 bit bus');
        Value:=Value and not(SDHCI_CTRL_4BITBUS);
       end;
     (*end;*)
@@ -3557,9 +3561,9 @@ begin
 
    {Setup Argument}
    if (direction = sdioWrite) then
-      wifilogdebug(nil, 'adding write but to argument')
+      WIFILogDebug(nil, 'adding write but to argument')
    else
-     wifilogdebug(nil, 'the argument is configured as a read');
+     WIFILogDebug(nil, 'the argument is configured as a read');
    if (direction = sdioWrite) then Command.Argument:=$80000000;
    Command.Argument:=Command.Argument or (Operation shl 28);   // adds in function number
    if increment then
@@ -3691,7 +3695,7 @@ begin
        {Check Response Type}
        if ((Command^.ResponseType and SDIO_RSP_136) <> 0) and ((Command^.ResponseType and SDIO_RSP_BUSY) <> 0) then
         begin
-         if WIFI_LOG_ENABLED then WifiLogError(nil,'MMC Send Command Invalid Response Type');
+         if WIFI_LOG_ENABLED then WIFILogError(nil,'MMC Send Command Invalid Response Type');
          Command^.Status:=WIFI_STATUS_INVALID_PARAMETER;
          Exit;
         end;
@@ -3983,7 +3987,7 @@ begin
  {Check Response}
   if (ApplicationCommand.Response[0] and WIFI_RSP_R1_APP_CMD) = 0 then
    begin
-    if WIFI_LOG_ENABLED then WifiLogError(nil,'SD Send Application Command Not Supported');
+    if WIFI_LOG_ENABLED then WIFILogError(nil,'SD Send Application Command Not Supported');
     Command^.Status:=WIFI_STATUS_UNSUPPORTED_REQUEST;
     Exit;
    end;
@@ -4023,7 +4027,7 @@ var
  chiprev : word;
  socitype : word;
 begin
- wifiloginfo(nil, 'Starting core scan');
+ if WIFI_LOG_ENABLED then wifiloginfo(nil, 'Starting WIFI core scan');
 
  Result := WIFI_STATUS_INVALID_PARAMETER;
 
@@ -4035,7 +4039,7 @@ begin
  // read 32 bits containing chip id and other info
  Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioRead,BACKPLANE_FUNCTION,0,  0, pbyte(@chipidbuf));
  if (Result <> WIFI_STATUS_SUCCESS) then
-    wifilogerror(nil, 'failed to read the first byte of the chip id');
+    WIFILogError(nil, 'failed to read the first byte of the chip id');
 
  Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioRead,BACKPLANE_FUNCTION,1,  0, pbyte(@chipidbuf)+1);
  Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioRead,BACKPLANE_FUNCTION,2,  0, pbyte(@chipidbuf)+2);
@@ -4044,14 +4048,14 @@ begin
  chipid := chipidbuf  and CID_ID_MASK;
  chiprev := (chipidbuf and CID_REV_MASK) shr CID_REV_SHIFT;
  socitype := (chipidbuf and CID_TYPE_MASK) shr CID_TYPE_SHIFT;
- wifilogdebug(nil, 'chipid ' + inttohex(chipid,4) + ' chiprev ' + inttohex(chiprev, 4) + ' socitype ' + inttohex(socitype,4));
+ WIFILogDebug(nil, 'chipid ' + inttohex(chipid,4) + ' chiprev ' + inttohex(chiprev, 4) + ' socitype ' + inttohex(socitype,4));
 
  // read pointer to core info structure.
  // 63*4 is yucky. Could do with a proper address definition for it.
  Result := SDIOWIFIDeviceReadWriteExtended(WIFI, sdioRead, BACKPLANE_FUNCTION, 63*4, true, @addressbytes[1], 0, 4, 1);
  address := plongint(@addressbytes[1])^;
 
- WIFILogdebug(nil, 'Core info pointer is read as ' + inttohex(address, 8));
+ WIFILogDebug(nil, 'Core info pointer is read as ' + inttohex(address, 8));
 
  // we must get the top 15 bits from the address and set the bakplane window to it
  WIFIDeviceSetBackplaneWindow(WIFI, address);
@@ -4154,7 +4158,7 @@ begin
       i := i + 4;
     end;
 
-    WIFILogInfo(nil, 'Corescan completed.');
+    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Corescan completed.');
     WIFILogDebug(nil,'chipcommon=0x' + inttohex(WIFI^.chipcommon,8));
     WIFILogDebug(nil,'armcore=0x' + inttohex(WIFI^.armcore,8));
     WIFILogDebug(nil,'armctl=0x' + inttohex(WIFI^.armctl,8));
@@ -4182,7 +4186,7 @@ begin
   v := 0;
   Result := SDIOWIFIDeviceReadWriteExtended(WIFI, sdioRead, BACKPLANE_FUNCTION, (addr and $1ffff) or $8000, true, @v, 0, 4, 3);
   if (Result <> WIFI_STATUS_SUCCESS) then
-    wifilogerror(nil, 'Failed to read config item 0x'+inttohex(addr, 8) + ' callerid='+inttostr(callerid) + ' result='+inttostr(Result));
+    WIFILogError(nil, 'Failed to read config item 0x'+inttohex(addr, 8) + ' callerid='+inttostr(callerid) + ' result='+inttostr(Result));
   Result := v;
 end;
 
@@ -4192,7 +4196,7 @@ var
 begin
  Result := SDIOWIFIDeviceReadWriteExtended(WIFI, sdioWrite, BACKPLANE_FUNCTION, (addr and $1ffff) or $8000, true, @v, 0, 4, 4);
  if (Result <> WIFI_STATUS_SUCCESS) then
-   wifilogerror(nil,'Failed to update config item 0x'+inttohex(addr, 8));
+   WIFILogError(nil,'Failed to update config item 0x'+inttohex(addr, 8));
 end;
 
 procedure cfgw(WIFI : PWIFIDevice; offset : longword; value : byte);
@@ -4201,7 +4205,7 @@ var
 begin
   Result := SDIOWIFIDeviceReadWriteDirect(WIFI, sdioWrite, BACKPLANE_FUNCTION, offset, value, nil);
   if (Result <> WIFI_STATUS_SUCCESS) then
-    wifilogerror(nil, 'Failed to write config item 0x'+inttohex(offset, 8));
+    WIFILogError(nil, 'Failed to write config item 0x'+inttohex(offset, 8));
 end;
 
 function cfgr(WIFI : PWIFIDevice; offset : longword) : byte;
@@ -4211,7 +4215,7 @@ var
 begin
   Res := SDIOWIFIDeviceReadWriteDirect(WIFI, sdioRead, BACKPLANE_FUNCTION, offset, 0, @value);
   if (Res <> WIFI_STATUS_SUCCESS) then
-    wifilogerror(nil, 'Failed to read config item 0x'+inttohex(offset, 8));
+    WIFILogError(nil, 'Failed to read config item 0x'+inttohex(offset, 8));
 
   Result := value;
 end;
@@ -4243,7 +4247,7 @@ begin
   cfgreadl(WIFI, regs + Ioctrl);
  except
    on e : exception do
-     wifilogerror(nil, 'exception in sbdisable 0x' + inttohex(longword(exceptaddr), 8));
+     WIFILogError(nil, 'exception in sbdisable 0x' + inttohex(longword(exceptaddr), 8));
  end;
 end;
 
@@ -4319,28 +4323,28 @@ begin
   if (WIFI^.armcore = ARMcr4) then
   begin
     r := WIFI^.armregs;
-    wifilogdebug(nil, 'ramscan armcr4 0x' + inttohex(r, 8));
+    WIFILogDebug(nil, 'ramscan armcr4 0x' + inttohex(r, 8));
     WIFIDeviceSetBackplaneWindow(WIFI, r);
     r := (r and $7fff) or $8000;
     n := cfgreadl(WIFI, r + Cr4Cap);
 
-    wifilogdebug(nil, 'cr4 banks 0x' + inttohex(n, 8));
+    WIFILogDebug(nil, 'cr4 banks 0x' + inttohex(n, 8));
 
     banks := ((n shr 4) and $F) + (n and $F);
     size := 0;
 
-    wifilogdebug(nil, 'banks='+inttostr(banks));
+    WIFILogDebug(nil, 'banks='+inttostr(banks));
 
     for i := 0 to banks - 1 do
     begin
        cfgwritel(WIFI, r + Cr4Bankidx, i);
        n := cfgreadl(WIFI, r + Cr4Bankinfo);
-       wifilogdebug(nil, 'bank ' + inttostr(i) + ' reg 0x' + inttohex(n, 2) + ' size 0x' + inttohex(8192 * ((n and $3F) + 1), 8));
+       WIFILogDebug(nil, 'bank ' + inttostr(i) + ' reg 0x' + inttohex(n, 2) + ' size 0x' + inttohex(8192 * ((n and $3F) + 1), 8));
        size += 8192 * ((n and $3F) + 1);
     end;
     WIFI^.socramsize := size;
     WIFI^.rambase := $198000;
-    WIFILogdebug(nil, 'Socram size=0x'+inttohex(size, 8) + ' rambase=0x'+inttohex(WIFI^.rambase, 8));
+    WIFILogDebug(nil, 'Socram size=0x'+inttohex(size, 8) + ' rambase=0x'+inttohex(WIFI^.rambase, 8));
     exit;
   end;
 
@@ -4349,7 +4353,7 @@ begin
   WIFIDeviceSetBackplaneWindow(WIFI, r);
   n := cfgreadl(WIFI, r + Coreinfo);
 
-  wifilogdebug(nil ,'socramrev ' + inttostr(WIFI^.socramrev) + ' coreinfo 0x' + inttohex(n, 8));
+  WIFILogDebug(nil ,'socramrev ' + inttostr(WIFI^.socramrev) + ' coreinfo 0x' + inttohex(n, 8));
 
   banks := (n>>4) and $F;
   size := 0;
@@ -4357,19 +4361,19 @@ begin
   begin
     cfgwritel(WIFI, r + Bankidx, i);
     n := cfgreadl(WIFI, r + Bankinfo);
-    wifilogdebug(nil, 'bank ' + inttostr(i) + ' reg 0x' + inttohex(n, 2) + ' size 0x' + inttohex(8192 * ((n and $3F) + 1), 8));
+    WIFILogDebug(nil, 'bank ' + inttostr(i) + ' reg 0x' + inttohex(n, 2) + ' size 0x' + inttohex(8192 * ((n and $3F) + 1), 8));
     size += 8192 * ((n and $3F) + 1);
   end;
   WIFI^.socramsize := size;
   WIFI^.rambase := 0;
   if(WIFI^.chipid = 43430) then
   begin
-    wifilogdebug(nil, 'updating bankidx values for 43430');
+    WIFILogDebug(nil, 'updating bankidx values for 43430');
     cfgwritel(WIFI, r + Bankidx, 3);
     cfgwritel(WIFI, r + Bankpda, 0);
   end;
 
-  WIFILogdebug(nil, 'Socram size=0x'+inttohex(size, 8) + ' rambase=0x'+inttohex(WIFI^.rambase, 8));
+  WIFILogDebug(nil, 'Socram size=0x'+inttohex(size, 8) + ' rambase=0x'+inttohex(WIFI^.rambase, 8));
 
 end;
 
@@ -4500,7 +4504,7 @@ begin
   WIFIDeviceSetBackplaneWindow(WIFI, WIFI^.rambase + WIFI^.socramsize - 4);
   SDIOWIFIDeviceReadWriteExtended(WIFI, sdioWrite, BACKPLANE_FUNCTION, (WIFI^.rambase + WIFI^.socramsize - 4) and $7fff{ or $8000}, true, @lastramvalue, 0, 4, 7);
 
-  WIFILogInfo(nil, 'Starting firmware load...');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Starting WIFI firmware load...');
 
   // locate firmware detils based on chip id and revision
 
@@ -4523,7 +4527,7 @@ begin
     exit;
   end;
 
-  WIFILogInfo(nil, 'Using ' + FirmwareFilename + ' for firmware.');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Using ' + FirmwareFilename + ' for firmware.');
 
   // open file and read entire block into memory. Perhaps ought to do this in
   // chunks really? If we do, then the verify stuff needs to be done a chunk
@@ -4541,7 +4545,7 @@ begin
   // Not needed on a Pi Zero as the firmware loads at addres 0 by default - needs updating to suit.
 
   move(firmwarep^, WIFI^.resetvec, 4);
-  wifilogdebug(nil, 'Reset vector of 0x' + inttohex(WIFI^.resetvec, 8) + ' copied out of firmware');
+  WIFILogDebug(nil, 'Reset vector of 0x' + inttohex(WIFI^.resetvec, 8) + ' copied out of firmware');
 
   off := 0;
   if (fsize > FIRMWARE_CHUNK_SIZE) then
@@ -4555,7 +4559,7 @@ begin
 
   getmem(comparebuf, fsize);
 
-  wifilogdebug(nil, 'Bytes to transfer: ' + inttostr(fsize));
+  WIFILogDebug(nil, 'Bytes to transfer: ' + inttostr(fsize));
   bytestransferred := 0;
   dodumpregisters := false;
 
@@ -4577,43 +4581,8 @@ begin
   else
     chunksize := fsize;
 
- (*
- We don't need this comparison to always run
- This verify code needs updating to match the upload code now
- anyway. Do that later and move to an ifdef or global boolean.
-
-
-  wifiloginfo(nil, 'bytes to read are ' + inttostr(fsize));
-  bytestransferred := 0;
-  while bytestransferred < fsize do
-  begin
-
-    sbmem(WIFI, false, comparebuf+off, chunksize, WIFI^.rambase + off);
-    bytestransferred := bytestransferred + chunksize;
-     wifiloginfo(nil, 'bytes transferred = ' + inttostr(bytestransferred) + ' bytes left = ' +inttostr(fsize-bytestransferred));
-
-    if (bytestransferred < fsize) then
-    begin
-      off += FIRMWARE_CHUNK_SIZE;
-      if (off + chunksize > fsize) then
-        chunksize := fsize - off;
-    end;
-  end;
-
-
-  WIFILogDebug(nil, 'block comparison started');
-  for i := 0 to fsize - 1 do
-    if (pbyte(firmwarep+i)^ <> pbyte(comparebuf+i)^) then
-    begin
-      wifiloginfo(nil, 'compare failed at byte ' + inttostr(i));
-      break;
-    end;
-  wifiloginfo(nil, 'block comparison completed');
-
-  freemem(comparebuf);
-  *)
-
   freemem(firmwarep);
+
 
 
   // now we need to upload the configuration to ram
@@ -4622,7 +4591,7 @@ begin
   Reset(FirmwareFile);
   FSize := FileSize(FirmwareFile);
 
-  WIFILogdebug(nil, 'Size of firmware config file is ' + inttostr(fsize) + ' bytes');
+  WIFILogDebug(nil, 'Size of firmware config file is ' + inttostr(fsize) + ' bytes');
 
   // dword align to be sure
   if (fsize mod 4 <> 0) then
@@ -4664,7 +4633,7 @@ begin
 
   Freemem(firmwarep);
 
-  WIFILogInfo(nil, 'Finished transferring config file to socram');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Finished transferring config file to socram');
 
   // I believe this is some sort of checksum
   fsize := fsize div 4;
@@ -4683,7 +4652,7 @@ begin
      // write reset vector to bottom of RAM
      if (WIFI^.resetvec <> 0) then
      begin
-       wifilogdebug(nil, 'Firmware upload: Writing reset vector to address 0');
+       WIFILogDebug(nil, 'Firmware upload: Writing reset vector to address 0');
        sbmem(WIFI, true, @WIFI^.resetvec, sizeof(WIFI^.resetvec), 0);
      end;
 
@@ -4694,7 +4663,7 @@ begin
      sbreset(WIFI, WIFI^.armctl, 0, 0);
  except
    on e : exception do
-     wifilogerror(nil, 'exception : ' + e.message + ' at address ' + inttohex(longword(exceptaddr),8));
+     WIFILogError(nil, 'exception : ' + e.message + ' at address ' + inttohex(longword(exceptaddr),8));
  end;
 end;
 
@@ -4706,7 +4675,7 @@ var
   ints : longword;
 begin
   WIFIDeviceSetBackplaneWindow(WIFI, BAK_BASE_ADDR);
-  WIFILogInfo(nil, 'Enabling high throughput clock...');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Enabling high throughput clock...');
   cfgw(WIFI, BAK_CHIP_CLOCK_CSR_REG, 0);
   sleep(1);
   cfgw(WIFI, BAK_CHIP_CLOCK_CSR_REG, ReqHT);
@@ -4756,7 +4725,7 @@ begin
     Sleep(100);
   end;
 
-  WIFILogInfo(nil, 'Radio function (f2) successfully enabled');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Radio function (f2) successfully enabled');
 
   // enable interrupts.
   SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BUS_FUNCTION, SDIO_CCCR_IENx, (INTR_CTL_MASTER_EN or INTR_CTL_FUNC1_EN or INTR_CTL_FUNC2_EN), nil );
@@ -4772,7 +4741,9 @@ begin
       mbox := cfgreadl(WIFI, WIFI^.sdregs + Hostmboxdata);
       cfgwritel(WIFI, WIFI^.sdregs + Sbmbox, 2);	//ack
       if ((mbox and $8) = $8) then
-         WIFILogInfo(nil, 'The Broadcom firmware reports it is ready!')
+      begin
+         if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'The Broadcom firmware reports it is ready!')
+      end
       else
         WIFILogError(nil, 'The firmware is not ready! mbox=0x'+inttohex(mbox, 8));
     end
@@ -4783,12 +4754,12 @@ begin
   // It seems like we need to execute a read first to kick things off. If we don't do this the first
   // IOCTL command response will be an empty one rather than the one for the IOCTL we sent.
   if (SDIOWIFIDeviceReadWriteExtended(WIFI, sdioRead, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, @ioctl_rxmsg, 0, 64,8) <> WIFI_STATUS_SUCCESS) then
-     wifilogdebug(nil, 'There seems to be nothing to read from function 2')
+     WIFILogDebug(nil, 'There seems to be nothing to read from function 2')
   else
-    wifilogdebug(nil, 'Successfully read function 2 first empty response.');
+    WIFILogDebug(nil, 'Successfully read function 2 first empty response.');
 
 
-  WIFILogInfo(nil, 'WIFI Device Enabled');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'WIFI Device Enabled');
 end;
 
 
@@ -4887,11 +4858,11 @@ begin
   // out of order? I think so but needs testing and investigating.
   // requests are safe because the sdio read write functions have a spinlock.
 
-  wifilogdebug(nil, 'sending ' + inttostr(TransmitLen) + ' bytes to the wifi device');
+  WIFILogDebug(nil, 'sending ' + inttostr(TransmitLen) + ' bytes to the wifi device');
   Res := SDIOWIFIDeviceReadWriteExtended(WIFI, sdioWrite, WLAN_FUNCTION, BAK_BASE_ADDR and $1FFFF{ SB_32BIT_WIN}, false, msgp, 0, TransmitLen, 99);
   Result := Res;
   if (Res <> WIFI_STATUS_SUCCESS) then
-    wifilogerror(nil, 'failed to send cmd53 for ioctl command ' + inttostr(res));
+    WIFILogError(nil, 'failed to send cmd53 for ioctl command ' + inttostr(res));
 
   // wait for the worker thread to process the response.
   SemaphoreWait(WorkerRequestP^.Signal);
@@ -4900,7 +4871,7 @@ begin
   ResponseP := WorkerRequestP^.MsgP;
   if (ResponseP = nil) then
   begin
-    wifilogerror(nil, 'Nil response item in WirelessIOCTLCommand');
+    WIFILogError(nil, 'Nil response item in WirelessIOCTLCommand');
     exit;
   end;
 
@@ -4972,7 +4943,7 @@ begin
 
   // locate regulatory detils based on chip id and revision
 
-  WIFILogInfo(nil, 'Starting to upload regulatory file');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Starting to upload regulatory file');
   Found := false;
 
   for i := 1 to FIRWMARE_OPTIONS_COUNT do
@@ -4992,7 +4963,7 @@ begin
     exit;
   end;
 
-  WIFILogInfo(nil, 'Using ' + RegulatoryFilename + ' for regulatory file.');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Using ' + RegulatoryFilename + ' for regulatory file.');
 
   // now regulatory file if there is one.
 
@@ -5000,7 +4971,7 @@ begin
   Reset(FirmwareFile);
   FSize := FileSize(FirmwareFile);
 
-  WIFILogInfo(nil, 'Size of regulatory file is ' + inttostr(fsize) + ' bytes');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Size of regulatory file is ' + inttostr(fsize) + ' bytes');
 
   GetMem(firmwarep, Reguhdr+Regusz+1);
 
@@ -5045,7 +5016,7 @@ begin
    freemem(firmwarep);
   end;
 
-  WIFILogInfo(nil, 'Finished transferring regulatory file');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Finished transferring regulatory file');
 end;
 
 
@@ -5108,7 +5079,7 @@ begin
 
     if (eventrecordp^.whd_event.status = 8) then
       s := s + ' Partial scan result';
-    WIFILogInfo(nil, s);
+    if WIFI_LOG_ENABLED then WIFILogInfo(nil, s);
 
     if (RequestItemP^.UserDataP <> nil) then
     begin
@@ -5161,7 +5132,7 @@ begin
 
   // passive scan - listens for beacons only.
 
-  WIFILogInfo(nil, 'Starting wireless network scan');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Starting wireless network scan');
 
   WirelessCommandInt(WIFI, $b9, $28); // scan channel time
   WirelessCommandInt(WIFI, $bb, $28); // scan unassoc time
@@ -5210,7 +5181,7 @@ end;
 
 procedure JoinCallback(Event : TWIFIEvent; EventRecordP : pwhd_event; RequestItemP : PWIFIRequestItem);
 begin
-  wifiloginfo(nil, 'wireless join callback: removing an event ' + inttostr(ord(event)) + ' from the list (status='+inttostr(eventrecordp^.whd_event.status)+')');
+  if WIFI_LOG_ENABLED then wifiloginfo(nil, 'wireless join callback: removing an event ' + inttostr(ord(event)) + ' from the list (status='+inttostr(eventrecordp^.whd_event.status)+')');
   RequestItemP^.RegisteredEvents := RequestItemP^.RegisteredEvents - [Event];
 
   // early termination of the wait.
@@ -5381,10 +5352,11 @@ begin
 
   if (RequestEntryP^.RegisteredEvents = []) then
   begin
-    WIFILogInfo(nil, 'Successfully found all of the registered events');
+    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Successfully found all of the registered eventss');
 
     {Set network State to Open}
     WIFI^.NetworkP^.NetworkState:=NETWORK_STATE_OPEN;
+    WIFI^.NetworkP^.NetworkStatus:=NETWORK_STATUS_UP;
 
     {Notify the State}
     NotifierNotify(@WIFI^.NetworkP^.Device,DEVICE_NOTIFICATION_OPEN);
@@ -5392,7 +5364,7 @@ begin
   else
   begin
     Result := WIFI_STATUS_INVALID_PARAMETER;
-    WIFILogInfo(nil, 'There are still some events not found after the 5 second wait');
+    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'There are still some events not found after the 5 second wait');
   end;
 
   WIFIWorkerThread.DoneWithRequest(RequestEntryP);
@@ -5432,13 +5404,13 @@ begin
  // request the mac address of the wifi device
  fillchar(macaddress[0], sizeof(macaddress), 0);
 
- WIFILogInfo(nil, 'Requesting MAC address from the WIFI device...');
+ if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Requesting MAC address from the WIFI device...');
  Result := WirelessGetVar(WIFI, 'cur_etheraddr', @macaddress[0], MAC_ADDRESS_LEN);
  if Result <> WIFI_STATUS_SUCCESS then
    exit;
 
 
- WIFILogInfo(nil, 'WIFI Current MAC address is '
+ if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'WIFI Current MAC address is '
          + IntToHex(macaddress[0], 2) + ':'
          + IntToHex(macaddress[1], 2) + ':'
          + IntToHex(macaddress[2], 2) + ':'
@@ -5481,7 +5453,7 @@ begin
  if Result <> WIFI_STATUS_SUCCESS then
    exit;
 
- WIFILogInfo(nil, 'Firmware version string (partial): ' + buftostr(@version[1], 50));
+ if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Firmware version string (partial): ' + buftostr(@version[1], 50));
 
  Result := WirelessSetInt(WIFI, 'roam_off', 1);
  if Result <> WIFI_STATUS_SUCCESS then
@@ -5719,7 +5691,7 @@ begin
          begin
            if SDIOWIFIDeviceReadWriteExtended(FWIFI, sdioRead, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, ResponseP, 0, SDPCM_HEADER_SIZE,18) <> WIFI_STATUS_SUCCESS then
            begin
-             wifilogerror(nil, 'Error trying to read SDPCM header');
+             WIFILogError(nil, 'Error trying to read SDPCM header');
              exit;
            end
            else
@@ -5753,13 +5725,13 @@ begin
                  if (blockcount > 0) then
                  begin
                    if SDIOWIFIDeviceReadWriteExtended(FWIFI, sdioRead, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep)+SDPCM_HEADER_SIZE, blockcount, 512,19) <> WIFI_STATUS_SUCCESS then
-                     wifilogerror(nil, 'Error trying to read blocks for ioctl response');
+                     WIFILogError(nil, 'Error trying to read blocks for ioctl response');
                  end;
 
                  if (remainder > 0) then
                  begin
                    if SDIOWIFIDeviceReadWriteExtended(FWIFI, sdioRead, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep)+SDPCM_HEADER_SIZE + blockcount*512, 0, remainder,20) <> WIFI_STATUS_SUCCESS then
-                     wifilogerror(nil, 'Error trying to read blocks for ioctl response (len='+inttostr(responsep^.len)+')');
+                     WIFILogError(nil, 'Error trying to read blocks for ioctl response (len='+inttostr(responsep^.len)+')');
                  end;
 
                  // the channel has 4 bits flags in the upper nibble and 4 bits channel number in the lower nibble.
@@ -5800,7 +5772,7 @@ begin
                         EventRecordP^.whd_event.status := NetSwapLong(EventRecordP^.whd_event.status);
                         EventRecordP^.whd_event.event_type := NetSwapLong(EventRecordP^.whd_event.event_type);
 
-                        wifiloginfo(nil, 'event message received ' + inttostr(eventrecordp^.whd_event.event_type)
+                        if WIFI_LOG_ENABLED then wifiloginfo(nil, 'event message received ' + inttostr(eventrecordp^.whd_event.event_type)
                             + ' status='+inttostr(eventrecordp^.whd_event.status)
                             + ' reponsep len='+inttostr(responsep^.len) + ' hdrlen='+inttostr(responsep^.cmd.sdpcmheader.hdrlen));
 
@@ -5814,16 +5786,6 @@ begin
                         end
                         else
                           WIFILogDebug(nil, 'there was no interest in event ' + IntToStr(EventRecordP^.whd_event.event_type));
-
-                        // note this has already been swapped above.
-                        if (EventRecordP^.whd_event.event_type = 2) then
-                          case EventRecordP^.whd_event.status of
-                             3 : wifiloginfo(nil, 'Could not find the network that was specified');
-                             0 : wifiloginfo(nil, 'the specified network was sucessfully located');
-                             else
-                               wifiloginfo(nil, 'some other status was received that we dont have a definition for');
-                          end;
-
                    end;
                    2: begin
                       try
@@ -5837,7 +5799,7 @@ begin
                         else
                           FrameLength := responseP^.len - 4 - ETHERNET_HEADER_BYTES;
 
-//                        wifiloginfo(nil, 'receive packet framelength='+inttostr(framelength));
+//                        if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'receive packet framelength='+inttostr(framelength));
                         NetworkEntryP^.Packets[NetworkEntryP^.Count - 1].Buffer:=ResponseP;
                         NetworkEntryP^.Packets[NetworkEntryP^.Count - 1].Data:=Pointer(ResponseP) + NetworkEntryP^.Offset;
                         NetworkEntryP^.Packets[NetworkEntryP^.Count - 1].Length:=FrameLength - ETHERNET_CRC_SIZE;
@@ -5863,11 +5825,11 @@ begin
 
                         except
                           on e : exception do
-                            wifiloginfo(nil, 'exception ' + e.message + ' at ' + inttohex(longword(exceptaddr), 8));
+                            WIFILogError(nil, 'exception ' + e.message + ' at ' + inttohex(longword(exceptaddr), 8));
                         end;
                       end;
                  else
-                   wifiloginfo(nil,'WIFIWorker: Unrecognised channel message received channel='+inttohex(responseP^.cmd.sdpcmheader.chan and $f, 2));
+                   WIFILogError(nil,'WIFIWorker: Unrecognised channel message received channel='+inttohex(responseP^.cmd.sdpcmheader.chan and $f, 2));
                  end
                end
                else
@@ -5877,7 +5839,7 @@ begin
                // read next sdpcm header (may not be one present in which case everything will be zero including length)
                if (not isFinished) and (SDIOWIFIDeviceReadWriteExtended(FWIFI, sdioRead, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, ResponseP, 0, SDPCM_HEADER_SIZE,21) <> WIFI_STATUS_SUCCESS) then
                begin
-                 wifilogerror(nil, 'Error trying to read SDPCM header (repeat)');
+                 WIFILogError(nil, 'Error trying to read SDPCM header (repeat)');
                  exit;
                end;
              end;
@@ -5993,7 +5955,7 @@ begin
 
   except
     on e : exception do
-     wifilogerror(nil, 'exception ' + e.message + ' at ' + inttohex(longword(exceptaddr), 8));
+     WIFILogError(nil, 'exception ' + e.message + ' at ' + inttohex(longword(exceptaddr), 8));
   end;
 end;
 
