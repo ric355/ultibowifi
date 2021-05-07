@@ -1215,7 +1215,8 @@ type
    ReceivePacketCount:LongWord;                  {Maximum number of packets per receive entry}
    TransmitPacketCount:LongWord;                 {Maximum number of packets per transmit entry}
    
-   OriginalHostStart:TSDHCIHostStart; 
+   JoinCompleted: Boolean;
+   OriginalHostStart: TSDHCIHostStart; 
   end;
 
 
@@ -1271,7 +1272,7 @@ var
 
   // signals when wifi is actually ready. Will be replaced with something
   // better in due course.
-  WIFIIsReady : boolean = false;
+  // WIFIIsReady : boolean = false;
 
 var
   // Auto init variable, move to GlobalConfig or restructure during integration
@@ -1890,6 +1891,8 @@ var
  Status : longword;
  Entry:PNetworkEntry;
 begin
+ Result := ERROR_INVALID_PARAMETER;
+ 
  WIFI:=WIFIDeviceCreate;
  if WIFI = nil then
   begin
@@ -2054,15 +2057,26 @@ begin
  // responses won't be received.
  WirelessInit(WIFI);
 
+ {Set State to Open}
+ Network^.NetworkState := NETWORK_STATE_OPEN;
+
+ {Notify the State}
+ NotifierNotify(@Network^.Device, DEVICE_NOTIFICATION_OPEN);
 
  Result := ERROR_SUCCESS;
 
- WIFIIsReady := true;
+ // WIFIIsReady := true;
 end;
 
 function CYW43455DeviceClose(Network:PNetworkDevice):LongWord;
 begin
- Result := ERROR_SUCCESS;
+  {Set State to Closed}
+  Network^.NetworkState := NETWORK_STATE_CLOSED;
+ 
+  {Notify the State}
+  NotifierNotify(@Network^.Device, DEVICE_NOTIFICATION_CLOSE); 
+
+  Result := ERROR_SUCCESS;
 end;
 
 function CYW43455DeviceControl(Network:PNetworkDevice;Request:Integer;Argument1:PtrUInt;var Argument2:PtrUInt):LongWord;
@@ -2178,7 +2192,7 @@ begin
         {Get Link State for this device}
         // very temporary at the moment.
         // depends what 'link' means
-        if (WIFIIsReady) then
+        if PCYW43455Network(Network)^.JoinCompleted then // if (WIFIIsReady) then
           Argument2 := NETWORK_LINK_UP
         else
           Argument2 := NETWORK_LINK_DOWN;
@@ -2225,9 +2239,7 @@ begin
 
  {Check State}
  Result:=ERROR_NOT_READY;
-// commented out because wired network is very keen to send packets long before
-// the wifi network is ready. Need better solution.
-// if Network^.NetworkState <> NETWORK_STATE_OPEN then Exit;
+ if Network^.NetworkState <> NETWORK_STATE_OPEN then Exit;
 
  {Set Result}
  Result:=ERROR_OPERATION_FAILED;
@@ -2376,12 +2388,7 @@ begin
 
   {Check State}
   Result:=ERROR_NOT_READY;
-
-  // this check is not really valid for wifi, since the wired network adapter calls
-  // it very early, long before we have joined a network.
-  // hence for now we'll comment it out so the request can be queued up.
-  // hopefully that'll move things forward.
-//  if Network^.NetworkState <> NETWORK_STATE_OPEN then Exit;
+  if Network^.NetworkState <> NETWORK_STATE_OPEN then Exit;
 
   {Wait for Entry}
   if SemaphoreWait(Network^.TransmitQueue.Wait) = ERROR_SUCCESS then
@@ -2459,7 +2466,7 @@ begin
  end;
 
  // init 32khz oscillator.
- SysGPIOPullSelect(SD_32KHZ_PIN, GPIO_PULL_NONE);
+ GPIOPullSelect(SD_32KHZ_PIN, GPIO_PULL_NONE);
  GPIOFunctionSelect(SD_32KHZ_PIN, GPIO_FUNCTION_ALT0);
 
  // turn on wlan power
@@ -5593,12 +5600,13 @@ begin
   begin
     if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Successfully found all of the registered eventss');
 
-    {Set network State to Open}
-    WIFI^.NetworkP^.NetworkState:=NETWORK_STATE_OPEN;
-    WIFI^.NetworkP^.NetworkStatus:=NETWORK_STATUS_UP;
+    PCYW43455Network(WIFI^.NetworkP)^.JoinCompleted := True;
 
-    {Notify the State}
-    NotifierNotify(@WIFI^.NetworkP^.Device,DEVICE_NOTIFICATION_OPEN);
+    {Set Status to Up}
+    WIFI^.NetworkP^.NetworkStatus := NETWORK_STATUS_UP;
+
+    {Notify the Status}
+    NotifierNotify(@WIFI^.NetworkP^.Device, DEVICE_NOTIFICATION_UP);
   end
   else
   begin

@@ -315,7 +315,7 @@ var
   HTTPListener : THTTPListener;
   ScanResultList : TStringList;
   Status : Longword;
-
+  CYW43455Network: PCYW43455Network;
 
 procedure WIFIScanCallback(ssid : string; ScanResultP : pwl_escan_result);
 begin
@@ -327,6 +327,7 @@ begin
   ConsoleFramebufferDeviceAdd(FramebufferDeviceGetDefault);
   topwindow := ConsoleWindowCreate(ConsoleDeviceGetDefault, CONSOLE_POSITION_TOP,TRUE);
 
+  LOGGING_INCLUDE_TICKCOUNT := True;
   CONSOLE_LOGGING_POSITION := CONSOLE_POSITION_BOTTOM;
   LoggingConsoleDeviceAdd(ConsoleDeviceGetDefault);
   LoggingDeviceSetDefault(LoggingDeviceFindByType(LOGGING_TYPE_CONSOLE));
@@ -350,6 +351,7 @@ begin
   ConsoleWindowWriteln(topwindow, 'Waiting for file system...');
   while not directoryexists('c:\') do
   begin
+    Sleep(0);
   end;
   ConsoleWindowWriteln(topwindow, 'File system ready. Initialize Wifi Device.');
 
@@ -372,10 +374,18 @@ begin
     // whole network device integration stuff is complete.
     // Certainly can't stay the way it is.
 
+    ConsoleWindowWriteln(topwindow, 'Waiting for Wifi Device to be opened.');
+    
     // spin until the wifi device is actually ready to do stuff.
-
-    while not (WIFIIsReady) do
+    repeat
+      CYW43455Network := PCYW43455Network(NetworkDeviceFindByDescription(CYW45455_NETWORK_DESCRIPTION));
+      if CYW43455Network = nil then
+        Sleep(100);
+    until CYW43455Network <> nil;
+    
+    while CYW43455Network^.Network.NetworkState <> NETWORK_STATE_OPEN do // while not (WIFIIsReady) do
     begin
+      Sleep(0);
     end;
 
 
