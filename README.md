@@ -1,38 +1,22 @@
 Ultibo WIFI Device Driver for onboard Cypress WIFI chips
 ----------------------------------------------------------
 
-Prerequisites for building and running this app:
+This is an Ultibo application and device driver which enables support for the internal WIFI
+device (a Cypress 43445 chip). It supports WPA2/PSK only at the moment, and does not
+allow connection to open networks.
+
+Prerequisites for building and running the demo kernel:
 1. You must boot from a USB drive
 2. Pi3b+ or Pi zero i.e. Must be a device with onboard wifi support (*not* a USB wifi device)
-3. USB drive must contain c:\firmware with the correct firmware file in it
+3. USB drive must contain c:\firmware with the correct firmware file in it (see repo folder)
 
-This is a very rough and ready Ultibo application which creates a wifi device and attempts
-to get the Arasan controller to talk to the Cypress WFI chip.
-
-Latest capabilities (in the approximate order they occur):
-- initialise Arasan controller for wifi (diconnects eMMC)
-- initialise cypress chip via SDIO
-- scan cores and ram to establish key addresses
-- Load firmware to cypress chip
-- Load configuration to cypress chip
-- Load regulatory blob to cypress chip
-- Set the country code and other basic settings
-- Scan for wireless networks (optional)
-- Join a network
-- Get an IP address via DHCP
-- Full IP traffic is working although not guaranteed totally stable.
-
-Once up and running you should be able to ping the device and you will also be
-able to telnet to it and use Ultibo's standard set of shell commands. This includes
-the ability to upgrade the kernel if you set up a local web server and point
+With the demo kernel up and running you should be able to ping the device and you
+will also be able to telnet to it and use Ultibo's standard set of shell commands.
+This includes the ability to upgrade the kernel if you set up a local web server and point
 your cmdline.txt to it in the usual way (see Ultibo website for details on how
 to do this).
 
-At the moment I'm verifying the work done to integrate the Ultibo buffer API is
-correct, and looking out for all of the complications I haven't properly considered
-but as a concept it basically works. The next items to look at are how to handle loss of
-connection and subsequent reconnection.
-
+Currently looking at how to handle loss of connection and subsequent reconnection.
 
 Running
 -------
@@ -80,9 +64,13 @@ The application should compile in Ultibo Lazarus if you open the wifi project.
 The guts of what goes on in this application is in the wifidevice source file.
 It contains various functions for talking to the Cypress device including the
 rather lengthy initialisation process.
-Some of it is similar to what is being done in the mmc unit but a lot of it is
-wifi specific. The initialisation process is derived from various sources including
-the broadcom full mac driver, the plan9 driver, and the cypress wifi host driver.
+The initialisation process is derived from various sources including the broadcom
+full mac driver, the plan9 driver, and the cypress wifi host driver.
 
-Note previous pushes to this repo changed the kernel path to a place other than
-the root folder. This is not the case anymore; the kernel is back in the root folder.
+Using the Device Driver in your applications
+--------------------------------------------
+
+See the contents of wifi.lpr for how this is currently done. It could change in
+the future as presently the devices are being created outside of the unit
+initialization process in order to manage the dependency on the C: drive
+for firmware loading.

@@ -1270,10 +1270,6 @@ var
   // and that is because the SDHCI and WIFI Device are being created externally.
   WIFIWorkerThread : TWIFIWorkerThread;
 
-  // signals when wifi is actually ready. Will be replaced with something
-  // better in due course.
-  // WIFIIsReady : boolean = false;
-
 var
   // Auto init variable, move to GlobalConfig or restructure during integration
   WIFI_AUTO_INIT : Boolean = False; //True; // Don't auto init during development
@@ -2064,8 +2060,6 @@ begin
  NotifierNotify(@Network^.Device, DEVICE_NOTIFICATION_OPEN);
 
  Result := ERROR_SUCCESS;
-
- // WIFIIsReady := true;
 end;
 
 function CYW43455DeviceClose(Network:PNetworkDevice):LongWord;
@@ -2190,9 +2184,7 @@ begin
        end;
       NETWORK_CONTROL_GET_LINK:begin
         {Get Link State for this device}
-        // very temporary at the moment.
-        // depends what 'link' means
-        if PCYW43455Network(Network)^.JoinCompleted then // if (WIFIIsReady) then
+        if PCYW43455Network(Network)^.JoinCompleted then
           Argument2 := NETWORK_LINK_UP
         else
           Argument2 := NETWORK_LINK_DOWN;
@@ -5369,10 +5361,6 @@ var
 begin
 
   // scan for wifi networks
-
-  // perhaps implement a callback eventually, so that the caller can see the
-  // networks being found.
-
   // passive scan - listens for beacons only.
 
   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Starting wireless network scan');
@@ -5598,7 +5586,7 @@ begin
 
   if (RequestEntryP^.RegisteredEvents = []) then
   begin
-    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Successfully found all of the registered eventss');
+    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Successfully found all of the registered events');
 
     PCYW43455Network(WIFI^.NetworkP)^.JoinCompleted := True;
 
@@ -5858,8 +5846,9 @@ var
   CurP : PWIFIRequestItem;
 begin
   // find the first request item that has an interest in the specified event.
-  // we really need to find a list of items but we can do that later.
-  // let's start with the first one for testing purposes.
+  // we really need to find a list of items but we can do that later. We currently
+  // only have one consumer of this anyway.
+
   Result := nil;
 
   CriticalSectionLock(FQueueProtect);

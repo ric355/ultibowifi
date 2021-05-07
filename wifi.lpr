@@ -343,8 +343,7 @@ begin
   WIFI_LOG_ENABLED := true;
 
   // We've gotta wait for the file system to be alive because that's where the firmware is.
-  // Note at the moment the firmware is hard coded to a pi3b.
-  // Also note that because the WIFI uses the Arasan host, the only way you'll get a drive C
+  // Because the WIFI uses the Arasan host, the only way you'll get a drive C
   // is if you use USB boot. So that's a pre-requisite at the moment until we make the
   // SD card work off the other SDHost controller.
 
@@ -383,7 +382,7 @@ begin
         Sleep(100);
     until CYW43455Network <> nil;
     
-    while CYW43455Network^.Network.NetworkState <> NETWORK_STATE_OPEN do // while not (WIFIIsReady) do
+    while CYW43455Network^.Network.NetworkState <> NETWORK_STATE_OPEN do
     begin
       Sleep(0);
     end;
