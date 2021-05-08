@@ -308,10 +308,7 @@ var
   topwindow : THandle;
   Winsock2TCPClient : TWinsock2TCPClient;
   IPAddress : string;
-  s : string;
   i : integer;
-  j : integer;
-  c : integer;
   HTTPListener : THTTPListener;
   ScanResultList : TStringList;
   Status : Longword;
@@ -321,6 +318,46 @@ procedure WIFIScanCallback(ssid : string; ScanResultP : pwl_escan_result);
 begin
   if (ScanResultList <> nil) and (ScanResultList.Indexof(ssid) < 0) then
     ScanResultList.Add(ssid);
+end;
+
+procedure WaitForIP;
+begin
+  Winsock2TCPClient:=TWinsock2TCPClient.Create;
+
+  while (true) do
+  begin
+    sleep(200);
+    if (Winsock2TCPClient.LocalAddress <> IPAddress)
+       and (length(Winsock2TCPClient.LocalAddress) > 0)
+       and (Winsock2TCPClient.LocalAddress <> ' ') then
+    begin
+      ConsoleWindowWriteLn(topwindow, 'IP address='+Winsock2TCPClient.LocalAddress);
+      IPAddress := Winsock2TCPClient.LocalAddress;
+      break;
+    end;
+  end;
+end;
+
+procedure DumpIP;
+var
+  i, j, c : integer;
+  s : string;
+begin
+  for i := 0 to 15 do
+  begin
+    s := '';
+    for c := 1 to length(ipaddress) do
+    begin
+      for j := 7 downto 0 do
+      begin
+        if (FONT_LATIN1_8X16_DATA.data[ord(ipaddress[c]), i] and (1 shl j) = (1 shl j)) then
+          s := s + '#'
+        else
+          s := s + ' ';
+      end;
+    end;
+    consolewindowwriteln(topwindow, s);
+  end;
 end;
 
 begin
@@ -377,7 +414,7 @@ begin
     
     // spin until the wifi device is actually ready to do stuff.
     repeat
-      CYW43455Network := PCYW43455Network(NetworkDeviceFindByDescription(CYW45455_NETWORK_DESCRIPTION));
+      CYW43455Network := PCYW43455Network(NetworkDeviceFindByDescription(CYW43455_NETWORK_DESCRIPTION));
       if CYW43455Network = nil then
         Sleep(100);
     until CYW43455Network <> nil;
@@ -413,44 +450,26 @@ begin
        ConsoleWindowWriteln(topwindow, 'Cant join a network without SSID, Key, and Country Code.')
     else
     begin
-      status := WirelessJoinNetwork(SSID, Key, Country);
+      status := WirelessJoinNetwork(SSID, Key, Country, WIFIJoinBackground, WIFIReconnectAlways);
+      IPAddress := '0.0.0.0';
       if (status = WIFI_STATUS_SUCCESS) then
       begin
 
         ConsoleWindowWriteln(topwindow, 'Network joined, waiting for an IP address...');
 
-        Winsock2TCPClient:=TWinsock2TCPClient.Create;
-        IPAddress := '0.0.0.0';
+        WaitForIP;
 
-        while (true) do
-        begin
-          sleep(200);
-          if (Winsock2TCPClient.LocalAddress <> IPAddress) then
-          begin
-            ConsoleWindowWriteLn(topwindow, 'IP address='+Winsock2TCPClient.LocalAddress);
-            IPAddress := Winsock2TCPClient.LocalAddress;
-            break;
-          end;
-        end;
-
-        for i := 0 to 15 do
-        begin
-          s := '';
-          for c := 1 to length(ipaddress) do
-          begin
-            for j := 7 downto 0 do
-            begin
-              if (FONT_LATIN1_8X16_DATA.data[ord(ipaddress[c]), i] and (1 shl j) = (1 shl j)) then
-                s := s + '#'
-              else
-                s := s + ' ';
-            end;
-          end;
-          consolewindowwriteln(topwindow, s);
-        end;
+        DumpIP;
       end
       else
+      begin
         ConsoleWindowWriteLn(topwindow,'Failed to join the WIFI network. Status='+inttostr(status));
+        ConsoleWindowWriteln(topwindow, 'Waiting for auto retry...');
+
+        WaitForIP;
+
+        DumpIP;
+      end;
     end;
 
   except

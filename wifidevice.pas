@@ -11,7 +11,12 @@ uses
   GlobalConfig,GlobalConst,GlobalTypes,Platform,Threads,DMA,gpio,Network, {$IFDEF RPI3}BCM2710{$endif} {$ifdef zero}BCM2708{$endif};
 
 const
-  CYW45455_NETWORK_DESCRIPTION = 'Cypress 43455 SDIO Wireless Network Adapter';
+  CYW43455_NETWORK_DESCRIPTION = 'Cypress 43455 SDIO Wireless Network Adapter';
+
+  //cyw43455 event flags bits (see whd_event_msg record)
+  CYW43455_EVENT_FLAG_LINK        = $01;  // bit 0
+  CYW43455_EVENT_FLAG_FLUSHTXQ    = $02;  // bit 1
+  CYW43455_EVENT_FLAG_GROUP       = $04;  // but 2
 
   CHIP_ID_PI_ZEROW = $a9a6;
 
@@ -754,6 +759,9 @@ const
 
 
 type
+  TWIFIJoinType = (WIFIJoinBlocking, WIFIJoinBackground);
+  TWIFIReconnectionType = (WIFIReconnectNever, WIFIReconnectAlways);
+
   countryparams = record
     country_ie : array[1..4] of char;
     revision : longint;
@@ -1197,6 +1205,20 @@ type
     procedure Execute; override;
   end;
 
+  TWirelessReconnectionThread = class(TThread)
+  private
+    FConnectionLost : TSemaphoreHandle;
+    FSSID : string;
+    FKey : string;
+    FCountry : string;
+  public
+    constructor Create;
+    procedure SetConnectionDetails(aSSID, aKey, aCountry : string);
+    destructor Destroy; override;
+    procedure Execute; override;
+  end;
+
+
 
 
   PCYW43455Network = ^TCYW43455Network;
@@ -1258,7 +1280,11 @@ procedure WIFILogError(WIFI:PWIFIDevice;const AText:String); inline;
 function WIFIDeviceSetIOS(WIFI:PWIFIDevice):LongWord;
 
 procedure WirelessScan(UserCallback : TWIFIScanUserCallback);
-function WirelessJoinNetwork(ssid : string; security_key : string; countrycode : string) : longword;
+function WirelessJoinNetwork(ssid : string; security_key : string;
+                             countrycode : string;
+                             JoinType : TWIFIJoinType;
+                             ReconnectType : TWIFIReconnectionType) : longword;
+//                             backgroundretry : boolean) : longword;
 procedure WIFIInit;
 
 
@@ -1382,6 +1408,8 @@ var
   //FoundSDHCI : PSDHCIHost = nil; // don't really like this but only way at the moment.
   WIFI:PWIFIDevice;
   macaddress : array[0..MAC_ADDRESS_LEN-1] of byte;
+  BackgroundJoinThread : TWirelessReconnectionThread = nil;
+
 
 
 
@@ -2048,6 +2076,8 @@ begin
  WIFIWorkerThread := TWIFIWorkerThread.Create(true, WIFI);
  WIFIWorkerThread.Start;
 
+ BackgroundJoinThread := TWirelessReconnectionThread.Create;
+
  // call initialisation (loads country code etc)
  // note this code requires the worker thread to be running otherwise
  // responses won't be received.
@@ -2482,7 +2512,7 @@ begin
  Network^.Network.Device.DeviceType:=NETWORK_TYPE_ETHERNET;
  Network^.Network.Device.DeviceFlags:=NETWORK_FLAG_RX_BUFFER or NETWORK_FLAG_TX_BUFFER or NETWORK_FLAG_RX_MULTIPACKET;
  Network^.Network.Device.DeviceData:=nil;
- Network^.Network.Device.DeviceDescription:=CYW45455_NETWORK_DESCRIPTION;
+ Network^.Network.Device.DeviceDescription:=CYW43455_NETWORK_DESCRIPTION;
  {Network}
  Network^.Network.NetworkState:=NETWORK_STATE_CLOSED;
  Network^.Network.NetworkStatus:=NETWORK_STATUS_DOWN;
@@ -5413,14 +5443,29 @@ end;
 procedure JoinCallback(Event : TWIFIEvent; EventRecordP : pwhd_event; RequestItemP : PWIFIRequestItem);
 begin
   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'wireless join callback: removing an event ' + inttostr(ord(event)) + ' from the list (status='+inttostr(eventrecordp^.whd_event.status)+')');
-  RequestItemP^.RegisteredEvents := RequestItemP^.RegisteredEvents - [Event];
+
+  if (EventRecordP^.whd_event.event_type = Ord(WLC_E_LINK)) then
+  begin
+    // for the e_link event, the flags have to be tested because these convey the status of the link.
+    // (it appears the 'reason' field also has 1 in it when connection lost - ignored here though)
+    if (EventRecordP^.whd_event.flags and CYW43455_EVENT_FLAG_LINK = CYW43455_EVENT_FLAG_LINK) then
+      RequestItemP^.RegisteredEvents := RequestItemP^.RegisteredEvents - [Event]
+    else
+      WIFILogError(nil, 'CYW43455: Link went down during network connect');
+  end
+  else
+    RequestItemP^.RegisteredEvents := RequestItemP^.RegisteredEvents - [Event];
 
   // early termination of the wait.
   if RequestItemP^.RegisteredEvents = [] then
     SemaphoreSignal(RequestItemP^.Signal);
 end;
 
-function WirelessJoinNetwork(ssid : string; security_key : string; countrycode : string) : longword;
+function WirelessJoinNetwork(ssid : string; security_key : string;
+                             countrycode : string;
+                             JoinType : TWIFIJoinType;
+                             ReconnectType : TWIFIReconnectionType) : longword;
+
 const
   WPA2_SECURITY = $00400000;        // Flag to enable WPA2 Security
   AES_ENABLED   = $0004;            // Flag to enable AES Encryption
@@ -5491,6 +5536,23 @@ begin
   *)
 
   Result := WIFI_STATUS_INVALID_DATA;
+
+  // pass connection details to the retry thread for handling loss of connection.
+  BackgroundJoinThread.SetConnectionDetails(SSID, security_key, countrycode);
+
+  if (JoinType = WIFIJoinBackground) then
+  begin
+    // set network status down, schedule the join thread to do a background join
+    // (it will call this function in blocking form to achieve that)
+   {$ifdef CYW43455_DEBUG}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CY43455: Background join scheduled.');
+   {$endif}
+
+    WIFI^.NetworkP^.NetworkStatus := NETWORK_STATUS_DOWN;
+    SemaphoreSignal(BackgroundJoinThread.FConnectionLost);
+    Result := WIFI_STATUS_SUCCESS;
+    exit;
+  end;
 
   // set country code
   {$ifdef CYW43455_DEBUG}
@@ -5577,7 +5639,6 @@ begin
   if (Result <> WIFI_STATUS_SUCCESS) then
     exit;
 
-
   // register for join events we are interested in.
   RequestEntryP := WIFIWorkerThread.AddRequest(0, [WLC_E_SET_SSID, WLC_E_LINK, WLC_E_PSK_SUP], @JoinCallback, nil);
 
@@ -5599,7 +5660,19 @@ begin
   else
   begin
     Result := WIFI_STATUS_INVALID_PARAMETER;
-    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'There are still some events not found after the 5 second wait');
+    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'The join attempt to network ' + SSID + ' was unsuccessful');
+
+    if (ReconnectType = WIFIReconnectAlways) then
+    begin
+      if (BackgroundJoinThread.Suspended) then
+        BackgroundJoinThread.Start;
+
+      {Set Status to Up}
+      WIFI^.NetworkP^.NetworkStatus := NETWORK_STATUS_DOWN;
+
+      // tell the join thread to make another join attempt.
+      SemaphoreSignal(BackgroundJoinThread.FConnectionLost);
+    end;
   end;
 
   WIFIWorkerThread.DoneWithRequest(RequestEntryP);
@@ -6009,10 +6082,33 @@ begin
 
                         EventRecordP^.whd_event.status := NetSwapLong(EventRecordP^.whd_event.status);
                         EventRecordP^.whd_event.event_type := NetSwapLong(EventRecordP^.whd_event.event_type);
+                        EventRecordP^.whd_event.reason:= NetSwapLong(EventRecordP^.whd_event.reason);
+                        EventRecordP^.whd_event.flags := NetSwapWord(EventRecordP^.whd_event.flags);
 
+                        {$ifdef CYW43455_DEBUG}
                         if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'event message received ' + inttostr(eventrecordp^.whd_event.event_type)
                             + ' status='+inttostr(eventrecordp^.whd_event.status)
+                            + ' reason='+inttostr(eventrecordp^.whd_event.reason)
                             + ' reponsep len='+inttostr(responsep^.len) + ' hdrlen='+inttostr(responsep^.cmd.sdpcmheader.hdrlen));
+                        {$endif}
+
+                        if (EventRecordP^.whd_event.event_type = ord(WLC_E_DEAUTH))
+                           or (EventRecordP^.whd_event.event_type = ord(WLC_E_DEAUTH_IND))
+                           or (EventRecordP^.whd_event.event_type = ord(WLC_E_DISASSOC_IND))
+                           or
+                              ((EventRecordP^.whd_event.event_type = ord(WLC_E_LINK))
+                                and (EventRecordP^.whd_event.flags and CYW43455_EVENT_FLAG_LINK = 0))
+                           then
+                        begin
+                          // the wifi link has gone down. Reset conection
+                          {$ifdef CYW43455_DEBUG}
+                          if (WIFI_LOG_ENABLED) then WIFILogInfo(nil, 'The WIFI link appears to have been lost (flags='+inttostr(EventRecordP^.whd_event.flags)+')');
+                          {$endif}
+
+                          FWIFI^.NetworkP^.NetworkStatus := NETWORK_STATUS_DOWN;
+
+                          SemaphoreSignal(BackgroundJoinThread.FConnectionLost);
+                        end;
 
                         // see if there are any requests interested in this event, and if so trigger
                         // the callbacks. We only do the first one at the moment; we need a list eventually.
@@ -6201,6 +6297,59 @@ begin
   end;
 end;
 
+
+constructor TWirelessReconnectionThread.Create;
+begin
+  inherited Create(true);
+
+  FConnectionLost := SemaphoreCreate(0);
+  Start;
+end;
+
+destructor TWirelessReconnectionThread.Destroy;
+begin
+  SemaphoreDestroy(FConnectionLost);
+
+  inherited Destroy;
+end;
+
+procedure TWirelessReconnectionThread.SetConnectionDetails(aSSID, aKey, aCountry : string);
+begin
+  FSSID := aSSID;
+  FKey := aKey;
+  FCountry := aCountry;
+end;
+
+procedure TWirelessReconnectionThread.Execute;
+var
+  Res : longword;
+begin
+  while not Terminated do
+  begin
+    // wifi worker is the source of this sempahore.
+
+    if (SemaphoreWaitEx(FConnectionLost, 1000) = ERROR_SUCCESS) then
+    begin
+      // the connection has been lost. Reconnect. Keep trying indefinitely until
+      // the join function returns a success.
+
+      Res := WIFI_STATUS_INVALID_PARAMETER;
+      while (Res <> WIFI_STATUS_SUCCESS) do
+      begin
+        Res := WirelessJoinNetwork(FSSID, FKey, FCountry, WIFIJoinBlocking, WIFIReconnectNever); // do *not* call with WIFIReconnectAlways from this thread.
+        if (Res <> 0) then
+        begin
+          {$ifdef CYW43455_DEBUG}
+          if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Wireless Join returned fail ' + inttostr(res));
+          {$endif}
+        end
+        else
+          WIFILogInfo(nil, 'Successfully reconnected to the WIFI network');
+      end;
+
+    end;
+  end;
+end;
 
 initialization
   if WIFI_AUTO_INIT then

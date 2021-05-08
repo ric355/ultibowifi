@@ -16,7 +16,12 @@ This includes the ability to upgrade the kernel if you set up a local web server
 your cmdline.txt to it in the usual way (see Ultibo website for details on how
 to do this).
 
-Currently looking at how to handle loss of connection and subsequent reconnection.
+Latest changes cover the ability to automatically reconnect to the network if the
+connection is lost, plus the ability to have either blocking or non-blocking
+connection. The reconnect is always background (non-blocking).
+
+Kernel images are compiled with a blocking initial connect but will work fine if
+you change the relveant parameter to non-blocking in the connect call and recompile.
 
 Running
 -------
