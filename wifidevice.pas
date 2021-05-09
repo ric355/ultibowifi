@@ -11,6 +11,22 @@ uses
   GlobalConfig,GlobalConst,GlobalTypes,Platform,Threads,DMA,gpio,Network, {$IFDEF RPI3}BCM2710{$endif} {$ifdef zero}BCM2708{$endif};
 
 const
+  WPA2_SECURITY = $00400000;        // Flag to enable WPA2 Security
+  AES_ENABLED   = $0004;            // Flag to enable AES Encryption
+  WHD_SECURITY_WPA2_AES_PSK = (WPA2_SECURITY or AES_ENABLED);
+  WLC_SET_WSEC = 134;
+  DEFAULT_EAPOL_KEY_PACKET_TIMEOUT = 2500; // in milliseconds
+  WSEC_MAX_PSK_LEN = 64;
+  WSEC_PASSPHRASE = (1 shl 0);
+  WLC_SET_WSEC_PMK = 268;
+  WL_AUTH_OPEN_SYSTEM = 0;
+  WL_AUTH_SAE = 3;
+  WLC_SET_INFRA = 20;
+  WLC_SET_AUTH = 22;
+  WLC_SET_WPA_AUTH = 165;
+  WPA2_AUTH_PSK = $0080;
+  WLC_SET_SSID = 26;
+
   CYW43455_NETWORK_DESCRIPTION = 'Cypress 43455 SDIO Wireless Network Adapter';
 
   //cyw43455 event flags bits (see whd_event_msg record)
@@ -762,11 +778,101 @@ type
   TWIFIJoinType = (WIFIJoinBlocking, WIFIJoinBackground);
   TWIFIReconnectionType = (WIFIReconnectNever, WIFIReconnectAlways);
 
+  ether_addr = record
+    octet : array[0..ETHER_ADDR_LEN-1] of byte;
+  end;
+
   countryparams = record
     country_ie : array[1..4] of char;
     revision : longint;
     country_code : array[1..4] of char;
   end;
+
+  wlc_ssid = record
+    SSID_len : longword;
+    SSID : array[0..31] of byte;
+  end;
+
+  chanrec = record
+    chan : byte;
+    other : byte;
+  end;
+
+  wl_scan_params = record
+    ssid : wlc_ssid;
+    bssid : ether_addr;
+    bss_type : byte;
+    scan_type : byte;
+    nprobes : longword;
+    active_time : longword;
+    passive_time : longword;
+    home_time : longword;
+    channel_num : longword;
+    channel_list : array[1..14] of chanrec;
+    ssids : array[0..SSID_MAX_LEN-1] of word;
+  end;
+
+
+  wl_escan_params = record
+    version : longword;
+    action : word;
+    sync_id : word;
+    params : wl_scan_params;
+  end;
+
+
+  pwhd_tlv8_header = ^whd_tlv8_header;
+  whd_tlv8_header = record
+    atype : byte;
+    length : byte;
+  end;
+
+
+  pwhd_tlv8_data = ^whd_tlv8_data;
+  whd_tlv8_data = record
+    atype : byte;
+    length : byte;
+    data : array[1..1] of byte;    // used as a pointer to a list.
+  end;
+
+  prsn_ie_fixed_portion = ^rsn_ie_fixed_portion;
+  rsn_ie_fixed_portion = record
+    tlv_header : whd_tlv8_header; //id, length
+    version : word;
+    group_key_suite : longword; // See whd_80211_cipher_t for values
+    pairwise_suite_count : word;
+    pairwise_suite_list : array[1..1] of longword;
+  end;
+
+  wsec_pmk = record
+    key_len : word;
+    flags : word;
+    key : array[0..WSEC_MAX_PSK_LEN-1] of byte;
+  end;
+
+  wl_join_assoc_params = record
+    bssid : ether_addr;
+    bssid_cnt : word;
+    chanspec_num : longword;
+    chanspec_list : array[1..1] of word;
+  end;
+
+  wl_join_scan_params = record
+    scan_type : byte;          // 0 use default, active or passive scan */
+    nprobes : longint;         // -1 use default, number of probes per channel */
+    active_time : longint;     // -1 use default, dwell time per channel for active scanning
+    passive_time : longint;    // -1 use default, dwell time per channel for passive scanning
+    home_time : longint;       // -1 use default, dwell time for the home channel between channel scans
+  end;
+
+  wl_extjoin_params = record
+     ssid : wlc_ssid;                          // {0, ""}: wildcard scan */
+     scan_params : wl_join_scan_params;
+     assoc_params : wl_join_assoc_params;     // optional field, but it must include the fixed portion
+                                              // of the wl_join_assoc_params_t struct when it does
+                                              // present.
+  end;
+
 
 
   PSDPCM_HEADER = ^SDPCM_HEADER;
@@ -1126,10 +1232,6 @@ type
 
   wl_chanspec = integer;
 
-  ether_addr = record
-    octet : array[0..ETHER_ADDR_LEN-1] of byte;
-  end;
-
   pwl_bss_info = ^wl_bss_info;
   wl_bss_info = record
       version : longword;                       // version field
@@ -1312,65 +1414,6 @@ const
   WIFI_LOG_LEVEL_NONE      = LOG_LEVEL_NONE;   {No WIFI messages}
 
   MAC_ADDRESS_LEN = 6;
-
-
-type
-
-  wlc_ssid = record
-    SSID_len : longword;
-    SSID : array[0..31] of byte;
-  end;
-
-  chanrec = record
-    chan : byte;
-    other : byte;
-  end;
-
-  wl_scan_params = record
-    ssid : wlc_ssid;
-    bssid : ether_addr;
-    bss_type : byte;
-    scan_type : byte;
-    nprobes : longword;
-    active_time : longword;
-    passive_time : longword;
-    home_time : longword;
-    channel_num : longword;
-    channel_list : array[1..14] of chanrec;
-    ssids : array[0..SSID_MAX_LEN-1] of word;
-  end;
-
-
-  wl_escan_params = record
-    version : longword;
-    action : word;
-    sync_id : word;
-    params : wl_scan_params;
-  end;
-
-
-  pwhd_tlv8_header = ^whd_tlv8_header;
-  whd_tlv8_header = record
-    atype : byte;
-    length : byte;
-  end;
-
-
-  pwhd_tlv8_data = ^whd_tlv8_data;
-  whd_tlv8_data = record
-    atype : byte;
-    length : byte;
-    data : array[1..1] of byte;    // used as a pointer to a list.
-  end;
-
-  prsn_ie_fixed_portion = ^rsn_ie_fixed_portion;
-  rsn_ie_fixed_portion = record
-    tlv_header : whd_tlv8_header; //id, length
-    version : word;
-    group_key_suite : longword; // See whd_80211_cipher_t for values
-    pairwise_suite_count : word;
-    pairwise_suite_list : array[1..1] of longword;
-  end;
 
 
 var
@@ -3789,7 +3832,6 @@ var
  Status:LongWord;
  Timeout:LongWord;
  SDHCI:PSDHCIHost;
- blksizecnt : longword;
 begin
  {}
  Result:=WIFI_STATUS_INVALID_PARAMETER;
@@ -4010,11 +4052,6 @@ begin
 
          SDHCIHostWriteWord(SDHCI,SDHCI_BLOCK_COUNT,Command^.Data^.BlockCount);
 
-         blksizecnt := SDHCIHostReadLong(SDHCI, SDHCI_BLOCK_SIZE);
-         {$ifdef CYW43455_DEBUG}
-         if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'reading back blksizecnt to match circle=0x'+inttohex(blksizecnt, 8));
-         {$endif}
-
          {Write Argument}
          {$ifdef CYW43455_DEBUG}
          if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command SDHCI_ARGUMENT (Value=' + IntToHex(Command^.Argument,8) + ')');
@@ -4217,11 +4254,13 @@ var
  addr : longint;
  addressbytes : array[1..4] of byte;
  address : longword;
- str : string;
  chipidbuf : longword;
  chipid : word;
  chiprev : word;
  socitype : word;
+ {$ifdef CYW43455_DEBUG}
+ str : string;
+ {$endif}
 begin
  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Starting WIFI core scan');
 
@@ -4718,7 +4757,6 @@ end;
 function WIFIDeviceDownloadFirmware(WIFI : PWIFIDevice) : Longword;
 
 var
- // rambase : longword;
  FirmwareFile : file of byte;
  firmwarep : pbyte;
  comparebuf : pbyte;
@@ -4732,9 +4770,7 @@ var
  Found : boolean;
  ConfigFilename : string;
  FirmwareFilename : string;
- // s : string;
  bytebuf : array[1..4] of byte;
- //flag : word;
 begin
  try
   Result := WIFI_STATUS_INVALID_PARAMETER;
@@ -5326,7 +5362,7 @@ var
 begin
   if (Event = WLC_E_ESCAN_RESULT) then
   begin
-    scanresultp := pwl_escan_result(pbyte(@eventrecordp^.whd_event + sizeof(whd_event_msg)));
+    scanresultp := pwl_escan_result(pbyte(longword(@eventrecordp^.whd_event) + sizeof(whd_event_msg)));
     ssidstr := buftostr(@scanresultp^.bss_info[1].SSID[0], scanresultp^.bss_info[1].SSID_len, true);
     if (ssidstr = '') then
       ssidstr := '<hidden>';
@@ -5359,9 +5395,9 @@ end;
 
 procedure WirelessScan(UserCallback : TWIFIScanUserCallback);
 
-const
+(*const
   SCAN_PARAMS_LEN = 4+2+2+4+32+6+1+1+4*4+2+2+14*2+32+4;
-  (*oldscanparams : array[0..SCAN_PARAMS_LEN-1] of byte =
+  oldscanparams : array[0..SCAN_PARAMS_LEN-1] of byte =
     (
       1,0,0,0,
       1,0,
@@ -5465,58 +5501,6 @@ function WirelessJoinNetwork(ssid : string; security_key : string;
                              countrycode : string;
                              JoinType : TWIFIJoinType;
                              ReconnectType : TWIFIReconnectionType) : longword;
-
-const
-  WPA2_SECURITY = $00400000;        // Flag to enable WPA2 Security
-  AES_ENABLED   = $0004;            // Flag to enable AES Encryption
-  WHD_SECURITY_WPA2_AES_PSK = (WPA2_SECURITY or AES_ENABLED);
-  WLC_SET_WSEC = 134;
-  DEFAULT_EAPOL_KEY_PACKET_TIMEOUT = 2500; // in milliseconds
-  WSEC_MAX_PSK_LEN = 64;
-  WSEC_PASSPHRASE = (1 shl 0);
-  WLC_SET_WSEC_PMK = 268;
-  WL_AUTH_OPEN_SYSTEM = 0;
-  WL_AUTH_SAE = 3;
-  WLC_SET_INFRA = 20;
-  WLC_SET_AUTH = 22;
-  WLC_SET_WPA_AUTH = 165;
-  WPA2_AUTH_PSK = $0080;
-  WLC_SET_SSID = 26;
-
-
-type
-  wsec_pmk = record
-    key_len : word;
-    flags : word;
-    key : array[0..WSEC_MAX_PSK_LEN-1] of byte;
-  end;
-
-  wl_join_assoc_params = record
-    bssid : ether_addr;
-    bssid_cnt : word;
-    chanspec_num : longword;
-    chanspec_list : array[1..1] of word;
-  end;
-
-  wl_join_scan_params = record
-    scan_type : byte;          // 0 use default, active or passive scan */
-    nprobes : longint;         // -1 use default, number of probes per channel */
-    active_time : longint;     // -1 use default, dwell time per channel for active scanning
-    passive_time : longint;    // -1 use default, dwell time per channel for passive scanning
-    home_time : longint;       // -1 use default, dwell time for the home channel between channel scans
-  end;
-
-  wl_extjoin_params = record
-     ssid : wlc_ssid;                          // {0, ""}: wildcard scan */
-     scan_params : wl_join_scan_params;
-     assoc_params : wl_join_assoc_params;     // optional field, but it must include the fixed portion
-                                              // of the wl_join_assoc_params_t struct when it does
-                                              // present.
-  end;
-
-
-
-
 var
   data : array[0..1] of longword;
   psk : wsec_pmk;
@@ -5647,7 +5631,7 @@ begin
 
   if (RequestEntryP^.RegisteredEvents = []) then
   begin
-    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Successfully found all of the registered events');
+    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Successfully joined WIFI network ' + SSID);
 
     PCYW43455Network(WIFI^.NetworkP)^.JoinCompleted := True;
 
@@ -6085,12 +6069,10 @@ begin
                         EventRecordP^.whd_event.reason:= NetSwapLong(EventRecordP^.whd_event.reason);
                         EventRecordP^.whd_event.flags := NetSwapWord(EventRecordP^.whd_event.flags);
 
-                        {$ifdef CYW43455_DEBUG}
                         if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'event message received ' + inttostr(eventrecordp^.whd_event.event_type)
                             + ' status='+inttostr(eventrecordp^.whd_event.status)
                             + ' reason='+inttostr(eventrecordp^.whd_event.reason)
                             + ' reponsep len='+inttostr(responsep^.len) + ' hdrlen='+inttostr(responsep^.cmd.sdpcmheader.hdrlen));
-                        {$endif}
 
                         if (EventRecordP^.whd_event.event_type = ord(WLC_E_DEAUTH))
                            or (EventRecordP^.whd_event.event_type = ord(WLC_E_DEAUTH_IND))
@@ -6101,9 +6083,7 @@ begin
                            then
                         begin
                           // the wifi link has gone down. Reset conection
-                          {$ifdef CYW43455_DEBUG}
                           if (WIFI_LOG_ENABLED) then WIFILogInfo(nil, 'The WIFI link appears to have been lost (flags='+inttostr(EventRecordP^.whd_event.flags)+')');
-                          {$endif}
 
                           FWIFI^.NetworkP^.NetworkStatus := NETWORK_STATUS_DOWN;
 
