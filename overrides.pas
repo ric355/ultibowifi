@@ -14,7 +14,7 @@ implementation
 procedure myloggingoutputhandler(AFacility,ASeverity:LongWord;const ATag,AContent:String);
 begin
 //  if (atag <> 'USB') and (atag <> 'Device') then
-    if (atag = 'WIFIdevice') or (atag = 'MMC') then
+    if (atag = 'WIFIdevice') or (atag = 'MMC') or (atag = 'Network') then
       log('('+atag+')' + ' ' + acontent);
 end;
 
