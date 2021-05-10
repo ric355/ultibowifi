@@ -369,7 +369,9 @@ begin
   LoggingConsoleDeviceAdd(ConsoleDeviceGetDefault);
   LoggingDeviceSetDefault(LoggingDeviceFindByType(LOGGING_TYPE_CONSOLE));
 
-  LoggingOutputExHandler:= @myloggingoutputhandler;
+  // Filter the logs so we only see the WiFi and MMC device events
+  // (Primarily development use, otherwise you don't see network events etc)
+  //LoggingOutputExHandler:= @myloggingoutputhandler; 
 
   HTTPListener:=THTTPListener.Create;
   HTTPListener.Active:=True;
@@ -472,6 +474,16 @@ begin
       end;
     end;
 
+    // Setup a slow blink of the activity LED to give an indcation that the Pi is still alive
+    ActivityLEDEnable;
+    
+    while True do
+    begin
+      ActivityLEDOn;
+      Sleep(500);
+      ActivityLEDOff;
+      Sleep(500);
+    end;
   except
     on e : exception do
       ConsoleWindowWriteln(topwindow, 'Exception: ' + e.message + ' at ' + inttohex(longword(exceptaddr), 8));

@@ -1663,6 +1663,7 @@ end;
 function WIFIHostStart(SDHCI: PSDHCIHost): LongWord;
 // Overwridden SDHCIHostStart method for the Arasan SDHCI controller
 var
+  i : integer;
   Network: PCYW43455Network;
   
   Capabilities:LongWord;
@@ -1687,6 +1688,29 @@ begin
     if Result <> ERROR_SUCCESS then
       Exit;
   end;  
+
+  // disconnect emmc from SD card (connect sdhost instead)
+  for i := 48 to 53 do
+    GPIOFunctionSelect(i,GPIO_FUNCTION_ALT0);
+
+  // connect emmc to wifi
+  for i := 34 to 39 do
+  begin
+    GPIOFunctionSelect(i,GPIO_FUNCTION_ALT3);
+
+    if (i = 34) then
+      GPIOPullSelect(i, GPIO_PULL_NONE)
+    else
+      GPIOPullSelect(i, GPIO_PULL_UP);
+  end;
+
+  // init 32khz oscillator.
+  GPIOPullSelect(SD_32KHZ_PIN, GPIO_PULL_NONE);
+  GPIOFunctionSelect(SD_32KHZ_PIN, GPIO_FUNCTION_ALT0);
+
+  // turn on wlan power
+  GPIOFunctionSelect(WLAN_ON_PIN, GPIO_FUNCTION_OUT);
+  GPIOOutputSet(WLAN_ON_PIN, GPIO_LEVEL_HIGH);
 
   // Perform operations normally done by SDHCIHostStart
   {Get Capabilities}
@@ -2502,7 +2526,6 @@ end;
 {Initialization Functions}
 procedure WIFIInit;
 var
-  i : integer;
   Network:PCYW43455Network;
   SDHCI : PSDHCIHost;
 begin
@@ -2513,30 +2536,6 @@ begin
  WIFI_LOG_ENABLED:=(WIFI_DEFAULT_LOG_LEVEL <> WIFI_LOG_LEVEL_NONE);
 
  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'WIFI Initialize');
-
-
- // disconnect emmc from SD card (connect sdhost instead)
- for i := 48 to 53 do
-   GPIOFunctionSelect(i,GPIO_FUNCTION_ALT0);
-
- // connect emmc to wifi
- for i := 34 to 39 do
- begin
-   GPIOFunctionSelect(i,GPIO_FUNCTION_ALT3);
-
-   if (i = 34) then
-     GPIOPullSelect(i, GPIO_PULL_NONE)
-   else
-     GPIOPullSelect(i, GPIO_PULL_UP);
- end;
-
- // init 32khz oscillator.
- GPIOPullSelect(SD_32KHZ_PIN, GPIO_PULL_NONE);
- GPIOFunctionSelect(SD_32KHZ_PIN, GPIO_FUNCTION_ALT0);
-
- // turn on wlan power
- GPIOFunctionSelect(WLAN_ON_PIN, GPIO_FUNCTION_OUT);
- GPIOOutputSet(WLAN_ON_PIN, GPIO_LEVEL_HIGH);
 
  SDIOProtect := SpinCreate;
 
@@ -5532,7 +5531,12 @@ begin
    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CY43455: Background join scheduled.');
    {$endif}
 
+    // Set join not completed
+    PCYW43455Network(WIFI^.NetworkP)^.JoinCompleted := False;
+
+    {Set Status to Down}
     WIFI^.NetworkP^.NetworkStatus := NETWORK_STATUS_DOWN;
+    
     SemaphoreSignal(BackgroundJoinThread.FConnectionLost);
     Result := WIFI_STATUS_SUCCESS;
     exit;
@@ -5633,6 +5637,7 @@ begin
   begin
     if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Successfully joined WIFI network ' + SSID);
 
+    // Set join completed
     PCYW43455Network(WIFI^.NetworkP)^.JoinCompleted := True;
 
     {Set Status to Up}
@@ -5651,7 +5656,10 @@ begin
       if (BackgroundJoinThread.Suspended) then
         BackgroundJoinThread.Start;
 
-      {Set Status to Up}
+      // Set join not completed
+      PCYW43455Network(WIFI^.NetworkP)^.JoinCompleted := False;
+      
+      {Set Status to Down}
       WIFI^.NetworkP^.NetworkStatus := NETWORK_STATUS_DOWN;
 
       // tell the join thread to make another join attempt.
@@ -6085,7 +6093,14 @@ begin
                           // the wifi link has gone down. Reset conection
                           if (WIFI_LOG_ENABLED) then WIFILogInfo(nil, 'The WIFI link appears to have been lost (flags='+inttostr(EventRecordP^.whd_event.flags)+')');
 
+                          // Set join not completed
+                          PCYW43455Network(WIFI^.NetworkP)^.JoinCompleted := False;
+
+                          {Set Status to Down}
                           FWIFI^.NetworkP^.NetworkStatus := NETWORK_STATUS_DOWN;
+
+                          {Notify the Status}
+                          NotifierNotify(@WIFI^.NetworkP^.Device, DEVICE_NOTIFICATION_DOWN);
 
                           SemaphoreSignal(BackgroundJoinThread.FConnectionLost);
                         end;
