@@ -452,7 +452,7 @@ begin
        ConsoleWindowWriteln(topwindow, 'Cant join a network without SSID, Key, and Country Code.')
     else
     begin
-      status := WirelessJoinNetwork(SSID, Key, Country, WIFIJoinBackground, WIFIReconnectAlways);
+      status := WirelessJoinNetwork(SSID, Key, Country, WIFIJoinBlocking, WIFIReconnectAlways);
       IPAddress := '0.0.0.0';
       if (status = WIFI_STATUS_SUCCESS) then
       begin
