@@ -5871,12 +5871,14 @@ begin
      if (CurP = FLastRequestQueueP) then
        FLastRequestQueueP := PrevP;
 
-     // dispose of the semaphore and free the memory it used
+     // dispose of the semaphore and free the memory the request item used
      SemaphoreDestroy(ARequestItemP^.Signal);
-     if (ARequestItemP <> nil) then
+
+     if (ARequestItemP^.MsgP <> nil) then
        FreeMem(ARequestItemP^.MsgP);
 
      Freemem(ARequestItemP);
+
     end
     else
       WIFILogError(nil, 'Unable to locate item in the request queue');
