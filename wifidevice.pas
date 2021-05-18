@@ -2,13 +2,14 @@ unit wifidevice;
 
 {$mode objfpc}{$H+}
 
+//{$DEFINE CYW43455_DEBUG}
 
 interface
 
 uses
   mmc,
   Classes, SysUtils, Devices,
-  GlobalConfig,GlobalConst,GlobalTypes,Platform,Threads,DMA,gpio,Network, {$IFDEF RPI3}BCM2710{$endif} {$ifdef zero}BCM2708{$endif};
+  GlobalConfig,GlobalConst,GlobalTypes,Platform,Threads,DMA,gpio,Network, {$IFDEF RPI4}BCM2711{$ENDIF} {$IFDEF RPI3}BCM2710{$ENDIF} {$IFDEF RPI}BCM2708{$ENDIF};
 
 const
   WPA2_SECURITY = $00400000;        // Flag to enable WPA2 Security
@@ -101,7 +102,12 @@ const
   SDIO_BUS_SPEED_HS          = 50000000;
   SDIO_BUS_SPEED_HS200     = 200000000;
 
+  {$IFDEF RPI}
   WLAN_ON_PIN = GPIO_PIN_41;
+  {$ENDIF}
+  {$IF DEFINED(RPI3) or DEFINED(RPI4)}
+  WLAN_ON_PIN = VIRTUAL_GPIO_PIN_1;
+  {$ENDIF}
   SD_32KHZ_PIN = GPIO_PIN_43;
 
   {SDIO Device States}
@@ -1387,6 +1393,8 @@ function WirelessJoinNetwork(ssid : string; security_key : string;
                              JoinType : TWIFIJoinType;
                              ReconnectType : TWIFIReconnectionType) : longword;
 //                             backgroundretry : boolean) : longword;
+
+procedure WIFIPreInit;
 procedure WIFIInit;
 
 
@@ -1417,7 +1425,7 @@ const
 
 
 var
-  WIFI_DEFAULT_LOG_LEVEL:LongWord = WIFI_LOG_LEVEL_INFO; {Minimum level for WIFI messages.  Only messages with level greater than or equal to this will be printed}
+  WIFI_DEFAULT_LOG_LEVEL:LongWord = WIFI_LOG_LEVEL_DEBUG; {Minimum level for WIFI messages.  Only messages with level greater than or equal to this will be printed}
   WIFIDeviceTableLock:TCriticalSectionHandle = INVALID_HANDLE_VALUE;
 
   WIFIDeviceTable:PWIFIDevice;
@@ -1663,7 +1671,9 @@ end;
 function WIFIHostStart(SDHCI: PSDHCIHost): LongWord;
 // Overwridden SDHCIHostStart method for the Arasan SDHCI controller
 var
+  {$IFNDEF RPI4}
   i : integer;
+  {$ENDIF}
   Network: PCYW43455Network;
   
   Capabilities:LongWord;
@@ -1689,11 +1699,14 @@ begin
       Exit;
   end;  
 
+  {$IFNDEF RPI4}
   // disconnect emmc from SD card (connect sdhost instead)
+  // ZeroW/3B/3B+/3A+
   for i := 48 to 53 do
     GPIOFunctionSelect(i,GPIO_FUNCTION_ALT0);
 
   // connect emmc to wifi
+  // ZeroW/3B/3B+/3A+
   for i := 34 to 39 do
   begin
     GPIOFunctionSelect(i,GPIO_FUNCTION_ALT3);
@@ -1703,14 +1716,27 @@ begin
     else
       GPIOPullSelect(i, GPIO_PULL_UP);
   end;
+  {$ENDIF}
 
-  // init 32khz oscillator.
+  {$IFNDEF RPI4}
+  // init 32khz oscillator (WIFI_CLK)
+  // ZeroW/3B/3B+/3A+
   GPIOPullSelect(SD_32KHZ_PIN, GPIO_PULL_NONE);
   GPIOFunctionSelect(SD_32KHZ_PIN, GPIO_FUNCTION_ALT0);
+  {$ENDIF}
 
-  // turn on wlan power
+  {$IFDEF RPI}
+  // turn on wlan power (WL_ON)
+  // ZeroW
   GPIOFunctionSelect(WLAN_ON_PIN, GPIO_FUNCTION_OUT);
   GPIOOutputSet(WLAN_ON_PIN, GPIO_LEVEL_HIGH);
+  {$ENDIF}
+  {$IF DEFINED(RPI3) or DEFINED(RPI4)}
+  // 3B/3B+/3A+/4B
+  // turn on wlan power (WL_ON)
+  VirtualGPIOFunctionSelect(WLAN_ON_PIN, GPIO_FUNCTION_OUT);
+  VirtualGPIOOutputSet(WLAN_ON_PIN, GPIO_LEVEL_HIGH);
+  {$ENDIF}
 
   // Perform operations normally done by SDHCIHostStart
   {Get Capabilities}
@@ -1954,10 +1980,13 @@ function SDHCIEnum(SDHCI:PSDHCIHost;Data:Pointer):LongWord;
 
 const
   {$IFDEF RPI}
-  SDHCI_DESCRIPTION = 'BCM2835 Arasan SD Host';
+  SDHCI_DESCRIPTION = BCM2708_EMMC_DESCRIPTION;
   {$ENDIF}
   {$IFDEF RPI3}
-  SDHCI_DESCRIPTION = 'BCM2837 Arasan SD Host';
+  SDHCI_DESCRIPTION = BCM2710_EMMC_DESCRIPTION;
+  {$ENDIF}
+  {$IFDEF RPI4}
+  SDHCI_DESCRIPTION = BCM2711_EMMC0_DESCRIPTION;
   {$ENDIF}
  
 begin
@@ -1974,7 +2003,7 @@ begin
   if SDHCI^.Device.DeviceDescription = SDHCI_DESCRIPTION then
   begin
     PCYW43455Network(Data)^.Network.Device.DeviceData := SDHCI;
-  end;
+  end;  
 end;
 
 function CYW43455DeviceOpen(Network:PNetworkDevice):LongWord;
@@ -2524,6 +2553,27 @@ end;
 
 
 {Initialization Functions}
+procedure WIFIPreInit;
+
+const
+  {$IFDEF RPI}
+  SDHOST_DESCRIPTION = 'BCM2835 SDHOST'; //BCM2708_SDHOST_DESCRIPTION;
+  {$ENDIF}
+  {$IFDEF RPI3}
+  SDHOST_DESCRIPTION = 'BCM2837 SDHOST'; //BCM2710_SDHOST_DESCRIPTION;
+  {$ENDIF}
+  {$IFDEF RPI4}
+  SDHOST_DESCRIPTION = BCM2711_EMMC2_DESCRIPTION;
+  {$ENDIF}
+
+var
+  SDHCI: PSDHCIHost;
+begin
+  SDHCI := PSDHCIHost(DeviceFindByDescription(SDHOST_DESCRIPTION));
+  if SDHCI <> nil then
+    SDHCIHostStart(SDHCI);
+end;
+
 procedure WIFIInit;
 var
   Network:PCYW43455Network;
@@ -4254,10 +4304,10 @@ var
  addressbytes : array[1..4] of byte;
  address : longword;
  chipidbuf : longword;
+ {$ifdef CYW43455_DEBUG}
  chipid : word;
  chiprev : word;
  socitype : word;
- {$ifdef CYW43455_DEBUG}
  str : string;
  {$endif}
 begin
@@ -4279,10 +4329,10 @@ begin
  Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioRead,BACKPLANE_FUNCTION,2,  0, pbyte(@chipidbuf)+2);
  Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioRead,BACKPLANE_FUNCTION,2,  0, pbyte(@chipidbuf)+3);
 
+ {$ifdef CYW43455_DEBUG}
  chipid := chipidbuf  and CID_ID_MASK;
  chiprev := (chipidbuf and CID_REV_MASK) shr CID_REV_SHIFT;
  socitype := (chipidbuf and CID_TYPE_MASK) shr CID_TYPE_SHIFT;
- {$ifdef CYW43455_DEBUG}
  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'chipid ' + inttohex(chipid,4) + ' chiprev ' + inttohex(chiprev, 4) + ' socitype ' + inttohex(socitype,4));
  {$endif}
 

@@ -4,7 +4,7 @@ program wifi;
 
 uses
   overrides,
-  {$IFDEF ZERO}
+  {$IFDEF RPI}
   RaspberryPi,
   BCM2835,
   BCM2708,
@@ -13,6 +13,11 @@ uses
   RaspberryPi3,
   BCM2837,
   BCM2710,
+  {$ENDIF}
+  {$IFDEF RPI4}
+  RaspberryPi4,
+  BCM2838,
+  BCM2711,
   {$ENDIF}
   GlobalConfig,
   GlobalConst,
@@ -38,7 +43,10 @@ uses
   Winsock2,
   font,
   HTTP,
-  WebStatus;
+  WebStatus,
+  Serial;
+
+//{$DEFINE SERIAL_LOGGING}
 
 const
    // copied from font as it's in the implementation section there.
@@ -365,9 +373,15 @@ begin
   topwindow := ConsoleWindowCreate(ConsoleDeviceGetDefault, CONSOLE_POSITION_TOP,TRUE);
 
   LOGGING_INCLUDE_TICKCOUNT := True;
+  {$IFDEF SERIAL_LOGGING}
+  SERIAL_REGISTER_LOGGING := True;
+  SerialLoggingDeviceAdd(SerialDeviceGetDefault);
+  LoggingDeviceSetDefault(LoggingDeviceFindByType(LOGGING_TYPE_SERIAL));
+  {$ELSE}
   CONSOLE_LOGGING_POSITION := CONSOLE_POSITION_BOTTOM;
   LoggingConsoleDeviceAdd(ConsoleDeviceGetDefault);
   LoggingDeviceSetDefault(LoggingDeviceFindByType(LOGGING_TYPE_CONSOLE));
+  {$ENDIF}
 
   // Filter the logs so we only see the WiFi and MMC device events
   // (Primarily development use, otherwise you don't see network events etc)
@@ -378,8 +392,12 @@ begin
   WebStatusRegister(HTTPListener,'','',True);
 
 
-
   WIFI_LOG_ENABLED := true;
+
+  // Because we disabled auto start of the MMC subsystem we need to start the SD card driver
+  // now to provide access to the firmware files on the SD card.
+  
+  WIFIPreInit;
 
   // We've gotta wait for the file system to be alive because that's where the firmware is.
   // Because the WIFI uses the Arasan host, the only way you'll get a drive C
@@ -401,7 +419,7 @@ begin
     // the kernel, but that would need to be an option I think really (easily done
     // by choosing to add a specific unit to the uses clause)
     // We'll need to work out what the best solution is later.
-
+    
     WIFIInit;
 
     // warning, after wifiinit is called, the deviceopen() stuff will happen on

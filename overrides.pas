@@ -24,6 +24,7 @@ initialization
   //MMC_AUTO_DEVICE_CREATE := False; // No longer required, overwride the SDHCI initializatoin instead
   
   MMC_AUTOSTART := False;
+  
   CONSOLE_REGISTER_LOGGING := True;
   CONSOLE_LOGGING_DEFAULT := True;
   CONSOLE_LOGGING_POSITION := CONSOLE_POSITION_BOTTOM;
@@ -33,5 +34,9 @@ initialization
 
   //WIFI_AUTO_INIT := False; // Moved to WifiDevice unit during development
 
+  {$IFDEF RPI4}
+  BCM2711_REGISTER_SDIO:=True;
+  {$ENDIF}
+  
 end.
 
