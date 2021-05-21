@@ -91,8 +91,9 @@ rather lengthy initialisation process.
 The initialisation process is derived from various sources including the broadcom
 full mac driver, the plan9 driver, and the cypress wifi host driver.
 
-## Note that the Pi4 version cannot be compiled until you have updated to the latest
-ultibo release. I recommend doing this even if you do not have a Pi4 because the
+## Note that the Pi4 version cannot be compiled until you have updated to the latest ultibo release. 
+
+I recommend doing this even if you do not have a Pi4 because the
 latest project files contain references to the Pi4 build target.
 
 
