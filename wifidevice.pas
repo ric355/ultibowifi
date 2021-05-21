@@ -1425,7 +1425,7 @@ const
 
 
 var
-  WIFI_DEFAULT_LOG_LEVEL:LongWord = WIFI_LOG_LEVEL_DEBUG; {Minimum level for WIFI messages.  Only messages with level greater than or equal to this will be printed}
+  WIFI_DEFAULT_LOG_LEVEL:LongWord = WIFI_LOG_LEVEL_INFO; {Minimum level for WIFI messages.  Only messages with level greater than or equal to this will be printed}
   WIFIDeviceTableLock:TCriticalSectionHandle = INVALID_HANDLE_VALUE;
 
   WIFIDeviceTable:PWIFIDevice;
