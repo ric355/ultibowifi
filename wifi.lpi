@@ -20,7 +20,7 @@
     <VersionInfo>
       <StringTable ProductVersion=""/>
     </VersionInfo>
-    <BuildModes Count="2">
+    <BuildModes Count="3">
       <Item1 Name="RPI3" Default="True"/>
       <Item2 Name="ZERO">
         <CompilerOptions>
@@ -59,6 +59,57 @@
           </Other>
         </CompilerOptions>
       </Item2>
+      <Item3 Name="RPI4">
+        <CompilerOptions>
+          <Version Value="11"/>
+          <Target>
+            <Filename Value="wifi"/>
+          </Target>
+          <SearchPaths>
+            <IncludeFiles Value="$(ProjOutDir)"/>
+            <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
+          </SearchPaths>
+          <Parsing>
+            <SyntaxOptions>
+              <IncludeAssertionCode Value="True"/>
+            </SyntaxOptions>
+          </Parsing>
+          <CodeGeneration>
+            <SmartLinkUnit Value="True"/>
+            <Checks>
+              <IOChecks Value="True"/>
+              <RangeChecks Value="True"/>
+              <OverflowChecks Value="True"/>
+              <StackChecks Value="True"/>
+            </Checks>
+            <TargetProcessor Value="ARMV7A"/>
+            <TargetController Value="RPI4B"/>
+            <TargetCPU Value="arm"/>
+            <TargetOS Value="ultibo"/>
+            <Optimizations>
+              <OptimizationLevel Value="2"/>
+            </Optimizations>
+          </CodeGeneration>
+          <Linking>
+            <Debugging>
+              <GenerateDebugInfo Value="False"/>
+              <UseLineInfoUnit Value="False"/>
+            </Debugging>
+            <LinkSmart Value="True"/>
+          </Linking>
+          <Other>
+            <CustomOptions Value="-dRPI4
+-dsdhci
+-dsdhci_debug
+-dMMC_DEBUG
+-dinterrupt_debug
+-dCYW43455_DEBUG"/>
+            <ExecuteBefore>
+              <ShowAllMessages Value="True"/>
+            </ExecuteBefore>
+          </Other>
+        </CompilerOptions>
+      </Item3>
     </BuildModes>
     <PublishOptions>
       <Version Value="2"/>
@@ -137,7 +188,8 @@
 -dsdhci
 -dsdhci_debug
 -dMMC_DEBUG
--dinterrupt_debug"/>
+-dinterrupt_debug
+-dCYW43455_DEBUG"/>
       <ExecuteBefore>
         <ShowAllMessages Value="True"/>
       </ExecuteBefore>
