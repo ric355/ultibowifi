@@ -3,41 +3,60 @@ Ultibo WIFI Device Driver for onboard Cypress WIFI chips
 
 This is an Ultibo application and device driver which enables support for the internal WIFI
 device (a Cypress 43445 chip). It supports WPA2/PSK only at the moment, and does not
-allow connection to open networks.
+allow connection to open networks. The device driver now supports Pi Zero, Pi3 and Pi4.
 
-Prerequisites for building and running the demo kernel:
+##Pi Zero and Pi3b - prerequisites for building and running the demo kernel
 1. You must boot from a USB drive
-2. Pi3b+ or Pi zero i.e. Must be a device with onboard wifi support (*not* a USB wifi device)
+2. Must be a device with *onboard* wifi support (*not* a USB wifi device)
 3. USB drive must contain c:\firmware with the correct firmware file in it (see repo folder)
+Note the USB requirement will be removed in due coursebut I don't have a date for that
+at the moment since the work will be done by the Ultibo developement team rather than me.
+
+## Support for Pi4 is now added following Ultibo's recent Pi4 core release!
+
+As the Pi4 contains multiple SDIO controllers the requirement to boot from USB is removed
+completely.
 
 With the demo kernel up and running you should be able to ping the device and you
 will also be able to telnet to it and use Ultibo's standard set of shell commands.
 This includes the ability to upgrade the kernel if you set up a local web server and point
 your cmdline.txt to it in the usual way (see Ultibo website for details on how
-to do this).
+to do this).  I have also enabled the webstatus unit so that you can connect a browser
+to the IP address and view system information over the wifi network. See Ultibo website
+for details on this also.
 
 Latest changes cover the ability to automatically reconnect to the network if the
 connection is lost, plus the ability to have either blocking or non-blocking
-connection. The reconnect is always background (non-blocking).
+connection. The reconnect is always background (non-blocking). And Pi4 support of course.
 
 Kernel images are compiled with a blocking initial connect but will work fine if
 you change the relveant parameter to non-blocking in the connect call and recompile.
 
 Running
 -------
-I have added some pre-built kernels to the repo. There is a kernel7.img (Pi3) and a
-kernel.img (Pi Zero). They will run through the initialisation above, scan for networks
+I have added some pre-built kernels to the repo. There is a kernel7l.img (Pi4),
+kernel7.img (Pi3) and a kernel.img (Pi Zero).
+They will run through the initialisation above, scan for networks
 displaying some information on screen about what is found, and ultimately join the
 network you specify in the cmdline.txt file. You should see an IP address in the
 top console window once you are connected.
 
+Installing on Pi Zero and Pi3
+-----------------------------
 Put the kernel on a USB drive in the usual manner and use it to boot from.
 You *must* use a USB drve; it won't work via the SD card slot at the moment
 because we haven't yet migrated the SD support to work via the other SD Host controller
 (since the Arasan, normally used for SD, is now being used for WIFI).
 
+Installing on Pi4
+-----------------
+Install the standard boot files on an SD card and add the kernel7l.img from this
+repository.
+
+All devices
+------------
 You will need to place the firmware folder into c:\ so it shows as c:\firmware
-on the usb drive as well.
+on the boot media as well.
 
 Finally, if you want to actually fully log on to a network then
 you must alter cmdline.txt to add the following:
@@ -71,6 +90,11 @@ It contains various functions for talking to the Cypress device including the
 rather lengthy initialisation process.
 The initialisation process is derived from various sources including the broadcom
 full mac driver, the plan9 driver, and the cypress wifi host driver.
+
+## Note that the Pi4 version cannot be compiled until you have updated to the latest
+ultibo release. I recommend doing this even if you do not have a Pi4 because the
+latest project files contain references to the Pi4 build target.
+
 
 Using the Device Driver in your applications
 --------------------------------------------
