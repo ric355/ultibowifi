@@ -5,7 +5,7 @@ This is an Ultibo application and device driver which enables support for the in
 device (a Cypress 43445 chip). It supports WPA2/PSK only at the moment, and does not
 allow connection to open networks. The device driver now supports Pi Zero, Pi3 and Pi4.
 
-##Pi Zero and Pi3b - prerequisites for building and running the demo kernel
+## Pi Zero and Pi3b - prerequisites for building and running the demo kernel
 1. You must boot from a USB drive
 2. Must be a device with *onboard* wifi support (*not* a USB wifi device)
 3. USB drive must contain c:\firmware with the correct firmware file in it (see repo folder)
