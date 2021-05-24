@@ -9,7 +9,7 @@ allow connection to open networks. The device driver now supports Pi Zero, Pi3 a
 1. You must boot from a USB drive
 2. Must be a device with *onboard* wifi support (*not* a USB wifi device)
 3. USB drive must contain c:\firmware with the correct firmware file in it (see repo folder)
-Note the USB requirement will be removed in due coursebut I don't have a date for that
+Note the USB requirement will be removed in due course but I don't have a date for that
 at the moment since the work will be done by the Ultibo developement team rather than me.
 
 ### Support for Pi4 is now added following Ultibo's recent Pi4 core release!
