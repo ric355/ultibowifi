@@ -4858,6 +4858,12 @@ begin
   // chunks really? If we do, then the verify stuff needs to be done a chunk
   // at a time as well.
 
+  if (not FileExists(FirmwareFilename)) then
+  begin
+    Result := WIFI_STATUS_INVALID_DATA;
+    exit;
+  end;
+
   assignfile(FirmwareFile, FirmwareFilename);
   reset(FirmwareFile);
   fsize := filesize(FirmwareFile);
@@ -4917,6 +4923,12 @@ begin
 
 
   // now we need to upload the configuration to ram
+
+  if (not FileExists(ConfigFilename)) then
+  begin
+    Result := WIFI_STATUS_INVALID_DATA;
+    exit;
+  end;
 
   AssignFile(FirmwareFile, ConfigFilename);
   Reset(FirmwareFile);
@@ -5316,6 +5328,12 @@ begin
   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Using ' + RegulatoryFilename + ' for regulatory file.');
 
   // now regulatory file if there is one.
+
+  if (not FileExists(RegulatoryFilename)) then
+  begin
+    Result := WIFI_STATUS_INVALID_DATA;
+    exit;
+  end;
 
   AssignFile(FirmwareFile, RegulatoryFilename);
   Reset(FirmwareFile);
