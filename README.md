@@ -29,6 +29,12 @@ Latest changes cover the ability to automatically reconnect to the network if th
 connection is lost, plus the ability to have either blocking or non-blocking
 connection. The reconnect is always background (non-blocking). And Pi4 support of course.
 
+I have now added some support for selecting a specific network via a combination of the
+SSID (the usual router name) and the BSSID (a MAC address). This enables a specific network
+address to be targetted in situations where a router broadcasts the same SSID for
+two different frequency bands (e.g. 5Ghz and 2.4Ghz). The two bands will likely have separate
+BSSIDs to support that.
+
 Kernel images are compiled with a blocking initial connect but will work fine if
 you change the relveant parameter to non-blocking in the connect call and recompile.
 
@@ -65,6 +71,12 @@ you must alter cmdline.txt to add the following:
 
 and if you want to see a scan for base stations, add
     WIFISCAN=1
+
+if you want to select a specific network interface, then in addition to the SSID you
+can specify the BSSID viz;
+    BSSID=a1:23:e5:c6:f3:e0
+
+You must use the exact format given above although case of the characters doesn't matter.
 
 Note that the SSID is most likely case sensitive so copy your router's ID exactly.
 

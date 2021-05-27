@@ -27,6 +27,7 @@ const
   WLC_SET_WPA_AUTH = 165;
   WPA2_AUTH_PSK = $0080;
   WLC_SET_SSID = 26;
+  WLC_SET_BSSID = 24;
 
   CYW43455_NETWORK_DESCRIPTION = 'Cypress 43455 SDIO Wireless Network Adapter';
 
@@ -1317,11 +1318,13 @@ type
   private
     FConnectionLost : TSemaphoreHandle;
     FSSID : string;
+    FBSSID : ether_addr;
+    FUseBSSID : boolean;
     FKey : string;
     FCountry : string;
   public
     constructor Create;
-    procedure SetConnectionDetails(aSSID, aKey, aCountry : string);
+    procedure SetConnectionDetails(aSSID, aKey, aCountry : string; BSSID : ether_addr; useBSSID : boolean);
     destructor Destroy; override;
     procedure Execute; override;
   end;
@@ -1391,8 +1394,9 @@ procedure WirelessScan(UserCallback : TWIFIScanUserCallback);
 function WirelessJoinNetwork(ssid : string; security_key : string;
                              countrycode : string;
                              JoinType : TWIFIJoinType;
-                             ReconnectType : TWIFIReconnectionType) : longword;
-//                             backgroundretry : boolean) : longword;
+                             ReconnectType : TWIFIReconnectionType;
+                             bssid : ether_addr;
+                             usebssid : boolean = false) : longword;
 
 procedure WIFIPreInit;
 procedure WIFIInit;
@@ -5438,7 +5442,8 @@ begin
                   + ' event status=' + inttostr(eventrecordp^.whd_event.status)
                   + ' buflen = '+inttostr(scanresultp^.buflen)
                   + ' channel = ' +inttostr(scanresultp^.bss_info[1].chanspec and $ff)
-                  + ' MAC = ' +inttohex(scanresultp^.bss_info[1].BSSID.octet[0], 2) + ':'
+                  + ' chanspec = ' +inttohex(scanresultp^.bss_info[1].chanspec, 8)
+                  + ' BSSID = ' +inttohex(scanresultp^.bss_info[1].BSSID.octet[0], 2) + ':'
                   + inttohex(scanresultp^.bss_info[1].BSSID.octet[1], 2) + ':'
                   + inttohex(scanresultp^.bss_info[1].BSSID.octet[2], 2) + ':'
                   + inttohex(scanresultp^.bss_info[1].BSSID.octet[3], 2) + ':'
@@ -5567,7 +5572,9 @@ end;
 function WirelessJoinNetwork(ssid : string; security_key : string;
                              countrycode : string;
                              JoinType : TWIFIJoinType;
-                             ReconnectType : TWIFIReconnectionType) : longword;
+                             ReconnectType : TWIFIReconnectionType;
+                             bssid : ether_addr;
+                             usebssid : boolean = false) : longword;
 var
   data : array[0..1] of longword;
   psk : wsec_pmk;
@@ -5578,6 +5585,9 @@ var
   RequestEntryP : PWIFIRequestItem;
   countrysettings : countryparams;
   clen : integer;
+  extjoinparams : wl_extjoin_params;
+  bandforchannel : word;
+
 
 begin
   (*
@@ -5589,7 +5599,7 @@ begin
   Result := WIFI_STATUS_INVALID_DATA;
 
   // pass connection details to the retry thread for handling loss of connection.
-  BackgroundJoinThread.SetConnectionDetails(SSID, security_key, countrycode);
+  BackgroundJoinThread.SetConnectionDetails(SSID, security_key, countrycode, BSSID, UseBSSID);
 
   if (JoinType = WIFIJoinBackground) then
   begin
@@ -5685,6 +5695,14 @@ begin
   Result := WirelessSetVar(WIFI, 'mfp', @auth_mfp, 4);
   if (Result <> WIFI_STATUS_SUCCESS) then
     exit;
+
+  // if there is a BSSID we set it here. Setting the SSID (mandatory) is what initiates the join.
+  if (usebssid) then
+  begin
+    Result := WirelessIOCTLCommand(WIFI, WLC_SET_BSSID, @bssid, sizeof(bssid), true, @responseval, 4);
+    if (Result <> WIFI_STATUS_SUCCESS) then
+      exit;
+  end;
 
 
   // simple join (no joinparams).
@@ -6368,6 +6386,7 @@ begin
   inherited Create(true);
 
   FConnectionLost := SemaphoreCreate(0);
+  FUseBSSID := false;
   Start;
 end;
 
@@ -6378,11 +6397,13 @@ begin
   inherited Destroy;
 end;
 
-procedure TWirelessReconnectionThread.SetConnectionDetails(aSSID, aKey, aCountry : string);
+procedure TWirelessReconnectionThread.SetConnectionDetails(aSSID, aKey, aCountry : string; BSSID : ether_addr; useBSSID : boolean);
 begin
   FSSID := aSSID;
   FKey := aKey;
   FCountry := aCountry;
+  FUseBSSID:=useBSSID;
+  FBSSID := BSSID;
 end;
 
 procedure TWirelessReconnectionThread.Execute;
@@ -6401,7 +6422,7 @@ begin
       Res := WIFI_STATUS_INVALID_PARAMETER;
       while (Res <> WIFI_STATUS_SUCCESS) do
       begin
-        Res := WirelessJoinNetwork(FSSID, FKey, FCountry, WIFIJoinBlocking, WIFIReconnectNever); // do *not* call with WIFIReconnectAlways from this thread.
+        Res := WirelessJoinNetwork(FSSID, FKey, FCountry, WIFIJoinBlocking, WIFIReconnectNever, FBSSID, FUseBSSID); // do *not* call with WIFIReconnectAlways from this thread.
         if (Res <> 0) then
         begin
           {$ifdef CYW43455_DEBUG}

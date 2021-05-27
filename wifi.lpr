@@ -24,6 +24,7 @@ uses
   GlobalTypes,
   Platform,
   Threads,
+  StrUtils,
   SysUtils,
   Classes,
   ShellFilesystem,
@@ -321,11 +322,21 @@ var
   ScanResultList : TStringList;
   Status : Longword;
   CYW43455Network: PCYW43455Network;
+  BSSIDStr : string;
 
 procedure WIFIScanCallback(ssid : string; ScanResultP : pwl_escan_result);
+var
+  ssidstr : string;
 begin
-  if (ScanResultList <> nil) and (ScanResultList.Indexof(ssid) < 0) then
-    ScanResultList.Add(ssid);
+  ssidstr := ssid + ' ' + inttohex(ScanResultP^.bss_info[1].BSSID.octet[0],2) + ':'
+                            + inttohex(ScanResultP^.bss_info[1].BSSID.octet[1],2) + ':'
+                            + inttohex(ScanResultP^.bss_info[1].BSSID.octet[2],2) + ':'
+                            + inttohex(ScanResultP^.bss_info[1].BSSID.octet[3],2) + ':'
+                            + inttohex(ScanResultP^.bss_info[1].BSSID.octet[4],2) + ':'
+                            + inttohex(ScanResultP^.bss_info[1].BSSID.octet[5],2);
+
+  if (ScanResultList <> nil) and (ScanResultList.Indexof(ssidstr) < 0) then
+    ScanResultList.Add(ssidstr);
 end;
 
 procedure WaitForIP;
@@ -367,6 +378,9 @@ begin
     consolewindowwriteln(topwindow, s);
   end;
 end;
+
+var
+  BSSID : ether_addr;
 
 begin
   ConsoleFramebufferDeviceAdd(FramebufferDeviceGetDefault);
@@ -463,6 +477,7 @@ begin
     SSID := SysUtils.GetEnvironmentVariable('SSID');
     key := SysUtils.GetEnvironmentVariable('KEY');
     Country := SysUtils.GetEnvironmentVariable('COUNTRY');
+    BSSIDStr := SysUtils.GetEnvironmentVariable('BSSID');
 
     ConsoleWindowWriteln(topwindow, 'Attempting to join WIFI network ' + SSID + ' (Country='+Country+')');
 
@@ -470,7 +485,20 @@ begin
        ConsoleWindowWriteln(topwindow, 'Cant join a network without SSID, Key, and Country Code.')
     else
     begin
-      status := WirelessJoinNetwork(SSID, Key, Country, WIFIJoinBlocking, WIFIReconnectAlways);
+      if (BSSIDStr <> '') then
+      begin
+        ConsoleWindowWriteln(topwindow, 'Using BSSID configuration ' + BSSIDStr + ' from cmdline.txt');
+        bssid.octet[0] := hex2dec(copy(BSSIDStr, 1, 2));
+        bssid.octet[1] := hex2dec(copy(BSSIDStr, 4, 2));
+        bssid.octet[2] := hex2dec(copy(BSSIDStr, 7, 2));
+        bssid.octet[3] := hex2dec(copy(BSSIDStr, 10, 2));
+        bssid.octet[4] := hex2dec(copy(BSSIDStr, 13, 2));
+        bssid.octet[5] := hex2dec(copy(BSSIDStr, 16, 2));
+      end
+      else
+        ConsoleWindowWriteln(topwindow, 'Letting the Cypress firmware determine the best network interface from the SSID');
+
+      status := WirelessJoinNetwork(SSID, Key, Country, WIFIJoinBlocking, WIFIReconnectAlways, BSSID, (BSSIDStr <> ''));
       IPAddress := '0.0.0.0';
       if (status = WIFI_STATUS_SUCCESS) then
       begin
