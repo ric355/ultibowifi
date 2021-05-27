@@ -70,10 +70,12 @@ you must alter cmdline.txt to add the following:
     SSID=<ssid name> KEY=<passphrase> COUNTRY=<country code>
 
 and if you want to see a scan for base stations, add
+
     WIFISCAN=1
 
 if you want to select a specific network interface, then in addition to the SSID you
 can specify the BSSID viz;
+
     BSSID=a1:23:e5:c6:f3:e0
 
 You must use the exact format given above although case of the characters doesn't matter.
