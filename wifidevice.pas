@@ -951,6 +951,7 @@ type
     Status:LongWord;
     Data:PSDIOData;
     {Host Properties}
+    Timeout:LongWord; {Milliseconds}
     DataCompleted:Boolean;
     BusyCompleted:Boolean;
     TuningCompleted:Boolean;
@@ -1830,12 +1831,12 @@ begin
   {$ENDIF}
    
   {Determine Capabilities}
-  SDHCI^.Capabilities:=MMC_MODE_HS or MMC_MODE_HS_52MHz or MMC_MODE_4BIT;
+  SDHCI^.Capabilities:=MMC_CAP_SD_HIGHSPEED or MMC_CAP_MMC_HIGHSPEED;
   if SDHCIGetVersion(SDHCI) >= SDHCI_SPEC_300 then
    begin
     if (Capabilities and SDHCI_CAN_DO_8BIT) <> 0 then
      begin
-      SDHCI^.Capabilities:=SDHCI^.Capabilities or MMC_MODE_8BIT;
+      SDHCI^.Capabilities:=SDHCI^.Capabilities or MMC_CAP_8_BIT_DATA;
      end;
    end;
   {Check Presets}
@@ -2771,7 +2772,7 @@ begin
    {$ifdef CYW43455_DEBUG}
    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'sdhci^.voltages is ' + inttostr(sdhci^.voltages) + 'firstbitsetof()='+inttostr(firstbitset(sdhci^.voltages)));
    {$endif}
-   Result:=SDHCIHostSetPower(SDHCI,FirstBitSet(SDHCI^.Voltages) - 1);
+   Result:=SDHCIHostSetPower(SDHCI,FirstBitSet(SDHCI^.Voltages));
    if Result <> WIFI_STATUS_SUCCESS then
     begin
      WIFILogError(nil,'failed to Set initial power');
@@ -2795,15 +2796,7 @@ begin
 
    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'WIFI Device Go Idle');
    {Set the Card to Idle State}
-   Result:= WIFIDeviceGoIdle(WIFI);
-   if Result <> WIFI_STATUS_SUCCESS then
-    begin
-     WIFILogError(nil, 'go idle returned fail but this is expected...');
-    end
-   {$ifdef CYW43455_DEBUG}
-   else
-     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Go Idle succeeded');
-   {$else};{$endif}
+   WIFIDeviceGoIdle(WIFI);
 
 
    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'send interface condition request');
@@ -3574,7 +3567,7 @@ begin
     end;
 
    {Set Power}
-   SDHCIHostSetPower(SDHCI,FirstBitSet(SDHCI^.Voltages) - 1);
+   SDHCIHostSetPower(SDHCI,FirstBitSet(SDHCI^.Voltages));
 
    {Set Bus Width}
    WIFI^.BusWidth := WIFI_BUS_WIDTH_4;
@@ -3620,6 +3613,9 @@ begin
    SDHCIHostWriteByte(SDHCI, SDHCI_BLOCK_GAP_CONTROL, 0);
    SDHCIHostWriteByte(SDHCI, SDHCI_POWER_CONTROL, 0);
 
+   {Update Bus Width}  
+   SDHCI^.BusWidth:=WIFI^.BusWidth;
+
    {Check Clock}
    if WIFI^.Clock > 26000000 then
     begin
@@ -3636,6 +3632,9 @@ begin
    //To Do //More here (Reset SD Clock Enable / Re-enable SD Clock) //See: bcm2835_mmc_set_ios in \linux-rpi-3.18.y\drivers\mmc\host\bcm2835-mmc.c
                  //Even more quirks                                       //See: sdhci_do_set_ios in \linux-rpi-3.18.y\drivers\mmc\host\sdhci.c
    SDHCIHostWriteByte(SDHCI,SDHCI_HOST_CONTROL,Value);
+
+   {Update Timing}  
+   SDHCI^.Timing:=WIFI^.Timing;
 
    Result:=WIFI_STATUS_SUCCESS;
   end;
@@ -3918,6 +3917,9 @@ begin
       {Setup Status}
       Command^.Status:=WIFI_STATUS_NOT_PROCESSED;
       try
+       {Update Statistics}
+       Inc(SDHCI^.RequestCount);
+
        {Wait Timeout (10ms)}
        Timeout:=1000;
        Mask:=SDHCI_CMD_INHIBIT;
@@ -4145,6 +4147,9 @@ begin
         {Wait for Completion}   // short timeout for a read command.
         if SDHCI^.Command^.Data = nil then // need to go back to test for data=nil
          begin
+          {Update Statistics}
+          Inc(SDHCI^.CommandRequestCount);
+
           {Wait for Signal with Timeout (100ms)}
           Status:=SemaphoreWaitEx(SDHCI^.Wait,500);  // increased during debug
           if Status <> ERROR_SUCCESS then
@@ -4177,6 +4182,12 @@ begin
          end
         else
          begin
+          {Update Statistics}
+          Inc(SDHCI^.DataRequestCount);
+
+          {Update Statistics}
+          Inc(SDHCI^.PIODataTransferCount);
+
           {Wait for Signal with Timeout (5000ms)}
           Status:=SemaphoreWaitEx(SDHCI^.Wait,5000);
           if Status <> ERROR_SUCCESS then
@@ -4207,11 +4218,21 @@ begin
         SDHCI^.Command:=nil;
        end;
       finally
-       {Check Status}
+       {Check Reset Required}
        if Command^.Status <> WIFI_STATUS_SUCCESS then //To Do //More see: sdhci_tasklet_finish //SDHCI_QUIRK_RESET_AFTER_REQUEST and SDHCI_QUIRK_CLOCK_BEFORE_RESET
         begin
          SDHCIHostReset(SDHCI,SDHCI_RESET_CMD);
          SDHCIHostReset(SDHCI,SDHCI_RESET_DATA);
+        end;
+       
+       {Check Status}
+       if Command^.Status <> MMC_STATUS_SUCCESS then 
+        begin
+         {Update Statistics}
+         Inc(SDHCI^.RequestErrors); 
+         
+         {Return Result}
+         Result:=Command^.Status;
         end;
       end;
 
@@ -6182,13 +6203,13 @@ begin
                           if (WIFI_LOG_ENABLED) then WIFILogInfo(nil, 'The WIFI link appears to have been lost (flags='+inttostr(EventRecordP^.whd_event.flags)+')');
 
                           // Set join not completed
-                          PCYW43455Network(WIFI^.NetworkP)^.JoinCompleted := False;
+                          PCYW43455Network(FWIFI^.NetworkP)^.JoinCompleted := False;
 
                           {Set Status to Down}
                           FWIFI^.NetworkP^.NetworkStatus := NETWORK_STATUS_DOWN;
 
                           {Notify the Status}
-                          NotifierNotify(@WIFI^.NetworkP^.Device, DEVICE_NOTIFICATION_DOWN);
+                          NotifierNotify(@FWIFI^.NetworkP^.Device, DEVICE_NOTIFICATION_DOWN);
 
                           SemaphoreSignal(BackgroundJoinThread.FConnectionLost);
                         end;
@@ -6367,7 +6388,7 @@ begin
 
 
       finally
-        MutexUnlock(WIFI^.NetworkP^.Lock);
+        MutexUnlock(FWIFI^.NetworkP^.Lock);
       end
      end
      else
