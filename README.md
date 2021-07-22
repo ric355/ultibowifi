@@ -6,16 +6,14 @@ device (a Cypress 43445 chip). It supports WPA2/PSK only at the moment, and does
 allow connection to open networks. The device driver now supports Pi Zero, Pi3 and Pi4.
 
 ### Pi Zero and Pi3b - prerequisites for building and running the demo kernel
-1. You must boot from a USB drive
-2. Must be a device with *onboard* wifi support (*not* a USB wifi device)
-3. USB drive must contain c:\firmware with the correct firmware file in it (see repo folder)
-Note the USB requirement will be removed in due course but I don't have a date for that
-at the moment since the work will be done by the Ultibo developement team rather than me.
+1. Must be a device with *onboard* wifi support (*not* a USB wifi device)
+2. boot device must contain c:\firmware with the correct firmware file in it (see repo folder)
+
+** For people who've been here before, the requirement to boot from USB has now been removed
+by the Ultibo development team. The demo applications and source here has been updated
+accordingly, so you can now use an SD card as per any other app **
 
 ### Support for Pi4 is now added following Ultibo's recent Pi4 core release!
-
-As the Pi4 contains multiple SDIO controllers the requirement to boot from USB is removed
-completely.
 
 With the demo kernel up and running you should be able to ping the device and you
 will also be able to telnet to it and use Ultibo's standard set of shell commands.
@@ -27,7 +25,8 @@ for details on this also.
 
 Latest changes cover the ability to automatically reconnect to the network if the
 connection is lost, plus the ability to have either blocking or non-blocking
-connection. The reconnect is always background (non-blocking). And Pi4 support of course.
+connection. The reconnect is always background (non-blocking). And Pi4 support and
+boot from SD support of course.
 
 I have now added some support for selecting a specific network via a combination of the
 SSID (the usual router name) and the BSSID (a MAC address). This enables a specific network
@@ -36,7 +35,7 @@ two different frequency bands (e.g. 5Ghz and 2.4Ghz). The two bands will likely 
 BSSIDs to support that.
 
 Kernel images are compiled with a blocking initial connect but will work fine if
-you change the relveant parameter to non-blocking in the connect call and recompile.
+you change the releveant parameter to non-blocking in the connect call and recompile.
 
 Running
 -------
@@ -47,20 +46,11 @@ displaying some information on screen about what is found, and ultimately join t
 network you specify in the cmdline.txt file. You should see an IP address in the
 top console window once you are connected.
 
-Installing on Pi Zero and Pi3
+Installing on Pi Zero and Pi3, and Pi4
 -----------------------------
-Put the kernel on a USB drive in the usual manner and use it to boot from.
-You *must* use a USB drve; it won't work via the SD card slot at the moment
-because we haven't yet migrated the SD support to work via the other SD Host controller
-(since the Arasan, normally used for SD, is now being used for WIFI).
+Put the kernel on your boot device in the usual manner, alongside all the other
+standard boot files.
 
-Installing on Pi4
------------------
-Install the standard boot files on an SD card and add the kernel7l.img from this
-repository.
-
-All devices
-------------
 You will need to place the firmware folder into c:\ so it shows as c:\firmware
 on the boot media as well.
 
@@ -92,6 +82,9 @@ is an id that is not supported.
 Compiling
 ---------
 
+You must update to the latest ultibo core to successfully compile this software.
+At the time of writing this is Ultibo Core  2.1.079.
+
 Previous versions of this repo had some custom RTL files. These can now be removed.
 If you previously compiled the RTL with the custom mmc.pas and globalconfig.pas
 files that were in this repo (now deleted) then put the RTL back to standard and
@@ -105,11 +98,6 @@ rather lengthy initialisation process.
 The initialisation process is derived from various sources including the broadcom
 full mac driver, the plan9 driver, and the cypress wifi host driver.
 
-### Note that the Pi4 version cannot be compiled until you have updated to the latest ultibo release. 
-
-I recommend doing this even if you do not have a Pi4 because the
-latest project files contain references to the Pi4 build target.
-
 
 Using the Device Driver in your applications
 --------------------------------------------
@@ -118,3 +106,4 @@ See the contents of wifi.lpr for how this is currently done. It could change in
 the future as presently the devices are being created outside of the unit
 initialization process in order to manage the dependency on the C: drive
 for firmware loading.
+
