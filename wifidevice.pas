@@ -5772,6 +5772,20 @@ begin
       // tell the join thread to make another join attempt.
       SemaphoreSignal(BackgroundJoinThread.FConnectionLost);
     end;
+
+    {$ifdef CYW43455_DEBUG}
+    if WIFI_LOG_ENABLED then
+    begin
+      if (WLC_E_SET_SSID in RequestEntryP^.RegisteredEvents) then
+        WIFILogDebug(nil, 'WLC_E_SET_SSID event was not returned from the join request');
+
+      if (WLC_E_LINK in RequestEntryP^.RegisteredEvents) then
+        WIFILogDebug(nil, 'WLC_E_LINK event was not returned from the join request');
+
+      if (WLC_E_PSK_SUP in RequestEntryP^.RegisteredEvents) then
+        WIFILogDebug(nil, 'WLC_E_PSK_SUP event was not returned from the join request');
+    end;
+    {$endif}
   end;
 
   WIFIWorkerThread.DoneWithRequest(RequestEntryP);
