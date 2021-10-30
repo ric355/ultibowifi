@@ -481,7 +481,10 @@ begin
 
     ConsoleWindowWriteln(topwindow, 'Attempting to join WIFI network ' + SSID + ' (Country='+Country+')');
 
-    if (SSID = '') or (Key = '') or (Country='') then
+    if (Key = '') then
+      ConsoleWindowWriteln(topwindow, 'Warning: Key not specified - expecting the network to be unencrypted.');
+
+    if (SSID = '') or (Country='') then
        ConsoleWindowWriteln(topwindow, 'Cant join a network without SSID, Key, and Country Code.')
     else
     begin
@@ -518,18 +521,24 @@ begin
 
         DumpIP;
       end;
+
+      // Setup a slow blink of the activity LED to give an indcation that the Pi is still alive
+      ActivityLEDEnable;
+
+
+      consolewindowwriteln(topwindow, 'trying to resolve host www.richmet.com ' + Winsock2TCPClient.ResolveHost('www.richmet.com'));
+      consolewindowwriteln(topwindow, 'trying to resolve host richard-desktop ' + Winsock2TCPClient.ResolveHost('richard-desktop'));
+
+      while True do
+      begin
+        ActivityLEDOn;
+        Sleep(500);
+        ActivityLEDOff;
+        Sleep(500);
+      end;
+
     end;
 
-    // Setup a slow blink of the activity LED to give an indcation that the Pi is still alive
-    ActivityLEDEnable;
-    
-    while True do
-    begin
-      ActivityLEDOn;
-      Sleep(500);
-      ActivityLEDOff;
-      Sleep(500);
-    end;
   except
     on e : exception do
       ConsoleWindowWriteln(topwindow, 'Exception: ' + e.message + ' at ' + inttohex(longword(exceptaddr), 8));

@@ -92,7 +92,7 @@ const
 
 
   FIRMWARE_CHUNK_SIZE = 2048;
-  FIRWMARE_OPTIONS_COUNT = 7;
+  FIRWMARE_OPTIONS_COUNT = 8;
   FIRMWARE_FILENAME_ROOT = 'c:\firmware\';
 
   {SDIO Bus Speeds (Hz)}
@@ -1442,13 +1442,14 @@ var
 
   firmware : array[1..FIRWMARE_OPTIONS_COUNT] of TFirmwareEntry =
     (
-    	( chipid : $4330; chipidrev : 3; firmwarefilename: 'fw_bcm40183b1.bin'; configfilename: 'bcmdhd.cal.40183.26MHz'; regufilename : ''),
-    	( chipid : $4330; chipidrev : 4; firmwarefilename: 'fw_bcm40183b2.bin'; configfilename: 'bcmdhd.cal.40183.26MHz'; regufilename : ''),
-    	( chipid : 43362; chipidrev : 0; firmwarefilename: 'fw_bcm40181a0.bin'; configfilename: 'bcmdhd.cal.40181'; regufilename : ''),
-    	( chipid : 43362; chipidrev : 1; firmwarefilename: 'fw_bcm40181a2.bin'; configfilename: 'bcmdhd.cal.40181'; regufilename : ''),
-    	( chipid : 43430; chipidrev : 1; firmwarefilename: 'brcmfmac43430-sdio.bin'; configfilename: 'brcmfmac43430-sdio.txt'; regufilename : ''),
-    	( chipid : $4345; chipidrev : 6; firmwarefilename: 'brcmfmac43455-sdio.bin'; configfilename: 'brcmfmac43455-sdio.txt'; regufilename : 'brcmfmac43455-sdio.clm_blob'),
-    	( chipid : $4345; chipidrev : 9; firmwarefilename: 'brcmfmac43456-sdio.bin'; configfilename: 'brcmfmac43456-sdio.txt'; regufilename : 'brcmfmac43456-sdio.clm_blob')
+      	    ( chipid : $4330; chipidrev : 3; firmwarefilename: 'fw_bcm40183b1.bin'; configfilename: 'bcmdhd.cal.40183.26MHz'; regufilename : ''),
+    	    ( chipid : $4330; chipidrev : 4; firmwarefilename: 'fw_bcm40183b2.bin'; configfilename: 'bcmdhd.cal.40183.26MHz'; regufilename : ''),
+    	    ( chipid : 43362; chipidrev : 0; firmwarefilename: 'fw_bcm40181a0.bin'; configfilename: 'bcmdhd.cal.40181'; regufilename : ''),
+    	    ( chipid : 43362; chipidrev : 1; firmwarefilename: 'fw_bcm40181a2.bin'; configfilename: 'bcmdhd.cal.40181'; regufilename : ''),
+    	    ( chipid : 43430; chipidrev : 1; firmwarefilename: 'brcmfmac43430-sdio.bin'; configfilename: 'brcmfmac43430-sdio.txt'; regufilename : ''),
+{Pi Zero2W} ( chipid : 43430; chipidrev : 2; firmwarefilename: 'brcmfmac43436-sdio.bin'; configfilename: 'brcmfmac43436-sdio.txt'; regufilename : 'brcmfmac43436-sdio.clm_blob'),
+    	    ( chipid : $4345; chipidrev : 6; firmwarefilename: 'brcmfmac43455-sdio.bin'; configfilename: 'brcmfmac43455-sdio.txt'; regufilename : 'brcmfmac43455-sdio.clm_blob'),
+    	    ( chipid : $4345; chipidrev : 9; firmwarefilename: 'brcmfmac43456-sdio.bin'; configfilename: 'brcmfmac43456-sdio.txt'; regufilename : 'brcmfmac43456-sdio.clm_blob')
     );
 
 
@@ -2090,7 +2091,7 @@ begin
 
    // pi zero has a different data offset as the header is 4 bytes longer.
    // actually a firmware version thing. Other versions may be different too.
-   if (WIFI^.ChipId = CHIP_ID_PI_ZEROW) then
+   if (WIFI^.ChipId = CHIP_ID_PI_ZEROW) and (WIFI^.ChipIdRev = 1) then
      Entry^.Offset:= ETHERNET_HEADER_BYTES + IOCL_LEN_BYTES + 4
    else
      Entry^.Offset:= ETHERNET_HEADER_BYTES + IOCL_LEN_BYTES; // + SDPCM_HEADER_SIZE + CDC_HEADER_SIZE;  // packet data starts after this point.
@@ -5657,7 +5658,8 @@ begin
   if Result <> WIFI_STATUS_SUCCESS then
     exit;
 
-  // Set infrastructure mode = 0 (i think)
+  // Set infrastructure mode
+  // 1 = normal, 0 = access point
   Result := WirelessCommandInt(WIFI, WLC_SET_INFRA, 1);
   if (Result <> WIFI_STATUS_SUCCESS) then
     exit;
@@ -5666,56 +5668,63 @@ begin
   if (Result <> WIFI_STATUS_SUCCESS) then
     exit;
 
-  // Set Wireless Security Type
-  Result := WirelessCommandInt(WIFI, WLC_SET_WSEC, AES_ENABLED);
-  if (Result <> WIFI_STATUS_SUCCESS) then
-    exit;
+  // whilst it is not recommended, the driver will connect to an open network
+  // if you specify an empty security key. Currently the pi400 and Pi Zero 2 W
+  // both require a software wpa_supplicant, and therefore until this is completed
+  // they cannot connect to a wifi network unless it is unencrypted.
+  if (security_key <> '') then
+  begin
+    // Set Wireless Security Type
+    Result := WirelessCommandInt(WIFI, WLC_SET_WSEC, AES_ENABLED);
+    if (Result <> WIFI_STATUS_SUCCESS) then
+      exit;
 
-  data[0] := 0;  // this is the primary interface
-  data[1] := 1;  // wpa security on
-  Result := WirelessSetVar(WIFI, 'bsscfg:sup_wpa', @data[0], sizeof(data));
-  if (Result <> WIFI_STATUS_SUCCESS) then
-    exit;
+    data[0] := 0;  // this is the primary interface
+    data[1] := 1;  // wpa security on (enables the firmware supplicant)
+    Result := WirelessSetVar(WIFI, 'bsscfg:sup_wpa', @data[0], sizeof(data));
+    if (Result <> WIFI_STATUS_SUCCESS) then
+      exit;
 
 
-  // Set the EAPOL version to whatever the AP is using (-1) */
-  data[0] := 0;
-  data[1] := longword(-1);
-  Result := WirelessSetVar(WIFI, 'bsscfg:sup_wpa2_eapver', @data[0], sizeof(data));
-  if (Result <> WIFI_STATUS_SUCCESS) then
-    exit;
+    // Set the EAPOL version to whatever the AP is using (-1) */
+    data[0] := 0;
+    data[1] := longword(-1);
+    Result := WirelessSetVar(WIFI, 'bsscfg:sup_wpa2_eapver', @data[0], sizeof(data));
+    if (Result <> WIFI_STATUS_SUCCESS) then
+      exit;
 
-  // Send WPA Key
-  // Set the EAPOL key packet timeout value, otherwise unsuccessful supplicant
-  // events aren't reported. If the IOVAR is unsupported then continue.
-  data[0] := 0;
-  data[1] := DEFAULT_EAPOL_KEY_PACKET_TIMEOUT;
-  Result := WirelessSetVar(WIFI, 'bsscfg:sup_wpa_tmo', @data, sizeof(data));
-  if (Result <> WIFI_STATUS_SUCCESS) then
-    exit;
+    // Send WPA Key
+    // Set the EAPOL key packet timeout value, otherwise unsuccessful supplicant
+    // events aren't reported. If the IOVAR is unsupported then continue.
+    data[0] := 0;
+    data[1] := DEFAULT_EAPOL_KEY_PACKET_TIMEOUT;
+    Result := WirelessSetVar(WIFI, 'bsscfg:sup_wpa_tmo', @data, sizeof(data));
+    if (Result <> WIFI_STATUS_SUCCESS) then
+      exit;
 
-  // Set WPA authentication mode
-  wpa_auth := WPA2_AUTH_PSK;
-  Result := WirelessIOCTLCommand(WIFI, WLC_SET_WPA_AUTH, @wpa_auth, sizeof(wpa_auth), true, @responseval, 4);
-  if (Result <> WIFI_STATUS_SUCCESS) then
-    exit;
+    // Set WPA authentication mode
+    wpa_auth := WPA2_AUTH_PSK;
+    Result := WirelessIOCTLCommand(WIFI, WLC_SET_WPA_AUTH, @wpa_auth, sizeof(wpa_auth), true, @responseval, 4);
+    if (Result <> WIFI_STATUS_SUCCESS) then
+      exit;
 
-  fillchar(psk, sizeof(psk), 0);
-  move(security_key[1], psk.key[0], length(security_key));
-  psk.key_len := length(security_key);
-  psk.flags := WSEC_PASSPHRASE;
+    fillchar(psk, sizeof(psk), 0);
+    move(security_key[1], psk.key[0], length(security_key));
+    psk.key_len := length(security_key);
+    psk.flags := WSEC_PASSPHRASE;
 
-  // Delay required to allow radio firmware to be ready to receive PMK and avoid intermittent failure
-  sleep(1);
+    // Delay required to allow radio firmware to be ready to receive PMK and avoid intermittent failure
+    sleep(1);
 
-  Result := WirelessIOCTLCommand(WIFI, WLC_SET_WSEC_PMK, @psk, sizeof(psk), true, @responseval, 4);
-  if (Result <> WIFI_STATUS_SUCCESS) then
-    exit;
+    Result := WirelessIOCTLCommand(WIFI, WLC_SET_WSEC_PMK, @psk, sizeof(psk), true, @responseval, 4);
+    if (Result <> WIFI_STATUS_SUCCESS) then
+      exit;
 
-  auth_mfp := 0;
-  Result := WirelessSetVar(WIFI, 'mfp', @auth_mfp, 4);
-  if (Result <> WIFI_STATUS_SUCCESS) then
-    exit;
+    auth_mfp := 0;
+    Result := WirelessSetVar(WIFI, 'mfp', @auth_mfp, 4);
+    if (Result <> WIFI_STATUS_SUCCESS) then
+      exit;
+  end;
 
   // if there is a BSSID we set it here. Setting the SSID (mandatory) is what initiates the join.
   if (usebssid) then
@@ -5735,7 +5744,11 @@ begin
     exit;
 
   // register for join events we are interested in.
-  RequestEntryP := WIFIWorkerThread.AddRequest(0, [WLC_E_SET_SSID, WLC_E_LINK, WLC_E_PSK_SUP], @JoinCallback, nil);
+  // for an open network we don't expect to see the PSK_SUP event.
+  if (security_key <> '') then
+    RequestEntryP := WIFIWorkerThread.AddRequest(0, [WLC_E_SET_SSID, WLC_E_LINK, WLC_E_PSK_SUP], @JoinCallback, nil)
+  else
+    RequestEntryP := WIFIWorkerThread.AddRequest(0, [WLC_E_SET_SSID, WLC_E_LINK], @JoinCallback, nil);
 
   // wait for 5 seconds or a completion signal.
   SemaphoreWaitEx(RequestEntryP^.Signal, 5000);
@@ -6190,7 +6203,7 @@ begin
                         // extra 4 bytes represent yet. Note the packet data offset for channel 2 has to be
                         // adjusted as well but this is done during init.
 
-                        if (FWIFI^.ChipId = CHIP_ID_PI_ZEROW) then
+                        if (FWIFI^.ChipId = CHIP_ID_PI_ZEROW) and (WIFI^.ChipIdRev = 1) then
                           EventRecordP := pwhd_event(pbyte(responsep)+responsep^.cmd.sdpcmheader.hdrlen + 8)
                         else
                           EventRecordP := pwhd_event(pbyte(responsep)+responsep^.cmd.sdpcmheader.hdrlen + 4);
@@ -6250,7 +6263,7 @@ begin
                         NetworkEntryP^.Count:=NetworkEntryP^.Count+1;
 
                         // account for different header length in pi zero
-                        if (FWIFI^.ChipId = CHIP_ID_PI_ZEROW) then
+                        if (FWIFI^.ChipId = CHIP_ID_PI_ZEROW) and (WIFI^.ChipIdRev = 1) then
                           FrameLength := responseP^.len - 8 - ETHERNET_HEADER_BYTES
                         else
                           FrameLength := responseP^.len - 4 - ETHERNET_HEADER_BYTES;

@@ -2,16 +2,13 @@ Ultibo WIFI Device Driver for onboard Cypress WIFI chips
 ----------------------------------------------------------
 
 This is an Ultibo application and device driver which enables support for the internal WIFI
-device (a Cypress 43445 chip). It supports WPA2/PSK only at the moment, and does not
-allow connection to open networks. The device driver now supports Pi Zero, Pi3 and Pi4.
+device (a Cypress 43445 chip). It supports WPA2/PSK only at the moment. Connection to open
+networks is now allowed but not recommended. See device support later for why this is.
+The device driver currently supports Pi Zero, Pi3, Pi4, and Pi400.
 
-### Pi Zero, Pi3b and Pi4 - prerequisites for building and running the demo kernel
+### Pi Zero, Pi Zero2W, Pi3b, Pi4 and Pi400 - prerequisites for building and running the demo kernel
 1. Must be a device with *onboard* wifi support (*not* a USB wifi device)
 2. boot device must contain c:\firmware with the correct firmware file in it (see repo folder)
-
-** For people who've been here before, the requirement to boot from USB has now been removed
-by the Ultibo development team. The demo applications and source here has been updated
-accordingly, so you can now use an SD card as per any other app **
 
 ### Demo kernel
 With the demo kernel up and running you should be able to ping the device and you
@@ -22,11 +19,6 @@ to do this).  I have also enabled the webstatus unit so that you can connect a b
 to the IP address and view system information over the wifi network. See Ultibo website
 for details on this also.
 
-Latest changes cover the ability to automatically reconnect to the network if the
-connection is lost, plus the ability to have either blocking or non-blocking
-connection. The reconnect is always background (non-blocking). And Pi4 support and
-boot from SD support of course.
-
 I have now added some support for selecting a specific network via a combination of the
 SSID (the usual router name) and the BSSID (a MAC address). This enables a specific network
 address to be targetted in situations where a router broadcasts the same SSID for
@@ -34,19 +26,27 @@ two different frequency bands (e.g. 5Ghz and 2.4Ghz). The two bands will likely 
 BSSIDs to support that.
 
 Kernel images are compiled with a blocking initial connect but will work fine if
-you change the releveant parameter to non-blocking in the connect call and recompile.
+you change the relevant parameter to non-blocking in the connect call and recompile.
+
+Device Support
+--------------
+As already mentioned this device driver supports all Pi devices with an onboard wifi chip.
+However, in the case of the Pi400 and the Pi Zero2W only connections to an open
+network are supported. This is because earlier Wifi firmware contains a WPA_SUPPLICANT
+directly within the firmware but this is not included in the pi400 and zero2w firmware
+and therefore a driver based supplicant needs to be added. Use open networks at your own risk!
 
 Running
 -------
 I have added some pre-built kernels to the repo. There is a kernel7l.img (Pi4),
-kernel7.img (Pi3) and a kernel.img (Pi Zero).
+kernel7.img (Pi3 and zero2w) and a kernel.img (Pi Zero).
 They will run through the initialisation above, scan for networks
 displaying some information on screen about what is found, and ultimately join the
 network you specify in the cmdline.txt file. You should see an IP address in the
 top console window once you are connected.
 
-Installing on Pi Zero and Pi3, and Pi4
------------------------------
+Installing on Pi Zero, Zero2W, Pi3, and Pi4
+-------------------------------------------
 Put the kernel on your boot device in the usual manner, alongside all the other
 standard boot files.
 
@@ -58,7 +58,10 @@ you must alter cmdline.txt to add the following:
 
     SSID=<ssid name> KEY=<passphrase> COUNTRY=<country code>
 
-and if you want to see a scan for base stations, add
+For an open network, KEY= can be left empty (or not included). Use of open networks
+is obviously not recommended.
+
+If you want to see a scan for base stations, add
 
     WIFISCAN=1
 
@@ -70,9 +73,6 @@ can specify the BSSID viz;
 You must use the exact format given above although case of the characters doesn't matter.
 
 Note that the SSID is most likely case sensitive so copy your router's ID exactly.
-
-The code does not attempt to connect to open networks and is only enabled for
-WPA2/PSK.
 
 There is a possibility it won't work on a given pi if the firmware needed is
 not present. The chip id will show what it is looking for. Let me know if there
