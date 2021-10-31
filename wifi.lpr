@@ -525,10 +525,6 @@ begin
       // Setup a slow blink of the activity LED to give an indcation that the Pi is still alive
       ActivityLEDEnable;
 
-
-      consolewindowwriteln(topwindow, 'trying to resolve host www.richmet.com ' + Winsock2TCPClient.ResolveHost('www.richmet.com'));
-      consolewindowwriteln(topwindow, 'trying to resolve host richard-desktop ' + Winsock2TCPClient.ResolveHost('richard-desktop'));
-
       while True do
       begin
         ActivityLEDOn;
