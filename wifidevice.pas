@@ -5338,6 +5338,13 @@ begin
   begin
     if (firmware[i].chipid = WIFI^.chipid) and (firmware[i].chipidrev = WIFI^.chipidrev) then
     begin
+      // If no regulatory file just succeed
+      if Length(firmware[i].regufilename) = 0 then
+      begin
+        Result := WIFI_STATUS_SUCCESS;
+        Exit;
+      end;  
+
       RegulatoryFilename := FIRMWARE_FILENAME_ROOT + firmware[i].regufilename;
       Found := true;
       break;
@@ -5873,6 +5880,11 @@ begin
  Result := WirelessSetInt(WIFI, 'bus:txglom', 0);
  if Result <> WIFI_STATUS_SUCCESS then
   exit;
+
+ Result := WirelessSetInt(WIFI, 'bus:rxglom', 0);
+ // Linux driver says this is allowed to fail
+ //if Result <> WIFI_STATUS_SUCCESS then
+ // exit;
 
  Result := WirelessSetInt(WIFI, 'bcn_timeout', 10);
  if Result <> WIFI_STATUS_SUCCESS then
