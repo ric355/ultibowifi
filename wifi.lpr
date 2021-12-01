@@ -379,12 +379,26 @@ begin
   end;
 end;
 
+procedure CPUUtilisation(window : TWindowHandle; core : integer);
+var
+  cpupercent : double;
+begin
+  cpupercent := CPUGetPercentage(core);
+  ConsoleWindowWriteEx(window, 'CPU' + inttostr(core) + ' '  + floattostr(cpupercent) + '%      ', 1, 3+core, COLOR_BLACK, COLOR_WHITE);
+end;
+
 var
   BSSID : ether_addr;
+  LedStatus : boolean;
+  cpuwindow : TWindowHandle;
+
+
 
 begin
   ConsoleFramebufferDeviceAdd(FramebufferDeviceGetDefault);
-  topwindow := ConsoleWindowCreate(ConsoleDeviceGetDefault, CONSOLE_POSITION_TOP,TRUE);
+  topwindow := ConsoleWindowCreate(ConsoleDeviceGetDefault, CONSOLE_POSITION_LEFT,TRUE);
+  cpuwindow := ConsoleWindowCreate(ConsoleDeviceGetDefault, CONSOLE_POSITION_BOTTOMLEFT, FALSE);
+
 
   LOGGING_INCLUDE_TICKCOUNT := True;
   {$IFDEF SERIAL_LOGGING}
@@ -425,6 +439,9 @@ begin
   end;
   ConsoleWindowWriteln(topwindow, 'File system ready. Initialize Wifi Device.');
 
+  if (not (DirectoryExists('c:\firmware'))) then
+    ConsoleWindowWriteln(topwindow, 'You must copy the WIFI firmware to a folder called c:\firmware.');
+
   try
     // WIFIInit has to be done from the main application because the initialisation
     // process needs access to the c: drive in order to load the firmware, regulatory file
@@ -457,6 +474,7 @@ begin
     begin
       Sleep(0);
     end;
+
 
 
     if (SysUtils.GetEnvironmentVariable('WIFISCAN') = '1') then
@@ -522,14 +540,27 @@ begin
         DumpIP;
       end;
 
+      ConsoleWindowWriteln(cpuwindow, 'CPU Utilisation');
+
       // Setup a slow blink of the activity LED to give an indcation that the Pi is still alive
       ActivityLEDEnable;
 
+      LedStatus := true;
       while True do
       begin
-        ActivityLEDOn;
-        Sleep(500);
-        ActivityLEDOff;
+        if (LedStatus) then
+          ActivityLEDOn
+        else
+          ActivityLEDOff;
+
+        LedStatus := not LedStatus;
+
+        CPUUtilisation(cpuwindow, 0);
+        {$ifndef RPI}
+        CPUUtilisation(cpuwindow, 1);
+        CPUUtilisation(cpuwindow, 2);
+        CPUUtilisation(cpuwindow, 3);
+        {$endif}
         Sleep(500);
       end;
 
