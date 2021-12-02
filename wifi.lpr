@@ -45,7 +45,9 @@ uses
   font,
   HTTP,
   WebStatus,
-  Serial;
+  Serial,
+  ip,
+  transport;
 
 //{$DEFINE SERIAL_LOGGING}
 
@@ -340,7 +342,40 @@ begin
 end;
 
 procedure WaitForIP;
+{$ifndef oldipdetect}
+var
+  WiredAdapter : twiredadapter;
+  IPTransport : TIPTransport;
+  IPTransportAdapter : TIPTransportAdapter;
+{$endif}
 begin
+  // locate network WiredAdapter
+  WiredAdapter := TWiredAdapter(AdapterManager.GetAdapterByDevice(PNetworkDevice(CYW43455Network), false, 0));
+
+  // locate IP transport
+  IPTransport := TIPTransport(TransportManager.GetTransportByName(IP_TRANSPORT_NAME, false, 0));
+
+  // locate IP transport WiredAdapter
+  IPTransportAdapter := TIPTransportAdapter(IPTransport.GetAdapterByNext(nil,True,False,NETWORK_LOCK_READ));
+  while IPTransportAdapter <> nil do
+  begin
+    if IPTransportAdapter.Adapter = tnetworkadapter(WiredAdapter) then
+      break;
+
+    IPTransportAdapter := TIPTransportAdapter(IPTransport.GetAdapterByNext(IPTransportAdapter,True,False,NETWORK_LOCK_READ));
+  end;
+
+  // wait for IP address to update
+  IPAddress := '0.0.0.0';
+  while IPAddress = '0.0.0.0' do
+  begin
+    sleep(200);
+    IPAddress := InAddrToString(InAddrToNetwork(IPTransportAdapter.Address));
+  end;
+
+  ConsoleWindowWriteln(topwindow, 'IP Address=' + IPAddress);
+
+{$ifdef oldipdetect}
   Winsock2TCPClient:=TWinsock2TCPClient.Create;
 
   while (true) do
@@ -355,6 +390,7 @@ begin
       break;
     end;
   end;
+{$endif}
 end;
 
 procedure DumpIP;
