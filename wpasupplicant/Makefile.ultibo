@@ -1,0 +1,82 @@
+#
+# Makefile
+#
+
+ULTIBOHOME = .
+
+OBJS	= \
+	  wpa_supplicant/blacklist.o \
+	  wpa_supplicant/bss.o \
+	  wpa_supplicant/config.o \
+	  wpa_supplicant/events.o \
+	  wpa_supplicant/eap_register.o \
+	  wpa_supplicant/op_classes.o \
+	  wpa_supplicant/notify.o \
+	  wpa_supplicant/scan.o \
+	  wpa_supplicant/wpa_supplicant.o \
+	  wpa_supplicant/wpas_glue.o \
+	  wpa_supplicant/main_ultibo.o \
+	  wpa_supplicant/wmm_ac.o \
+	  wpa_supplicant/rrm.o \
+	  wpa_supplicant/config_file_ultibo.o
+	  
+OBJS2	= \
+	  src/common/wpa_common.o \
+	  src/common/ieee802_11_common.o \
+	  src/common/hw_features_common.o \
+	  src/crypto/aes-internal-dec.o \
+	  src/crypto/aes-internal.o \
+	  src/crypto/aes-unwrap.o \
+	  src/crypto/md5-internal.o \
+	  src/crypto/md5.o \
+	  src/crypto/rc4.o \
+	  src/crypto/random.o \
+	  src/crypto/crypto_internal.o \
+	  src/crypto/sha1-internal.o \
+	  src/crypto/sha1-pbkdf2.o \
+	  src/crypto/sha1-prf.o \
+	  src/crypto/sha1.o \
+	  src/crypto/tls_none.o \
+	  src/drivers/drivers.o \
+	  src/drivers/driver_common.o \
+	  src/drivers/driver_ultibo.o \
+	  src/eapol_supp/eapol_supp_sm.o \
+	  src/eap_common/eap_common.o \
+	  src/eap_peer/eap.o \
+	  src/eap_peer/eap_methods.o \
+	  src/l2_packet/l2_packet_ultibo.o \
+	  src/rsn_supp/pmksa_cache.o \
+	  src/rsn_supp/preauth.o \
+	  src/rsn_supp/wpa.o \
+	  src/rsn_supp/wpa_ie.o \
+	  src/utils/bitfield.o \
+	  src/utils/base64.o \
+	  src/utils/common.o \
+	  src/utils/eloop_ultibo.o \
+	  src/utils/os_ultibo.o \
+	  src/utils/wpa_debug.o \
+	  src/utils/wpabuf.o
+
+
+OBJS	+= $(OBJS2)
+
+INCLUDE += \
+	  -I src \
+	  -I src/common \
+	  -I src/crypto \
+	  -I src/rsn_supp \
+	  -I src/utils
+
+DEFINE	+= -DCONFIG_DRIVER_ULTIBO -DIEEE8021X_EAPOL
+
+EXTRACLEAN += $(OBJS2) $(OBJS2:.o=.d)
+
+libwpa_supplicant.a: $(OBJS)
+	@echo "  AR    $(OBJS)"
+	@echo "  AR    $@"
+	@rm -f $@
+	@$(AR) cr $@ $(OBJS)
+
+include $(ULTIBOHOME)/Rules.mk
+
+-include $(DEPS)

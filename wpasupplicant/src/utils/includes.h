@@ -16,6 +16,11 @@
 /* Include possible build time configuration before including anything else */
 #include "build_config.h"
 
+#ifdef __ultibo__
+#include "os_ultibo.h"
+#else
+
+
 #include <stdlib.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -41,5 +46,7 @@
 #include <sys/time.h>
 #endif /* __vxworks */
 #endif /* CONFIG_NATIVE_WINDOWS */
+
+#endif /* ultibo */
 
 #endif /* INCLUDES_H */

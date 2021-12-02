@@ -12,7 +12,7 @@
 struct hostapd_ip_addr {
 	int af; /* AF_INET / AF_INET6 */
 	union {
-		struct in_addr v4;
+		uint32_t v4;
 #ifdef CONFIG_IPV6
 		struct in6_addr v6;
 #endif /* CONFIG_IPV6 */

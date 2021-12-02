@@ -5732,6 +5732,9 @@ extern const struct wpa_driver_ops *const wpa_drivers[];
 
 /* Available drivers */
 
+#ifdef CONFIG_DRIVER_ULTIBO
+extern const struct wpa_driver_ops wpa_driver_ultibo_ops; /* driver_ultibo.c */
+#endif /* CONFIG_DRIVER_ULTIBO */
 #ifdef CONFIG_DRIVER_WEXT
 extern const struct wpa_driver_ops wpa_driver_wext_ops; /* driver_wext.c */
 #endif /* CONFIG_DRIVER_WEXT */

@@ -16,6 +16,7 @@
 #include "bss.h"
 #include "scan.h"
 #include "p2p_supplicant.h"
+#include "errno.h"
 
 
 static void wpas_rrm_neighbor_rep_timeout_handler(void *data, void *user_ctx)

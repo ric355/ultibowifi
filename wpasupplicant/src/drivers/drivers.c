@@ -10,9 +10,11 @@
 #include "utils/common.h"
 #include "driver.h"
 
-
 const struct wpa_driver_ops *const wpa_drivers[] =
 {
+#ifdef CONFIG_DRIVER_ULTIBO
+	&wpa_driver_ultibo_ops,
+#endif
 #ifdef CONFIG_DRIVER_NL80211
 	&wpa_driver_nl80211_ops,
 #endif /* CONFIG_DRIVER_NL80211 */

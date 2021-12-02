@@ -23,6 +23,7 @@
 #include "bss.h"
 #include "scan.h"
 #include "mesh.h"
+#include "errno.h"
 
 
 static void wpa_supplicant_gen_assoc_event(struct wpa_supplicant *wpa_s)
