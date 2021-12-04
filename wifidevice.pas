@@ -5899,9 +5899,15 @@ begin
  if Result <> WIFI_STATUS_SUCCESS then
    exit;
 
+ {$ifdef txglom}
+ WIFILogInfo(nil, 'Enabling support for receiving glom packets');
+ // this is NOT an error. txglom = receive, because the context is access point.
+ Result := WirelessSetInt(WIFI, 'bus:txglom', 1);
+// if Result <> WIFI_STATUS_SUCCESS then
+//  exit;
+ {$else}
  Result := WirelessSetInt(WIFI, 'bus:txglom', 0);
- if Result <> WIFI_STATUS_SUCCESS then
-  exit;
+ {$endif}
 
  Result := WirelessSetInt(WIFI, 'bus:rxglom', 0);
  // Linux driver says this is allowed to fail
