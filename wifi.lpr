@@ -442,7 +442,6 @@ begin
   SerialLoggingDeviceAdd(SerialDeviceGetDefault);
   LoggingDeviceSetDefault(LoggingDeviceFindByType(LOGGING_TYPE_SERIAL));
   {$ELSE}
-  CONSOLE_LOGGING_POSITION := CONSOLE_POSITION_BOTTOM;
   LoggingConsoleDeviceAdd(ConsoleDeviceGetDefault);
   LoggingDeviceSetDefault(LoggingDeviceFindByType(LOGGING_TYPE_CONSOLE));
   {$ENDIF}
