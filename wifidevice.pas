@@ -5908,7 +5908,7 @@ begin
  if Result <> WIFI_STATUS_SUCCESS then
    exit;
 
- {$ifdef txglom}
+ {$ifndef notxglom}
  WIFILogInfo(nil, 'Enabling support for receiving glom packets');
  // this is NOT an error. txglom = receive, because the context is access point.
  Result := WirelessSetInt(WIFI, 'bus:txglom', 1);

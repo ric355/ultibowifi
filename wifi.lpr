@@ -598,11 +598,14 @@ begin
         CPUUtilisation(CPUWindow, 2);
         CPUUtilisation(CPUWindow, 3);
         {$endif}
+
+        {$ifndef notxglom}
         if (WIFIDeviceP <> nil) then
         begin
           ConsoleWindowWriteEx(CPUWindow, 'Received Glom Descriptors ' + inttostr(WIFIDeviceP^.ReceiveGlomPacketCount) + '    ', 1, 8, COLOR_BLACK, COLOR_WHITE);
           ConsoleWindowWriteEx(CPUWindow, 'Received Glom Bytes ' + inttostr(WIFIDeviceP^.ReceiveGlomPacketSize) + '    ', 1, 9, COLOR_BLACK, COLOR_WHITE);
         end;
+        {$endif}
 
         Sleep(500);
       end;
