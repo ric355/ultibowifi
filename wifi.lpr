@@ -356,13 +356,13 @@ begin
   IPTransport := TIPTransport(TransportManager.GetTransportByName(IP_TRANSPORT_NAME, false, 0));
 
   // locate IP transport WiredAdapter
-  IPTransportAdapter := TIPTransportAdapter(IPTransport.GetAdapterByNext(nil,True,False,NETWORK_LOCK_READ));
+  IPTransportAdapter := TIPTransportAdapter(IPTransport.GetAdapterByNext(nil,False,False,NETWORK_LOCK_READ));
   while IPTransportAdapter <> nil do
   begin
     if IPTransportAdapter.Adapter = tnetworkadapter(WiredAdapter) then
       break;
 
-    IPTransportAdapter := TIPTransportAdapter(IPTransport.GetAdapterByNext(IPTransportAdapter,True,False,NETWORK_LOCK_READ));
+    IPTransportAdapter := TIPTransportAdapter(IPTransport.GetAdapterByNext(IPTransportAdapter,False,False,NETWORK_LOCK_READ));
   end;
 
   // wait for IP address to update
