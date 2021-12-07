@@ -89,6 +89,27 @@ At the time of writing this is Ultibo Core  2.1.079.
 The application will compile in Ultibo Lazarus if you open the wifi project and have
 met the necessary Core version requirements.
 
+Compiling with support for the supplicant
+-----------------------------------------
+By default, supplicant support is not included unless you define the compiler directive
+'supplicant'. In order to build with the supplicant the repo contains pre-built
+supplicant libraries for each of the target processors. There is a condtional define
+at the top of the wifidevice.pas file that deals with this.
+
+If for any reason you want to actually build the supplicant library from source,
+there are makefiles in the wpasupplicant subdirectory of the repo. Building the supplicant
+requires issuing one or more of the following commands, depending upon which
+device you are targeting. For a PiZero2W, use the Pi3 target:
+'''
+make -f Makefile.Ultibo libwpa_supplicant_pizero.a
+make -f Makefile.Ultibo libwpa_supplicant_pi3.a
+make -f Makefile.Ultibo libwpa_supplicant_pi4.a
+'''
+Use Pi4 for a Pi400 as well.
+The resultant libraries are placed in the relevant device related subfolder ready for
+compiling into an application via the wifidevice unit. You won't need to copy them
+to any other location.
+
 Using the Device Driver in your applications
 --------------------------------------------
 
