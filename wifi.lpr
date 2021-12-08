@@ -349,6 +349,7 @@ var
   IPTransportAdapter : TIPTransportAdapter;
 {$endif}
 begin
+  {$ifndef oldipdetect}
   // locate network WiredAdapter
   WiredAdapter := TWiredAdapter(AdapterManager.GetAdapterByDevice(PNetworkDevice(CYW43455Network), false, 0));
 
@@ -370,12 +371,16 @@ begin
   while IPAddress = '0.0.0.0' do
   begin
     sleep(200);
-    IPAddress := InAddrToString(InAddrToNetwork(IPTransportAdapter.Address));
+    try
+      IPAddress := InAddrToString(InAddrToNetwork(IPTransportAdapter.Address));
+    except
+      // The InAddrToNetwork call here^^^ sometimes crashes. Maybe the RTL
+      // is changing the objects after we've looked them up.
+      IPAddress := '0.0.0.0';
+    end;
   end;
+ {$else}
 
-  ConsoleWindowWriteln(TopWindow, 'IP Address=' + IPAddress);
-
-{$ifdef oldipdetect}
   Winsock2TCPClient:=TWinsock2TCPClient.Create;
 
   while (true) do
@@ -385,12 +390,14 @@ begin
        and (length(Winsock2TCPClient.LocalAddress) > 0)
        and (Winsock2TCPClient.LocalAddress <> ' ') then
     begin
-      ConsoleWindowWriteLn(topwindow, 'IP address='+Winsock2TCPClient.LocalAddress);
       IPAddress := Winsock2TCPClient.LocalAddress;
       break;
     end;
   end;
+
 {$endif}
+
+  ConsoleWindowWriteln(TopWindow, 'IP Address=' + IPAddress);
 end;
 
 procedure DumpIP;
