@@ -45,7 +45,9 @@ uses
   font,
   HTTP,
   WebStatus,
-  Serial;
+  Serial,
+  ip,
+  transport;
 
 //{$DEFINE SERIAL_LOGGING}
 
@@ -314,7 +316,7 @@ var
   SSID : string;
   key : string;
   Country : string;
-  topwindow : THandle;
+  TopWindow : THandle;
   Winsock2TCPClient : TWinsock2TCPClient;
   IPAddress : string;
   i : integer;
@@ -340,7 +342,45 @@ begin
 end;
 
 procedure WaitForIP;
+{$ifndef oldipdetect}
+var
+  WiredAdapter : twiredadapter;
+  IPTransport : TIPTransport;
+  IPTransportAdapter : TIPTransportAdapter;
+{$endif}
 begin
+  {$ifndef oldipdetect}
+  // locate network WiredAdapter
+  WiredAdapter := TWiredAdapter(AdapterManager.GetAdapterByDevice(PNetworkDevice(CYW43455Network), false, 0));
+
+  // locate IP transport
+  IPTransport := TIPTransport(TransportManager.GetTransportByName(IP_TRANSPORT_NAME, false, 0));
+
+  // locate IP transport WiredAdapter
+  IPTransportAdapter := TIPTransportAdapter(IPTransport.GetAdapterByNext(nil,False,False,NETWORK_LOCK_READ));
+  while IPTransportAdapter <> nil do
+  begin
+    if IPTransportAdapter.Adapter = tnetworkadapter(WiredAdapter) then
+      break;
+
+    IPTransportAdapter := TIPTransportAdapter(IPTransport.GetAdapterByNext(IPTransportAdapter,False,False,NETWORK_LOCK_READ));
+  end;
+
+  // wait for IP address to update
+  IPAddress := '0.0.0.0';
+  while IPAddress = '0.0.0.0' do
+  begin
+    sleep(200);
+    try
+      IPAddress := InAddrToString(InAddrToNetwork(IPTransportAdapter.Address));
+    except
+      // The InAddrToNetwork call here^^^ sometimes crashes. Maybe the RTL
+      // is changing the objects after we've looked them up.
+      IPAddress := '0.0.0.0';
+    end;
+  end;
+ {$else}
+
   Winsock2TCPClient:=TWinsock2TCPClient.Create;
 
   while (true) do
@@ -350,11 +390,14 @@ begin
        and (length(Winsock2TCPClient.LocalAddress) > 0)
        and (Winsock2TCPClient.LocalAddress <> ' ') then
     begin
-      ConsoleWindowWriteLn(topwindow, 'IP address='+Winsock2TCPClient.LocalAddress);
       IPAddress := Winsock2TCPClient.LocalAddress;
       break;
     end;
   end;
+
+{$endif}
+
+  ConsoleWindowWriteln(TopWindow, 'IP Address=' + IPAddress);
 end;
 
 procedure DumpIP;
@@ -375,16 +418,30 @@ begin
           s := s + ' ';
       end;
     end;
-    consolewindowwriteln(topwindow, s);
+    consolewindowwriteln(TopWindow, s);
   end;
+end;
+
+procedure CPUUtilisation(window : TWindowHandle; core : integer);
+var
+  cpupercent : double;
+begin
+  cpupercent := CPUGetPercentage(core);
+  ConsoleWindowWriteEx(window, 'CPU' + inttostr(core) + ' '  + floattostr(cpupercent) + '%      ', 1, 3+core, COLOR_BLACK, COLOR_WHITE);
 end;
 
 var
   BSSID : ether_addr;
+  LedStatus : boolean;
+  CPUWindow : TWindowHandle;
+  WIFIDeviceP : PWIFIDevice;
+
 
 begin
   ConsoleFramebufferDeviceAdd(FramebufferDeviceGetDefault);
-  topwindow := ConsoleWindowCreate(ConsoleDeviceGetDefault, CONSOLE_POSITION_TOP,TRUE);
+  CONSOLE_LOGGING_POSITION := CONSOLE_POSITION_RIGHT;
+  TopWindow := ConsoleWindowCreate(ConsoleDeviceGetDefault, CONSOLE_POSITION_LEFT,TRUE);
+  CPUWindow := ConsoleWindowCreate(ConsoleDeviceGetDefault, CONSOLE_POSITION_BOTTOMLEFT, FALSE);
 
   LOGGING_INCLUDE_TICKCOUNT := True;
   {$IFDEF SERIAL_LOGGING}
@@ -392,7 +449,6 @@ begin
   SerialLoggingDeviceAdd(SerialDeviceGetDefault);
   LoggingDeviceSetDefault(LoggingDeviceFindByType(LOGGING_TYPE_SERIAL));
   {$ELSE}
-  CONSOLE_LOGGING_POSITION := CONSOLE_POSITION_BOTTOM;
   LoggingConsoleDeviceAdd(ConsoleDeviceGetDefault);
   LoggingDeviceSetDefault(LoggingDeviceFindByType(LOGGING_TYPE_CONSOLE));
   {$ENDIF}
@@ -418,12 +474,17 @@ begin
   // is if you use USB boot. So that's a pre-requisite at the moment until we make the
   // SD card work off the other SDHost controller.
 
-  ConsoleWindowWriteln(topwindow, 'Waiting for file system...');
+  ConsoleWindowWriteln(TopWindow, 'Waiting for file system...');
+
   while not directoryexists('c:\') do
   begin
     Sleep(0);
   end;
-  ConsoleWindowWriteln(topwindow, 'File system ready. Initialize Wifi Device.');
+  ConsoleWindowWriteln(TopWindow, 'File system ready. Initialize Wifi Device.');
+
+  // check firmware folder is present on the card.
+  if (not (DirectoryExists('c:\firmware'))) then
+    ConsoleWindowWriteln(TopWindow, 'You must copy the WIFI firmware to a folder called c:\firmware.');
 
   try
     // WIFIInit has to be done from the main application because the initialisation
@@ -444,7 +505,7 @@ begin
     // whole network device integration stuff is complete.
     // Certainly can't stay the way it is.
 
-    ConsoleWindowWriteln(topwindow, 'Waiting for Wifi Device to be opened.');
+    ConsoleWindowWriteln(TopWindow, 'Waiting for Wifi Device to be opened.');
     
     // spin until the wifi device is actually ready to do stuff.
     repeat
@@ -458,21 +519,22 @@ begin
       Sleep(0);
     end;
 
+    WIFIDeviceP := WIFIDeviceFind(0);
 
     if (SysUtils.GetEnvironmentVariable('WIFISCAN') = '1') then
     begin
-      ConsoleWindowWriteln(topwindow, 'Performing a WIFI network scan...');
+      ConsoleWindowWriteln(TopWindow, 'Performing a WIFI network scan...');
       ScanResultList := TStringList.Create;
 
       WirelessScan(@WIFIScanCallback);
 
       for i := 0 to ScanResultList.Count-1 do
-        ConsoleWindowWriteln(topwindow, 'Found access point: ' + ScanResultList[i]);
+        ConsoleWindowWriteln(TopWindow, 'Found access point: ' + ScanResultList[i]);
 
       ScanResultList.Free;
     end
     else
-      ConsoleWindowWriteln(topwindow, 'Network scan not enabled in cmdline.txt (add the WIFISCAN=1 entry)');
+      ConsoleWindowWriteln(TopWindow, 'Network scan not enabled in cmdline.txt (add the WIFISCAN=1 entry)');
 
     SSID := SysUtils.GetEnvironmentVariable('SSID');
     key := SysUtils.GetEnvironmentVariable('KEY');
@@ -482,15 +544,15 @@ begin
     ConsoleWindowWriteln(topwindow, 'Attempting to join WIFI network ' + SSID + ' (Country='+Country+')');
 
     if (Key = '') then
-      ConsoleWindowWriteln(topwindow, 'Warning: Key not specified - expecting the network to be unencrypted.');
+      ConsoleWindowWriteln(TopWindow, 'Warning: Key not specified - expecting the network to be unencrypted.');
 
     if (SSID = '') or (Country='') then
-       ConsoleWindowWriteln(topwindow, 'Cant join a network without SSID, Key, and Country Code.')
+       ConsoleWindowWriteln(TopWindow, 'Cant join a network without SSID, Key, and Country Code.')
     else
     begin
       if (BSSIDStr <> '') then
       begin
-        ConsoleWindowWriteln(topwindow, 'Using BSSID configuration ' + BSSIDStr + ' from cmdline.txt');
+        ConsoleWindowWriteln(TopWindow, 'Using BSSID configuration ' + BSSIDStr + ' from cmdline.txt');
         bssid.octet[0] := hex2dec(copy(BSSIDStr, 1, 2));
         bssid.octet[1] := hex2dec(copy(BSSIDStr, 4, 2));
         bssid.octet[2] := hex2dec(copy(BSSIDStr, 7, 2));
@@ -499,7 +561,7 @@ begin
         bssid.octet[5] := hex2dec(copy(BSSIDStr, 16, 2));
       end
       else
-        ConsoleWindowWriteln(topwindow, 'Letting the Cypress firmware determine the best network interface from the SSID');
+        ConsoleWindowWriteln(TopWindow, 'Letting the Cypress firmware determine the best network interface from the SSID');
 
       status := WirelessJoinNetwork(SSID, Key, Country, WIFIJoinBlocking, WIFIReconnectAlways, BSSID, (BSSIDStr <> ''));
       IPAddress := '0.0.0.0';
@@ -522,14 +584,36 @@ begin
         DumpIP;
       end;
 
+      ConsoleWindowWriteln(CPUWindow, 'CPU Utilisation');
+
       // Setup a slow blink of the activity LED to give an indcation that the Pi is still alive
       ActivityLEDEnable;
 
-      while True do
+      LedStatus := true;
+      while true do
       begin
-        ActivityLEDOn;
-        Sleep(500);
-        ActivityLEDOff;
+        if (LedStatus) then
+          ActivityLEDOn
+        else
+          ActivityLEDOff;
+
+        LedStatus := not LedStatus;
+
+        CPUUtilisation(CPUWindow, 0);
+        {$ifndef RPI}
+        CPUUtilisation(CPUWindow, 1);
+        CPUUtilisation(CPUWindow, 2);
+        CPUUtilisation(CPUWindow, 3);
+        {$endif}
+
+        {$ifndef notxglom}
+        if (WIFIDeviceP <> nil) then
+        begin
+          ConsoleWindowWriteEx(CPUWindow, 'Received Glom Descriptors ' + inttostr(WIFIDeviceP^.ReceiveGlomPacketCount) + '    ', 1, 8, COLOR_BLACK, COLOR_WHITE);
+          ConsoleWindowWriteEx(CPUWindow, 'Received Glom Bytes ' + inttostr(WIFIDeviceP^.ReceiveGlomPacketSize) + '    ', 1, 9, COLOR_BLACK, COLOR_WHITE);
+        end;
+        {$endif}
+
         Sleep(500);
       end;
 
@@ -537,7 +621,7 @@ begin
 
   except
     on e : exception do
-      ConsoleWindowWriteln(topwindow, 'Exception: ' + e.message + ' at ' + inttohex(longword(exceptaddr), 8));
+      ConsoleWindowWriteln(TopWindow, 'Exception: ' + e.message + ' at ' + inttohex(longword(exceptaddr), 8));
   end;
 
 end.

@@ -1048,6 +1048,10 @@ type
    dllctl : longword;
    resetvec : longword;
 
+   {additional statistics}
+   ReceiveGlomPacketCount:LongWord;              {number of Glom packets received}
+   ReceiveGlomPacketSize:LongWord;               {total bytes received via Glom packets}
+
    {Internal Properties}
    Prev:PWIFIDevice;                                 {Previous entry in WIFI table}
    Next:PWIFIDevice;                                 {Next entry in WIFI table}
@@ -1584,7 +1588,7 @@ begin
 
  except
    on e : exception do
-     WIFILogInfo(nil, 'exception in buftostr ' + e.message + ' i='+inttostr(i));
+     WIFILogError(nil, 'exception in buftostr ' + e.message + ' i='+inttostr(i));
  end;
 end;
 
@@ -1938,6 +1942,8 @@ begin
    Result:=nil;
    Exit;
   end;
+
+  WIFIDeviceRegister(Result);
 end;
 
 function WIFIDeviceDestroy(WIFI:PWIFIDevice):LongWord;
@@ -2055,6 +2061,9 @@ begin
    WIFILogError(nil,'There was no SDHCI Device to initialise the WIFI device with');
    exit;
  end;
+
+ WIFI^.ReceiveGlomPacketCount:=0;
+ WIFI^.ReceiveGlomPacketSize:=0;
 
  WIFI^.Device.DeviceBus:=DEVICE_BUS_SD;
  WIFI^.Device.DeviceType:=WIFI_TYPE_SDIO;
@@ -5899,9 +5908,15 @@ begin
  if Result <> WIFI_STATUS_SUCCESS then
    exit;
 
+ {$ifndef notxglom}
+ WIFILogInfo(nil, 'Enabling support for receiving glom packets');
+ // this is NOT an error. txglom = receive, because the context is access point.
+ Result := WirelessSetInt(WIFI, 'bus:txglom', 1);
+// if Result <> WIFI_STATUS_SUCCESS then
+//  exit;
+ {$else}
  Result := WirelessSetInt(WIFI, 'bus:txglom', 0);
- if Result <> WIFI_STATUS_SUCCESS then
-  exit;
+ {$endif}
 
  Result := WirelessSetInt(WIFI, 'bus:rxglom', 0);
  // Linux driver says this is allowed to fail
@@ -6277,7 +6292,6 @@ var
   GlomDescriptor : TGlomDescriptor;
   p : integer;
   PrevResponseP : PIOCTL_MSG;
-  GlomTotal : longword;
 
 begin
   {$ifdef CYW43455_DEBUG}
@@ -6383,7 +6397,6 @@ begin
                        {This is the glom descriptor. It contains a list of packet lengths which will be in the
                         superpacket that will follow in the next SDIO read. Each length is a 2 byte quantity}
 
-                       GlomTotal := 0;
                        nGlomPackets := (responseP^.len - responseP^.cmd.sdpcmheader.hdrlen) div 2;
                        {$ifdef CYW43455_DEBUG}
                        if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Glom descriptor: ' + nGlomPackets.tostring + ' packets present');
@@ -6397,7 +6410,7 @@ begin
                         {$endif}
 
                          {update total length}
-                         GlomTotal += SubPacketLengthP^;
+                         WIFI^.ReceiveGlomPacketSize += SubPacketLengthP^;
 
                          {next entry}
                          SubPacketLengthP += 1;       {1 word, not byte}
@@ -6405,6 +6418,8 @@ begin
 
                        {store glom descriptor}
                        move(ResponseP^, GlomDescriptor, ResponseP^.Len);
+
+                       WIFI^.ReceiveGlomPacketCount += 1;
 
                        {stop looping if not enough room, so network stack can process data so far}
                        if (bytesleft < nGlomPackets * IOCTL_MAX_BLKLEN) then

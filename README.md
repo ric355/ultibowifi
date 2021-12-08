@@ -1,4 +1,4 @@
-Ultibo WIFI Device Driver for onboard Cypress WIFI chips
+Ultibo/Raspberry Pi WIFI Device Driver for onboard Cypress WIFI chips
 ----------------------------------------------------------
 
 This is an Ultibo application and device driver which enables support for the internal WIFI

@@ -27,7 +27,7 @@ initialization
   
   CONSOLE_REGISTER_LOGGING := True;
   CONSOLE_LOGGING_DEFAULT := True;
-  CONSOLE_LOGGING_POSITION := CONSOLE_POSITION_BOTTOM;
+  CONSOLE_LOGGING_POSITION := CONSOLE_POSITION_RIGHT;
 
   // at the moment we don't want auto init because the USB device where the firmware
   // is loaded from is not available until after initialisation.
