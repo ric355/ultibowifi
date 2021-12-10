@@ -47,7 +47,9 @@ uses
   WebStatus,
   Serial,
   ip,
-  transport;
+  transport,
+  Iphlpapi
+  ;
 
 //{$DEFINE SERIAL_LOGGING}
 
@@ -341,61 +343,139 @@ begin
     ScanResultList.Add(ssidstr);
 end;
 
-procedure WaitForIP;
-{$ifndef oldipdetect}
+
+function GetMACAddress(const AdapterName: String): String;
+// Get the MAC address of an adapter using the IP Helper API
 var
-  WiredAdapter : twiredadapter;
-  IPTransport : TIPTransport;
-  IPTransportAdapter : TIPTransportAdapter;
-{$endif}
+  Size:LongWord;
+  Count: LongWord;
+  Name: String;
+  IfTable: PMIB_IFTABLE;
+  IfRow: PMIB_IFROW;
+  HardwareAddress: THardwareAddress;
 begin
-  {$ifndef oldipdetect}
-  // locate network WiredAdapter
+  Result := '';
+
+  // Get number of network interfaces
+  GetNumberOfInterfaces(Count);
+
+  if Count > 0 then
+  begin
+    Size := SizeOf(MIB_IFTABLE) + (Count * SizeOf(MIB_IFROW));
+    IfTable := GetMem(Size);
+    if IfTable <> nil then
+    begin
+      // Get the network interface table
+      if GetIfTable(IfTable, Size, False) = ERROR_SUCCESS then
+      begin
+        // Get first row
+        IfRow := @IfTable^.table[0];
+
+        Count := 0;
+        while Count < IfTable^.dwNumEntries do
+        begin
+          Name := IfRow^.wszName;
+
+          // Check name
+          if Uppercase(Name) = Uppercase(AdapterName) then
+          begin
+            // Check address size
+            if IfRow^.dwPhysAddrLen = SizeOf(THardwareAddress) then
+            begin
+              System.Move(IfRow^.bPhysAddr[0], HardwareAddress[0], HARDWARE_ADDRESS_SIZE);
+              Result := HardwareAddressToString(HardwareAddress);
+              Exit;
+            end;
+          end;
+
+          // Get next row
+          Inc(Count);
+          Inc(IfRow);
+        end;
+      end;
+
+      FreeMem(IfTable);
+    end;
+  end;
+end;
+
+function GetIPAddress(const AdapterName: String): String;
+// Get the IP address of an adapter using the IP Helper API
+var
+  Size: LongWord;
+  Count: Integer;
+  Address: String;
+  MACAddress: String;
+  IpNetTable: PMIB_IPNETTABLE;
+  IpNetRow: PMIB_IPNETROW;
+  IPAddress: TInAddr;
+  HardwareAddress: THardwareAddress;
+begin
+  Result := '';
+
+  // Get the MAC address
+  MACAddress := GetMacAddress(AdapterName);
+  if Length(MACAddress) = 0 then
+    Exit;
+
+  // Get the ip net table (ARP table)
+  // First get the size
+  Size := 0;
+  IpNetTable := nil;
+  if (GetIpNetTable(nil, Size, False) = ERROR_INSUFFICIENT_BUFFER) and (Size > 0) then // First call with zero size
+  begin
+    IpNetTable := GetMem(Size);
+  end;
+  if IpNetTable <> nil then
+  begin
+    // Now get the table
+    if GetIpNetTable(IpNetTable, Size, False) = ERROR_SUCCESS then
+    begin
+      // Get first row
+      IpNetRow := @IpNetTable^.table[0];
+
+      Count := 0;
+      while Count < IpNetTable^.dwNumEntries do
+      begin
+        // Check address size
+        if IpNetRow^.dwPhysAddrLen = SizeOf(THardwareAddress) then
+        begin
+          // Get the address
+          System.Move(IpNetRow^.bPhysAddr[0], HardwareAddress[0], HARDWARE_ADDRESS_SIZE);
+          Address := HardwareAddressToString(HardwareAddress);
+
+          // Check the address
+          if Uppercase(Address) = Uppercase(MACAddress) then
+          begin
+            IPAddress.S_addr := IpNetRow^.dwAddr;
+            Result := InAddrToString(IPAddress);
+          end;
+        end;
+
+        // Get next row
+        Inc(Count);
+        Inc(IpNetRow);
+      end;
+    end;
+
+    FreeMem(IpNetTable);
+  end;
+end;
+
+
+procedure WaitForIP;
+var
+  WiredAdapter : TWiredAdapter;
+begin
+  // locate network WiredAdapter (the wireless interface is still supported by a wiredadapter object at present)
   WiredAdapter := TWiredAdapter(AdapterManager.GetAdapterByDevice(PNetworkDevice(CYW43455Network), false, 0));
 
-  // locate IP transport
-  IPTransport := TIPTransport(TransportManager.GetTransportByName(IP_TRANSPORT_NAME, false, 0));
-
-  // locate IP transport WiredAdapter
-  IPTransportAdapter := TIPTransportAdapter(IPTransport.GetAdapterByNext(nil,False,False,NETWORK_LOCK_READ));
-  while IPTransportAdapter <> nil do
-  begin
-    if IPTransportAdapter.Adapter = tnetworkadapter(WiredAdapter) then
-      break;
-
-    IPTransportAdapter := TIPTransportAdapter(IPTransport.GetAdapterByNext(IPTransportAdapter,False,False,NETWORK_LOCK_READ));
-  end;
-
-  // wait for IP address to update
-  IPAddress := '0.0.0.0';
-  while IPAddress = '0.0.0.0' do
+  IPAddress := GetIPAddress(WiredAdapter.Name);
+  while (IPAddress = '') or (IPAddress = '0.0.0.0') do
   begin
     sleep(200);
-    try
-      IPAddress := InAddrToString(InAddrToNetwork(IPTransportAdapter.Address));
-    except
-      // The InAddrToNetwork call here^^^ sometimes crashes. Maybe the RTL
-      // is changing the objects after we've looked them up.
-      IPAddress := '0.0.0.0';
-    end;
+    IPAddress := GetIPAddress(WiredAdapter.Name);
   end;
- {$else}
-
-  Winsock2TCPClient:=TWinsock2TCPClient.Create;
-
-  while (true) do
-  begin
-    sleep(200);
-    if (Winsock2TCPClient.LocalAddress <> IPAddress)
-       and (length(Winsock2TCPClient.LocalAddress) > 0)
-       and (Winsock2TCPClient.LocalAddress <> ' ') then
-    begin
-      IPAddress := Winsock2TCPClient.LocalAddress;
-      break;
-    end;
-  end;
-
-{$endif}
 
   ConsoleWindowWriteln(TopWindow, 'IP Address=' + IPAddress);
 end;
