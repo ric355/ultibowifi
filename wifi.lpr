@@ -46,6 +46,9 @@ uses
   HTTP,
   WebStatus,
   Serial,
+{$ifdef supplicant}
+  syscalls,
+{$endif}
   ip,
   transport,
   Iphlpapi
@@ -327,6 +330,9 @@ var
   Status : Longword;
   CYW43455Network: PCYW43455Network;
   BSSIDStr : string;
+  StdoutToLogging : boolean = false;
+  LoggingLine : string = '';
+
 
 procedure WIFIScanCallback(ssid : string; ScanResultP : pwl_escan_result);
 var
@@ -462,7 +468,6 @@ begin
   end;
 end;
 
-
 procedure WaitForIP;
 var
   WiredAdapter : TWiredAdapter;
@@ -510,6 +515,32 @@ begin
   ConsoleWindowWriteEx(window, 'CPU' + inttostr(core) + ' '  + floattostr(cpupercent) + '%      ', 1, 3+core, COLOR_BLACK, COLOR_WHITE);
 end;
 
+
+function MySysTextIOWriteChar(ACh:Char;AUserData:Pointer):Boolean;
+begin
+  // this lets us get the supplicant output, which is written to stdout, into
+  // the standard logging system and thus into a file or serial if enabled.
+
+  // we don't write the logging to the console and the logging device because
+  // doing both slows everything down too much and the router's responses are
+  // missed and we fail to get logged in.
+  if (StdOutToLogging) then
+   begin
+    if ach = #10 then
+    begin
+     loggingoutputex(0, 0, 'stdio', loggingline);
+     loggingline := '';
+    end
+    else
+    if ach <> #13 then
+     loggingline := loggingline + ach;
+     Result := true;
+   end
+   else
+     Result := Console.SysTextIOWriteChar(ACh, auserdata);
+end;
+
+
 var
   BSSID : ether_addr;
   LedStatus : boolean;
@@ -529,9 +560,28 @@ begin
   SerialLoggingDeviceAdd(SerialDeviceGetDefault);
   LoggingDeviceSetDefault(LoggingDeviceFindByType(LOGGING_TYPE_SERIAL));
   {$ELSE}
-  LoggingConsoleDeviceAdd(ConsoleDeviceGetDefault);
-  LoggingDeviceSetDefault(LoggingDeviceFindByType(LOGGING_TYPE_CONSOLE));
+  StdoutToLogging := true;
+  if (SysUtils.GetEnvironmentVariable('FILESYS_LOGGING_FILE') <> '') then
+  begin
+    StdOutToLogging := true;
+    LoggingDeviceSetDefault(LoggingDeviceFindByType(LOGGING_TYPE_FILE));
+  end
+  else
+  begin
+    CONSOLE_LOGGING_POSITION := CONSOLE_POSITION_RIGHT;
+    LoggingConsoleDeviceAdd(ConsoleDeviceGetDefault);
+    LoggingDeviceSetDefault(LoggingDeviceFindByType(LOGGING_TYPE_CONSOLE));
+  end;
   {$ENDIF}
+
+  {$ifdef supplicant}
+  // intercept stdio for logging purposes.
+  // supplicant writes to stdio for info and debug etc.
+  ConsoleWindowRedirectOutput(TopWindow);
+
+  TextIOWriteCharHandler:=@MySysTextIOWriteChar;
+  {$endif}
+
 
   // Filter the logs so we only see the WiFi and MMC device events
   // (Primarily development use, otherwise you don't see network events etc)
@@ -601,6 +651,7 @@ begin
 
     WIFIDeviceP := WIFIDeviceFind(0);
 
+    {$ifndef supplicant}
     if (SysUtils.GetEnvironmentVariable('WIFISCAN') = '1') then
     begin
       ConsoleWindowWriteln(TopWindow, 'Performing a WIFI network scan...');
@@ -615,21 +666,27 @@ begin
     end
     else
       ConsoleWindowWriteln(TopWindow, 'Network scan not enabled in cmdline.txt (add the WIFISCAN=1 entry)');
+    {$endif}
 
     SSID := SysUtils.GetEnvironmentVariable('SSID');
     key := SysUtils.GetEnvironmentVariable('KEY');
     Country := SysUtils.GetEnvironmentVariable('COUNTRY');
     BSSIDStr := SysUtils.GetEnvironmentVariable('BSSID');
 
+    {$ifdef supplicant}
+    ConsoleWindowWriteln(TopWindow, 'Attempting to join WIFI network using configuration in c:\wpa_supplicant.conf');
+    {$else}
     ConsoleWindowWriteln(topwindow, 'Attempting to join WIFI network ' + SSID + ' (Country='+Country+')');
 
     if (Key = '') then
       ConsoleWindowWriteln(TopWindow, 'Warning: Key not specified - expecting the network to be unencrypted.');
+    {$endif}
 
     if (SSID = '') or (Country='') then
        ConsoleWindowWriteln(TopWindow, 'Cant join a network without SSID, Key, and Country Code.')
     else
     begin
+      {$ifndef supplicant}
       if (BSSIDStr <> '') then
       begin
         ConsoleWindowWriteln(TopWindow, 'Using BSSID configuration ' + BSSIDStr + ' from cmdline.txt');
@@ -643,8 +700,9 @@ begin
       else
         ConsoleWindowWriteln(TopWindow, 'Letting the Cypress firmware determine the best network interface from the SSID');
 
-      status := WirelessJoinNetwork(SSID, Key, Country, WIFIJoinBlocking, WIFIReconnectAlways, BSSID, (BSSIDStr <> ''));
       IPAddress := '0.0.0.0';
+      status := WirelessJoinNetwork(SSID, Key, Country, WIFIJoinBlocking, WIFIReconnectAlways, BSSID, (BSSIDStr <> ''));
+
       if (status = WIFI_STATUS_SUCCESS) then
       begin
 
@@ -663,6 +721,13 @@ begin
 
         DumpIP;
       end;
+      {$else}
+      WirelessJoinNetWork(WIFIJoinBlocking);
+      ConsoleWindowWriteln(TopWindow, 'Waiting for an IP address...');
+
+      WaitForIP;
+      DumpIP;
+      {$endif}
 
       ConsoleWindowWriteln(CPUWindow, 'CPU Utilisation');
 
@@ -696,7 +761,6 @@ begin
 
         Sleep(500);
       end;
-
     end;
 
   except

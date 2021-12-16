@@ -3,6 +3,8 @@
 #include "common.h"
 #include "wpa_supplicant_i.h"
 
+extern int WPASupplicantLogLevel;
+
 
 int wpa_supplicant_main (const char *confname)
 {
@@ -12,8 +14,8 @@ int wpa_supplicant_main (const char *confname)
 	struct wpa_global *global;
 
 	memset(&params, 0, sizeof(params));
-	params.wpa_debug_level = MSG_INFO;
-	wpa_debug_level = MSG_INFO;
+	params.wpa_debug_level = WPASupplicantLogLevel;
+	wpa_debug_level = WPASupplicantLogLevel;
 
     wpa_printf(MSG_INFO, "Ultibodriver: wpa_supplicant_main started");
 	global = wpa_supplicant_init(&params);

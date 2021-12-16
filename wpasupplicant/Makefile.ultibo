@@ -107,14 +107,6 @@ pizero/%.o: %.c
 	@echo "output directory " $(KERNEL)/$(notdir $@) $<
 	@$(CC) $(CFLAGS) -std=gnu99 -c -o $(KERNEL)/$(notdir $@) $<
 
-#pi2
-
-pi2/%.o: %.c
-	@echo "  CC    $@"
-	@echo "flags " $(CFLAGS)
-	@echo "output directory " $(KERNEL)/$(notdir $@) $<
-	@$(CC) $(CFLAGS) -std=gnu99 -c -o $(KERNEL)/$(notdir $@) $<
-
 #pi3
 
 pi3/%.o: %.c
@@ -152,16 +144,6 @@ libwpa_supplicant_pizero.a: $(addprefix pizero/, $(notdir $(OBJS)))
 	@echo "  AR    " $(addprefix $(KERNEL)/, $(notdir $(OBJS)))
 	@rm -f pizero/libwpa_supplicant_pizero.a
 	@$(AR) cr pizero/libwpa_supplicant_pizero.a $(addprefix $(KERNEL)/, $(notdir $(OBJS)))
-
-
-libwpa_supplicant_pi2.a: ARCH	= -DAARCH=32 -mcpu=cortex-a7 -marm -mfpu=neon-vfpv4 -mfloat-abi=$(FLOAT_ABI)
-libwpa_supplicant_pi2.a: KERNEL=pi2
-libwpa_supplicant_pi2.a: $(addprefix pi2/, $(notdir $(OBJS)))
-	@echo "Building " $@
-	@echo ""
-	@echo "  AR    " $(addprefix $(KERNEL)/, $(notdir $(OBJS)))
-	@rm -f libwpa_supplicant_pi2.a
-	@$(AR) cr pi2/libwpa_supplicant_pi2.a $(addprefix $(KERNEL)/, $(notdir $(OBJS)))
 
 
 libwpa_supplicant_pi3.a: ARCH	= -DAARCH=32 -mcpu=cortex-a7 -marm -mfpu=neon-vfpv4 -mfloat-abi=$(FLOAT_ABI)
