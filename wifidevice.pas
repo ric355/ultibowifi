@@ -1440,6 +1440,10 @@ var
   // Auto init variable, move to GlobalConfig or restructure during integration
   WIFI_AUTO_INIT : Boolean = False; //True; // Don't auto init during development
 
+  // defines whether to inject waits into packet transmission when the firmware
+  // credit value indicates internal buffers are filling up.
+  CYW43455_USE_FIRMWARE_CREDIT_VALUE : Boolean = TRUE;
+
 
 implementation
 
@@ -6292,6 +6296,8 @@ var
   GlomDescriptor : TGlomDescriptor;
   p : integer;
   PrevResponseP : PIOCTL_MSG;
+  LastCredit : byte;
+  seqdiff : integer;
 
 begin
   {$ifdef CYW43455_DEBUG}
@@ -6299,6 +6305,8 @@ begin
   {$endif}
 
   ThreadSetName(ThreadGetCurrent, 'WIFI Worker Thread');
+
+  txseq := 0;
 
   try
 
@@ -6370,6 +6378,8 @@ begin
                 blockcount := 0;
                 remainder := ResponseP^.Len-SDPCM_HEADER_SIZE;
                end;
+
+               LastCredit := ResponseP^.Cmd.sdpcmheader.credit;
 
                if (ResponseP^.Len <= NetworkEntryP^.Size) and (ResponseP^.Len > 0) then
                begin
@@ -6533,6 +6543,24 @@ begin
                 else
                   txseq := 0;
 
+                // If we are beyond the sending limit then we need to wait a bit.
+                // it may be more advantageous to drop out of the loop and send the rest
+                // of the data next time, as we'd likely get a credit update from the reading
+                // code, but that is a larger change.
+                if (CYW43455_USE_FIRMWARE_CREDIT_VALUE) then
+                begin
+                  seqdiff := LastCredit - txseq;
+                  if (seqdiff < 0) then
+                    seqdiff := seqdiff + 256;
+
+                  if (seqdiff > 127) then
+                  begin
+                    // the sleep here should allow the firmware to empty its send buffers a bit.
+                    // perhaps the sleep should be a function of the difference value.
+                    sleep(30);
+                  end;
+                end;
+
                 PIOCTL_MSG(PacketP^.Buffer)^.len := PacketP^.length+sizeof(SDPCM_HEADER)+4+4;  // 4 for end of sdpcm header, 4 for length itself?
                 PIOCTL_MSG(PacketP^.Buffer)^.notlen := not PIOCTL_MSG(PacketP^.Buffer)^.len;
 
@@ -6547,14 +6575,18 @@ begin
 
                 //send data
                 if (blockcount > 0) then
-                  if (SDIOWIFIDeviceReadWriteExtended(FWIFI, sdioWrite, WLAN_FUNCTION,
-                        BAK_BASE_ADDR and $1ffff, false, PacketP^.Buffer, blockcount, 512)) <> WIFI_STATUS_SUCCESS then
-                          WIFILogError(nil, 'Failed to transmit packet data');
+                begin
+                  if SDIOWIFIDeviceReadWriteExtended(FWIFI, sdioWrite, WLAN_FUNCTION,
+                        BAK_BASE_ADDR and $1ffff, false, PacketP^.Buffer, blockcount, 512) <> WIFI_STATUS_SUCCESS then
+                          WIFILogError(nil, 'Failed to transmit packet data blocks txseq='+inttostr(txseq)+' lastcredit='+inttostr(LastCredit));
+                end;
 
                 if (remainder > 0) then
-                  if (SDIOWIFIDeviceReadWriteExtended(FWIFI, sdioWrite, WLAN_FUNCTION,
-                        BAK_BASE_ADDR and $1ffff, false, PacketP^.Buffer + blockcount*512, 0, remainder)) <> WIFI_STATUS_SUCCESS then
-                          WIFILogError(nil, 'Failed to transmit packet data');
+                begin
+                  if SDIOWIFIDeviceReadWriteExtended(FWIFI, sdioWrite, WLAN_FUNCTION,
+                        BAK_BASE_ADDR and $1ffff, false, PacketP^.Buffer + blockcount*512, 0, remainder) <> WIFI_STATUS_SUCCESS then
+                          WIFILogError(nil, 'Failed to transmit packet data remainder txseq='+inttostr(txseq)+' lastcredit='+inttostr(LastCredit));
+                end;
 
               end;
             end;
