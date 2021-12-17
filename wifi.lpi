@@ -51,11 +51,7 @@
           </Linking>
           <Other>
             <CustomOptions Value="-dZERO
--dsdhci
--dsdhci_debug
--dMMC_DEBUG
--dinterrupt_debug
--dcorescanextended"/>
+-dsupplicant"/>
           </Other>
         </CompilerOptions>
       </Item2>
@@ -99,11 +95,7 @@
           </Linking>
           <Other>
             <CustomOptions Value="-dRPI4
--dsdhci
--dsdhci_debug
--dMMC_DEBUG
--dinterrupt_debug
--dCYW43455_DEBUG"/>
+-dsupplicant"/>
             <ExecuteBefore>
               <ShowAllMessages Value="True"/>
             </ExecuteBefore>
@@ -185,11 +177,7 @@
     </Linking>
     <Other>
       <CustomOptions Value="-dRPI3
--dsdhci
--dsdhci_debug
--dMMC_DEBUG
--dinterrupt_debug
--dCYW43455_DEBUG"/>
+-dsupplicant"/>
       <ExecuteBefore>
         <ShowAllMessages Value="True"/>
       </ExecuteBefore>
