@@ -5,8 +5,8 @@ This is an Ultibo application and device driver which enables support for the *i
 device (a Cypress 43445 based chip). It supports WPA2/PSK encryption and additionally allows
 connection to an open network (although this is not generally recommended for security reasons).
 
-The device driver currently supports Pi ZeroW, Pi3, Pi4, and Pi400. It also supports compute
-module devices with onbostf WIFI although these have been tested by others as I do not have any
+The device driver currently supports Pi ZeroW, PiZero2W, Pi3, Pi4, and Pi400. It also supports compute
+module devices with onboard WIFI although these have only been tested by others as I do not have any
 on my test bench.
 
 USB WIFI devices are *not* supported.
@@ -135,12 +135,14 @@ file that deals with including the correct library version.
 If for any reason you want to actually build the supplicant library from source,
 there are makefiles in the wpasupplicant subdirectory of the repo. Building the supplicant
 requires issuing one or more of the following commands, depending upon which
-device you are targeting. For a PiZero2W, use the Pi3 target:
-'''
+device you are targeting:
+
+```
 make -f Makefile.Ultibo libwpa_supplicant_pizero.a
 make -f Makefile.Ultibo libwpa_supplicant_pi3.a
 make -f Makefile.Ultibo libwpa_supplicant_pi4.a
-'''
+```
+
 Use Pi4 for a Pi400 as well, and use pi3 for a PiZero2w.
 The resultant libraries are placed in the relevant device related subfolder ready for
 compiling into an application via the wifidevice unit. You won't need to copy them
