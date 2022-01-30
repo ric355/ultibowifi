@@ -6352,12 +6352,16 @@ begin
         end;
 *)
 
-        if (EventRecordP^.whd_event.event_type = ord(WLC_E_DEAUTH))
+        if (
+           (EventRecordP^.whd_event.event_type = ord(WLC_E_DEAUTH))
            or (EventRecordP^.whd_event.event_type = ord(WLC_E_DEAUTH_IND))
            or (EventRecordP^.whd_event.event_type = ord(WLC_E_DISASSOC_IND))
            or
               ((EventRecordP^.whd_event.event_type = ord(WLC_E_LINK))
                 and (EventRecordP^.whd_event.flags and CYW43455_EVENT_FLAG_LINK = 0))
+           )
+           and
+           (WIFI^.NetworkP^.NetworkStatus = NETWORK_STATUS_UP)
            then
         begin
           // the wifi link has gone down. Reset conection
