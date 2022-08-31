@@ -5346,6 +5346,7 @@ var
   TransmitLen : longword;
   Res : longword;
   WorkerRequestP : PWIFIRequestItem;
+  status : longword;
 
 begin
   Result := WIFI_STATUS_INVALID_PARAMETER;
@@ -5436,7 +5437,12 @@ begin
     WIFILogError(nil, 'failed to send cmd53 for ioctl command ' + inttostr(res));
 
   // wait for the worker thread to process the response.
-  SemaphoreWait(WorkerRequestP^.Signal);
+  status := SemaphoreWaitEx(WorkerRequestP^.Signal, 10000);
+  if (status = ERROR_WAIT_TIMEOUT) then
+  begin
+    WIFIWorkerThread.DoneWithRequest(WorkerRequestP);
+    exit;
+  end;
 
   // use old variable for now so copy paste from old code works still
   ResponseP := WorkerRequestP^.MsgP;
@@ -5896,7 +5902,7 @@ begin
     psk.flags := WSEC_PASSPHRASE;
 
     // Delay required to allow radio firmware to be ready to receive PMK and avoid intermittent failure
-    sleep(1);
+    sleep(10);
 
     Result := WirelessIOCTLCommand(WIFI, WLC_SET_WSEC_PMK, @psk, sizeof(psk), true, @responseval, 4);
     if (Result <> WIFI_STATUS_SUCCESS) then
