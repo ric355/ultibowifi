@@ -1528,7 +1528,7 @@ var
 
   // defines whether to inject waits into packet transmission when the firmware
   // credit value indicates internal buffers are filling up.
-  CYW43455_USE_FIRMWARE_CREDIT_VALUE : Boolean = TRUE;
+  CYW43455_USE_FIRMWARE_CREDIT_VALUE : Boolean = FALSE;
 
   {$ifdef supplicant}
   // Log level as used by the supplicant. Enables us to control it from the device
