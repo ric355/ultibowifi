@@ -1596,7 +1596,7 @@ var
 
 
   ioctl_txmsg, ioctl_rxmsg : IOCTL_MSG;
-  txglom : boolean = false; // don't know what this is for yet.
+  txglom : boolean = false;
   ioctl_reqid : longword = 1; // ioct request id used to match request to response.
                               // starts at 1 because 0 is reserved for an event entry.
 
@@ -2222,7 +2222,7 @@ begin
  PCYW43455Network(Network)^.ReceiveRequestSize:=RECEIVE_REQUEST_PACKET_COUNT * sizeof(IOCTL_MSG); // space for 16 reads; actually more than that as a packet can't be as large as the IOCTL msg allocates
  PCYW43455Network(Network)^.TransmitRequestSize:=ETHERNET_MAX_PACKET_SIZE; //+ LAN78XX_TX_OVERHEAD; don't know what overhead we have yet.
  PCYW43455Network(Network)^.ReceiveEntryCount:=40;
- PCYW43455Network(Network)^.TransmitEntryCount:=4;
+ PCYW43455Network(Network)^.TransmitEntryCount:=40;
  PCYW43455Network(Network)^.ReceivePacketCount:=RECEIVE_REQUEST_PACKET_COUNT * IOCTL_MAX_BLKLEN div (ETHERNET_MIN_PACKET_SIZE);
  PCYW43455Network(Network)^.TransmitPacketCount:=1;
 
