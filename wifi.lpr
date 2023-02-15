@@ -546,6 +546,7 @@ var
   LedStatus : boolean;
   CPUWindow : TWindowHandle;
   WIFIDeviceP : PWIFIDevice;
+  HeapStatus : TFPCHeapStatus;
 
 
 begin
@@ -682,9 +683,11 @@ begin
       ConsoleWindowWriteln(TopWindow, 'Warning: Key not specified - expecting the network to be unencrypted.');
     {$endif}
 
+    {$ifndef supplicant}
     if (SSID = '') or (Country='') then
        ConsoleWindowWriteln(TopWindow, 'Cant join a network without SSID, Key, and Country Code.')
     else
+    {$endif}
     begin
       {$ifndef supplicant}
       if (BSSIDStr <> '') then
@@ -759,7 +762,11 @@ begin
         end;
         {$endif}
 
-        Sleep(500);
+        Sleep(1000);
+        HeapStatus := GetFPCHeapStatus;
+        ConsoleWindowWriteEx(CPUWindow, 'Memory Used ' + inttostr(HeapStatus.CurrHeapUsed) + '    ', 1, 10, COLOR_BLACK, COLOR_WHITE);
+        ConsoleWindowWriteEx(CPUWindow, 'Received Glom Bytes ' + inttostr(WIFIDeviceP^.ReceiveGlomPacketSize) + '    ', 1, 9, COLOR_BLACK, COLOR_WHITE);
+
       end;
     end;
 
