@@ -24,6 +24,8 @@ uses
   GlobalConfig,GlobalConst,GlobalTypes,Platform,Threads,DMA,gpio,Network, {$IFDEF RPI4}BCM2711{$ENDIF} {$IFDEF RPI3}BCM2710{$ENDIF} {$IFDEF RPI}BCM2708{$ENDIF};
 
 const
+  WPA_KEY_MAX = 4;
+
   {wpa supplicant logging}
   MSG_EXCESSIVE = 0;
   MSG_MSGDUMP = 1;
@@ -1361,6 +1363,13 @@ type
     NextP : PWIFIRequestItem;
   end;
 
+  PUltiboPacketXFer = ^ TUltiboPacketXFer;
+  TUltiboPacketXFer = record
+    source_address : array[0..5] of byte;
+    packetbufferp : PByte;
+    DataLength : longint;
+  end;
+
   TWIFIWorkerThread = class(TThread)
   private
     FRequestQueueP : PWIFIRequestItem;
@@ -1430,7 +1439,8 @@ type
    OriginalHostStart: TSDHCIHostStart;
    {$ifdef supplicant}
    EAPOLCompleted : boolean;
-   WPAKeys : array[0..1] of TWPAKey;
+   WPAKeys : array[0..WPA_KEY_MAX] of TWPAKey;
+   ValidKeys : array[0..WPA_KEY_MAX] of boolean;
    NetworkUpSignal : TSemaphoreHandle;
    CountryCode : array[0..1] of char;
    {$endif}
@@ -1572,7 +1582,7 @@ const
 {$endif}
 
 var
-  WIFI_DEFAULT_LOG_LEVEL:LongWord = WIFI_LOG_LEVEL_DEBUG; {Minimum level for WIFI messages.  Only messages with level greater than or equal to this will be printed}
+  WIFI_DEFAULT_LOG_LEVEL:LongWord = WIFI_LOG_LEVEL_NONE; {Minimum level for WIFI messages.  Only messages with level greater than or equal to this will be printed}
   WIFIDeviceTableLock:TCriticalSectionHandle = INVALID_HANDLE_VALUE;
 
   WIFIDeviceTable:PWIFIDevice;
@@ -1839,6 +1849,7 @@ var
   Network: PCYW43455Network;
   
   Capabilities:LongWord;
+  k : integer;
 begin
   Result := ERROR_INVALID_PARAMETER;
   
@@ -2014,6 +2025,8 @@ begin
   {$ifdef supplicant}
   Network^.EAPOLCompleted:=false;
   Network^.NetworkUpSignal := SemaphoreCreate(0);
+  for k := 0 to WPA_KEY_MAX do
+    Network^.ValidKeys[k] := false;
   {$endif}
 
   {Host reset done by host start}
@@ -6302,6 +6315,7 @@ var
  EventRecordP : pwhd_event;
  Framelength : word;
  EtherHeaderP : pether_header;
+ k : integer;
 
 begin
  // the channel has 4 bits flags in the upper nibble and 4 bits channel number in the lower nibble.
@@ -6379,6 +6393,8 @@ begin
           {$ifdef supplicant}
           // Set EAPOL not completed
           PCYW43455Network(FWIFI^.NetworkP)^.EAPOLCompleted := False;
+          for k := 0 to WPA_KEY_MAX do
+            PCYW43455Network(FWIFI^.NetworkP)^.ValidKeys[k] := false;
           SupplicantOperatingState:=0;
           {$endif}
 
@@ -6934,6 +6950,28 @@ end;
 
 
 {$ifdef supplicant}
+
+procedure DoSendDriverNewPacketData(data : pointer);
+var
+  PacketXFerP : PUltiboPacketXFer;
+begin
+ try
+   PacketXFerP := PUltiboPacketXFer(data);
+   try
+    ultibo_driver_new_packet_data(@PacketXFerP^.source_address[0], PacketXFerP^.packetbufferp, PacketXFerP^.DataLength);
+
+   except
+     writeln('An exception occurred in the ultibo_driver_new_packet_data' + inttohex(longword(exceptaddr), 8));
+   end;
+
+   FreeMem(PacketXFerP^.packetbufferp);
+   FreeMem(PacketXFerP);
+
+ except
+   writeln('An exception occurred in dosenddrivernewpacketdata at ' + inttohex(longword(exceptaddr), 8));
+ end;
+end;
+
 procedure EAPOLCallback(Event : TWIFIEvent;
             EventRecordP : pwhd_event;
             RequestItemP : PWIFIRequestItem;
@@ -6941,6 +6979,7 @@ procedure EAPOLCallback(Event : TWIFIEvent;
 var
   packetbufferp : pbyte;
   EtherHeaderP : pether_header;
+  PacketXFerP : PUltiboPacketXFer;
 begin
   if (Event = WLC_E_EAPOL_MSG) then
   begin
@@ -6949,7 +6988,26 @@ begin
     EtherHeaderP := pether_header(RequestItemP^.UserDataP);
     packetbufferp := PByte(EtherHeaderP) + sizeof(ether_header);
 
-    ultibo_driver_new_packet_data(@EtherHeaderP^.source_address[0], packetbufferp, DataLength);
+    // Instead of sending the packet data directly to the supplicant, we instead
+    // copy it into another structure and then use an ultibo worker task to actually
+    // make the call to the supplicant. The reason for this is that it avoids a
+    // deadlock scenario where the supplicant thread and the wifi worker thread are
+    // are holding the locks which each other need to proceed (the network buffer
+    // lock and the packet queue lock).
+    // This isn't all that efficient but the EAPOL negotiation only happens at
+    // connection time and not at all thereafter.
+
+    getmem(PacketXferP, sizeof(TUltiboPacketXFer));
+    getmem(PacketXFerP^.packetbufferp, DataLength);
+    move(EtherHeaderP^.source_address[0], PacketXFerP^.source_address[0], 6);
+    move(packetbufferp^, PacketXFerP^.packetbufferp^, DataLength);
+    PacketXFerP^.DataLength := DataLength;
+
+    // the task will release the allocated memory.
+    WorkerSchedule(0, @DoSendDriverNewPacketData, PacketXFerP, nil)
+
+    // no longer called directly.
+    // ultibo_driver_new_packet_data(@EtherHeaderP^.source_address[0], packetbufferp, DataLength);
 
   end
   else
@@ -6973,6 +7031,7 @@ var
   RequestEntryP : PWIFIRequestItem;
   extjoinparams : wl_extjoin_params;
   auth_mfp : longword;
+  k : integer;
 
 begin
  fillchar(countrysettings, 0, sizeof(countrysettings));
@@ -7099,6 +7158,9 @@ begin
 
   {Set EAPOL not completed}
   PCYW43455Network(WIFI^.NetworkP)^.EAPOLCompleted := False;
+  for k := 0 to WPA_KEY_MAX do
+    PCYW43455Network(WIFI^.NetworkP)^.ValidKeys[k] := false;
+
 
   if (RequestEntryP^.RegisteredEvents = []) then
   begin
@@ -7134,9 +7196,9 @@ begin
   if (not tryentercriticalsection(EAPOLQueueLock)) then
   begin
     CriticalSectionHandle := TCriticalSectionHandle(EAPOLQueueLock.LockSemaphore);
-    writeln(trace, ' failed to get critical section. ownner=',ThreadGetName(CriticalSectionOwner(CriticalSectionHandle)), ' count=',CriticalSectionCount(CriticalSectionHandle), ' current=',ThreadGetName(ThreadGetCurrent));
+    writeln(trace, ' LockEAPOLPacketQueue failed to get critical section. ownner=',ThreadGetName(CriticalSectionOwner(CriticalSectionHandle)), ' count=',CriticalSectionCount(CriticalSectionHandle), ' current=',ThreadGetName(ThreadGetCurrent));
     EnterCriticalSection(EAPOLQueueLock);
-    writeln(trace, 'got critical section');
+    writeln('LockEAPOLPacketQueue lock finally acquired');
   end;
 end;
 
@@ -7146,15 +7208,24 @@ begin
 end;
 
 procedure LockSendPacketQueue; cdecl;
+var
+ CriticalSectionHandle:TCriticalSectionHandle;
 begin
- EnterCriticalSection(EAPOLQueueLock);
+  if (not tryentercriticalsection(EAPOLQueueLock)) then
+  begin
+    CriticalSectionHandle := TCriticalSectionHandle(EAPOLQueueLock.LockSemaphore);
+    writeln('LockSendPacketQueue failed to get critical section. ownner=',ThreadGetName(CriticalSectionOwner(CriticalSectionHandle)), ' count=',CriticalSectionCount(CriticalSectionHandle), ' current=',ThreadGetName(ThreadGetCurrent));
+    EnterCriticalSection(EAPOLQueueLock);
+    writeln('LockSendPacketQueue lock finally acquired');
+  end;
+
 //  EnterCriticalSection(L2SendQueueLock);
 end;
 
 procedure UnlockSendPacketQueue; cdecl;
 begin
 //  LeaveCriticalSection(L2SendQueueLock);
- LeaveCriticalSection(EAPOLQueueLock);
+  LeaveCriticalSection(EAPOLQueueLock);
 end;
 
 
@@ -7166,15 +7237,10 @@ var
   KeyP : PWPAKey;
   pairwise : boolean;
 begin
+ try
   Result := 0;
 
-  {check which key is being set as this is our clue how far through the process we are}
-  {key_idx=0 is first, so when we reach 1 we've got the other key from message 3}
-  if (key_idx = 1) then
-  begin
-    {this is the second key, so we're nearing the end of the EAPOL negotiation}
-    PCYW43455Network(WIFI^.NetworkP)^.EAPOLCompleted := true;
-  end;
+  PCYW43455Network(WIFI^.NetworkP)^.ValidKeys[key_idx] := true;
 
   {probably a request to clear the key - ignore for now.}
   if (addr = nil) then
@@ -7216,6 +7282,10 @@ begin
   KeyP^.ivlow := pqword(seq)^ and $ffff;
   if (pairwise) then
     move(addr^, KeyP^.ethaddr[0], 6);
+
+ except
+   writeln('Exception in usk at ' + inttohex(longword(exceptaddr), 8));
+ end;
 end;
 
 
@@ -7280,24 +7350,21 @@ end;
 procedure DoNetworkNotify(data : pointer);
 var
   KeyP : PWPAKey;
+  k : integer;
 begin
   {set both keys here before bringing up the network.}
-  WIFILogInfo(nil, 'Setting key 0');
+  for k := 0 to WPA_KEY_MAX do
+    if (PCYW43455Network(WIFI^.NetworkP)^.ValidKeys[k]) then
+    begin
+       writeln('setting key ' + k.tostring);
+      WIFILogInfo(nil, 'Setting key ' + k.ToString);
 
-  KeyP := @(PCYW43455Network(WIFI^.NetworkP)^.WPAKeys[0]);
-  if (WirelessSetVar(WIFI, 'wsec_key', PByte(KeyP), sizeof(TWPAKey), 'ultibosetkey') <> ERROR_SUCCESS) then
-    WIFILogError(nil, 'Failed to update wsec_key in UltiboSetKey')
-  else
-    WIFILogInfo(nil, 'Successfully set the wsec_key var');
-
-  WIFILogInfo(nil, 'Setting key 1');
-
-  KeyP := @(PCYW43455Network(WIFI^.NetworkP)^.WPAKeys[1]);
-  if (WirelessSetVar(WIFI, 'wsec_key', PByte(KeyP), sizeof(TWPAKey), 'ultibosetkey') <> ERROR_SUCCESS) then
-    WIFILogError(nil, 'Failed to update wsec_key in UltiboSetKey')
-  else
-    WIFILogInfo(nil, 'Successfully set the wsec_key var');
-
+      KeyP := @(PCYW43455Network(WIFI^.NetworkP)^.WPAKeys[k]);
+      if (WirelessSetVar(WIFI, 'wsec_key', PByte(KeyP), sizeof(TWPAKey), 'ultibosetkey') <> ERROR_SUCCESS) then
+        WIFILogError(nil, 'Failed to update wsec_key in UltiboSetKey key=' + k.tostring)
+      else
+        WIFILogInfo(nil, 'Successfully set the wsec_key var key=' + k.tostring);
+    end;
 
   {Set Status to Up}
   WIFI^.NetworkP^.NetworkStatus := NETWORK_STATUS_UP;
@@ -7313,7 +7380,7 @@ end;
 
 procedure UltiboEAPOLComplete; cdecl;
 begin
-  {don't really need this function anymore - leave stub for now but expect to remove it.}
+  PCYW43455Network(WIFI^.NetworkP)^.EAPOLCompleted := true;
   WIFILogInfo(nil, 'EAPOL auth is complete.');
 end;
 
