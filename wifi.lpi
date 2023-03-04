@@ -40,7 +40,7 @@
             <ExecuteBefore>
               <Command Value="/usr/bin/bash /home/richard/development/ultibowifi/wpasupplicant/domake.sh libwpa_supplicant_pizero.a"/>
               <ShowAllMessages Value="True"/>
-              <CompileReasons Run="False"/>
+              <CompileReasons Compile="False" Build="False" Run="False"/>
             </ExecuteBefore>
             <ExecuteAfter>
               <Command Value="/home/richard/development/lazarus/ultibo_auto_upload/autoupload /home/richard/development/ultibowifi 192.168.1.83"/>
@@ -81,9 +81,11 @@
           <Other>
             <CustomOptions Value="-dRPI4
 -dsdhci
--dsupplicant"/>
+-d_supplicant"/>
             <ExecuteBefore>
+              <Command Value="/usr/bin/bash /home/richard/development/ultibowifi/wpasupplicant/domake.sh libwpa_supplicant_pi4.a"/>
               <ShowAllMessages Value="True"/>
+              <CompileReasons Compile="False" Build="False" Run="False"/>
             </ExecuteBefore>
           </Other>
         </CompilerOptions>
@@ -123,7 +125,7 @@
             <ExecuteBefore>
               <Command Value="/usr/bin/bash /home/richard/development/wpasupplicant/domake.sh"/>
               <ShowAllMessages Value="True"/>
-              <CompileReasons Run="False"/>
+              <CompileReasons Compile="False" Build="False" Run="False"/>
             </ExecuteBefore>
             <ExecuteAfter>
               <Command Value="/home/richard/development/lazarus/ultibo_auto_upload/autoupload /home/richard/development/ultibowifi 192.168.1.159"/>
@@ -196,10 +198,9 @@
       <ExecuteBefore>
         <Command Value="/usr/bin/bash /home/richard/development/ultibowifi/wpasupplicant/domake.sh libwpa_supplicant_pi3.a"/>
         <ShowAllMessages Value="True"/>
-        <CompileReasons Run="False"/>
+        <CompileReasons Compile="False" Build="False" Run="False"/>
       </ExecuteBefore>
       <ExecuteAfter>
-        <Command Value="/home/richard/development/lazarus/ultibo_auto_upload/autoupload /home/richard/development/ultibowifi 192.168.1.158"/>
         <CompileReasons Compile="False" Run="False"/>
       </ExecuteAfter>
     </Other>

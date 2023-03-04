@@ -89,7 +89,7 @@ static void l2_packet_receive(int sock, void *eloop_ctx, void *sock_ctx)
 	
 	struct ultiborawpacket *rawpacket;
 
-	LockEAPOLPacketQueue();
+	LockEAPOLPacketQueue("supplicant: l2_packet_receive");
 
 	while ((rawpacket = dl_list_first(&ultiborawpacketreceivequeue.list, struct ultiborawpacket, list)))
 	{
