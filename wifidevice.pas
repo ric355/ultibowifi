@@ -7128,14 +7128,13 @@ begin
 
   RequestEntryP := WIFIWorkerThread.AddRequest(0, [WLC_E_SET_SSID, WLC_E_LINK], @JoinCallback, nil);
 
-  {wait for 5 seconds or a completion signal.}
-  SemaphoreWaitEx(RequestEntryP^.Signal, 5000);
-
   {Set EAPOL not completed}
   PCYW43455Network(WIFI^.NetworkP)^.EAPOLCompleted := False;
   for k := 0 to WPA_KEY_MAX do
     PCYW43455Network(WIFI^.NetworkP)^.ValidKeys[k] := false;
 
+  {wait for a completion signal or timeout.}
+  SemaphoreWaitEx(RequestEntryP^.Signal, 10000);
 
   if (RequestEntryP^.RegisteredEvents = []) then
   begin

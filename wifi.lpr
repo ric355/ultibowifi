@@ -326,10 +326,7 @@ begin
     // warning, after wifiinit is called, the deviceopen() stuff will happen on
     // a different thread, so the code below will execute regardless of whether
     // the device is open or not. Consequently we are going to spin until the
-    // wifi device has been fully initialized. This is a bit of a dirty hack
-    // but hopefully we can change it to a proper 'link is up' check once the
-    // whole network device integration stuff is complete.
-    // Certainly can't stay the way it is.
+    // wifi device has been fully initialized.
 
     ConsoleWindowWriteln(TopWindow, 'Waiting for Wifi Device to be opened.');
     
