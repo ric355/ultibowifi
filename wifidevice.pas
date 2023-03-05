@@ -6027,15 +6027,12 @@ begin
  DisableEvent(20);	// E_TXFAIL
  DisableEvent(124);	//?
 
- (*
- {$ifdef supplicant}
  DisableEvent(25);      // we are using event 25 (EAPOL) via packets, not via events, so we don't want the event generated.
                         // broadcom firmware generates these as well as sending packets; we only need one or the other
                         // and we've decided to use packets (channel 2).
 
  DisableEvent(51);	// WLC_E_MULTICAST_DECODE_ERROR. We get this during the authentication process for broadcast
                         // packets on the network (e.g. my home automation devices). Ignore.
- {$endif}*)
 
  Result := WirelessSetVar(WIFI, 'event_msgs', @eventmask, sizeof(eventmask));
  if Result <> WIFI_STATUS_SUCCESS then
