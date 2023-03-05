@@ -5137,8 +5137,9 @@ begin
   BlockRead(FirmwareFile, FirmwareP^, FileSize(FirmwareFile));
 
 
-
   fsize := Condense(PChar(FirmwareP), Filesize(FirmwareFile)); // note we deliberately *don't* use fsize here!
+
+  CloseFile(FirmwareFile);
 
   // Although what we've done here is correct, I noticed that ether4330.c only
   // reads the first 2048 bytes of the config which it then condenses, resulting
@@ -5587,6 +5588,7 @@ begin
 
   finally
    freemem(firmwarep);
+   closefile(FirmwareFile);
   end;
 
   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Finished transferring regulatory file');
