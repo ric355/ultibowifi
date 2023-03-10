@@ -358,15 +358,18 @@ int wpa_driver_ultibo_associate(void *priv,
 
 	wpa_printf(MSG_DEBUG, "Ultibodriver: Associate with station ssid=%s\n",params->ssid);
 
-	SupplicantWirelessJoinNetwork(params->ssid, params->wpa_ie, params->wpa_ie_len, params->bssid, 1);
+	if (SupplicantWirelessJoinNetwork(params->ssid, params->wpa_ie, params->wpa_ie_len, params->bssid, 1) == 0)
+	{
+		os_memmove(drv->bssid, params->bssid, 6);
+		drv->ssid_len = params->ssid_len;
+		os_memmove(drv->ssid, params->ssid, 32);
 
-	os_memmove(drv->bssid, params->bssid, 6);
-	drv->ssid_len = params->ssid_len;
-	os_memmove(drv->ssid, params->ssid, 32);
+		wpa_supplicant_event (drv->ctx, EVENT_ASSOC, 0);
 
-	wpa_supplicant_event (drv->ctx, EVENT_ASSOC, 0);
-
-	return 0;
+		return 0;
+	}
+	else
+	  return -1;
 }
 
 static int wpa_driver_ultibo_get_bssid (void *priv, u8 *bssid)
