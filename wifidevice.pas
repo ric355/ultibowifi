@@ -1417,6 +1417,7 @@ type
   public
     constructor Create;
     procedure Execute; override;
+    destructor Destroy; override;
   end;
 
 
@@ -5999,6 +6000,14 @@ begin
  Result := WirelessIOCTLCommand(WIFI, WLC_SET_SSID, @simplessid, sizeof(simplessid), true, @responseval, 4);
 (* if (Result <> WIFI_STATUS_SUCCESS) then
    exit;*)
+
+ // terminate the supplicant loop if the supplicant is active.
+ if (WIFI_USE_SUPPLICANT) then
+ begin
+    UltiboEloopTerminate;
+    WPASupplicantThread.Terminate;
+    WPASupplicantThread := nil;
+ end;
 end;
 
 function WirelessInit(WIFI : PWIFIDevice) : longword;
@@ -7374,6 +7383,12 @@ constructor TWPASupplicantThread.create;
 begin
   {the thread is created suspended. We'll let it run when the application asks for a connection.}
   inherited Create(True);
+  FreeOnTerminate := true;
+end;
+
+destructor TWPASupplicantThread.Destroy;
+begin
+  inherited Destroy;
 end;
 
 procedure TWPASupplicantThread.Execute;
