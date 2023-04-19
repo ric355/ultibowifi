@@ -1,16 +1,14 @@
 unit wifidevice;
 
 {$mode objfpc}{$H+}
-{$ifdef supplicant}
 {$ifdef RPI}
-{$linklib wpasupplicant/pizero/libwpa_supplicant_pizero.a}
+{$linklib libwpa_supplicant_pizero.a}
 {$endif}
 {$ifdef RPI3}
-{$linklib wpasupplicant/pi3/libwpa_supplicant_pi3.a}
+{$linklib libwpa_supplicant_pi3.a}
 {$endif}
 {$ifdef RPI4}
-{$linklib wpasupplicant/pi4/libwpa_supplicant_pi4.a}
-{$endif}
+{$linklib libwpa_supplicant_pi4.a}
 {$endif}
 
 
@@ -24,6 +22,15 @@ uses
   GlobalConfig,GlobalConst,GlobalTypes,Platform,Threads,DMA,gpio,Network, {$IFDEF RPI4}BCM2711{$ENDIF} {$IFDEF RPI3}BCM2710{$ENDIF} {$IFDEF RPI}BCM2708{$ENDIF};
 
 const
+  {WIFI logging}
+  WIFI_LOG_LEVEL_DEBUG     = LOG_LEVEL_DEBUG;  {WIFI debugging messages}
+  WIFI_LOG_LEVEL_INFO      = LOG_LEVEL_INFO;   {WIFI informational messages, such as a device being attached or detached}
+  WIFI_LOG_LEVEL_WARN      = LOG_LEVEL_WARN;   {WIFI warning messages}
+  WIFI_LOG_LEVEL_ERROR     = LOG_LEVEL_ERROR;  {WIFI error messages}
+  WIFI_LOG_LEVEL_NONE      = LOG_LEVEL_NONE;   {No WIFI messages}
+
+  WPA_KEY_MAX = 4;
+
   {wpa supplicant logging}
   MSG_EXCESSIVE = 0;
   MSG_MSGDUMP = 1;
@@ -829,9 +836,7 @@ type
   TWIFIJoinType = (WIFIJoinBlocking, WIFIJoinBackground);
   TWIFIReconnectionType = (WIFIReconnectNever, WIFIReconnectAlways);
 
-  {$ifdef supplicant}
   pether_addr = ^ether_addr;
-  {$endif}
   ether_addr = record
     octet : array[0..ETHER_ADDR_LEN-1] of byte;
   end;
@@ -1361,6 +1366,13 @@ type
     NextP : PWIFIRequestItem;
   end;
 
+  PUltiboPacketXFer = ^ TUltiboPacketXFer;
+  TUltiboPacketXFer = record
+    source_address : array[0..5] of byte;
+    packetbufferp : PByte;
+    DataLength : longint;
+  end;
+
   TWIFIWorkerThread = class(TThread)
   private
     FRequestQueueP : PWIFIRequestItem;
@@ -1400,14 +1412,13 @@ type
     procedure Execute; override;
   end;
 
-  {$ifdef supplicant}
   TWPASupplicantThread = class(TThread)
   private
   public
     constructor Create;
     procedure Execute; override;
+    destructor Destroy; override;
   end;
-  {$endif}
 
 
   PCYW43455Network = ^TCYW43455Network;
@@ -1428,12 +1439,12 @@ type
 
    JoinCompleted: Boolean;
    OriginalHostStart: TSDHCIHostStart;
-   {$ifdef supplicant}
+
    EAPOLCompleted : boolean;
-   WPAKeys : array[0..1] of TWPAKey;
+   WPAKeys : array[0..WPA_KEY_MAX] of TWPAKey;
+   ValidKeys : array[0..WPA_KEY_MAX] of boolean;
    NetworkUpSignal : TSemaphoreHandle;
    CountryCode : array[0..1] of char;
-   {$endif}
   end;
 
 
@@ -1474,7 +1485,6 @@ function WIFIDeviceSendApplicationCommand(WIFI:PWIFIDevice;Command:PSDIOCommand)
 procedure WIFILogError(WIFI:PWIFIDevice;const AText:String); inline;
 function WIFIDeviceSetIOS(WIFI:PWIFIDevice):LongWord;
 
-{$ifdef supplicant}
 {primary function for the user to call to join a wireless network}
 function WirelessJoinNetwork(JoinType : TWIFIJoinType;
                              timeout : integer = 10000) : longword; cdecl;
@@ -1499,23 +1509,21 @@ function UltiboSetKey(const ifname : PChar; priv : pointer; alg : byte;
 procedure UltiboEAPOLComplete; cdecl; public name 'UltiboEAPOLComplete';
 function UltiboSetCountry(priv : pointer; ccode : PChar) : integer; cdecl; public name 'UltiboSetCountry';
 
-
-{$else}
-procedure WirelessScan(UserCallback : TWIFIScanUserCallback; WaitTime : Longint = 10000); cdecl;
-function WirelessJoinNetwork(ssid : string; security_key : string;
+//procedure WirelessScan(UserCallback : TWIFIScanUserCallback; WaitTime : Longint = 10000); cdecl;
+function FirmwareWirelessJoinNetwork(ssid : string; security_key : string;
                              countrycode : string;
                              JoinType : TWIFIJoinType;
                              ReconnectType : TWIFIReconnectionType;
                              bssid : ether_addr;
                              usebssid : boolean = false) : longword; cdecl;
-{$endif}
+
 function WirelessLeaveNetwork : longword;
 procedure WIFIPreInit;
 procedure WIFIInit;
 
 
 var
-  WIFI_LOG_ENABLED : boolean = true;
+  WIFI_LOG_ENABLED : boolean = false;
 
   // this will be moved to the implementation section eventually
   // just here because we currently need to create it externally
@@ -1530,26 +1538,15 @@ var
   // credit value indicates internal buffers are filling up.
   CYW43455_USE_FIRMWARE_CREDIT_VALUE : Boolean = FALSE;
 
-  {$ifdef supplicant}
   // Log level as used by the supplicant. Enables us to control it from the device
   // driver source instead of having to change the supplicant source.
   WPASupplicantLogLevel : integer = MSG_INFO; cvar;
-  {$endif}
 
+  WIFI_DEFAULT_LOG_LEVEL:LongWord = WIFI_LOG_LEVEL_NONE; {Minimum level for WIFI messages.  Only messages with level greater than or equal to this will be printed}
 
 
 implementation
 
-const
-  {WIFI logging}
-  WIFI_LOG_LEVEL_DEBUG     = LOG_LEVEL_DEBUG;  {WIFI debugging messages}
-  WIFI_LOG_LEVEL_INFO      = LOG_LEVEL_INFO;   {WIFI informational messages, such as a device being attached or detached}
-  WIFI_LOG_LEVEL_WARN      = LOG_LEVEL_WARN;   {WIFI warning messages}
-  WIFI_LOG_LEVEL_ERROR     = LOG_LEVEL_ERROR;  {WIFI error messages}
-  WIFI_LOG_LEVEL_NONE      = LOG_LEVEL_NONE;   {No WIFI messages}
-
-
-{$ifdef supplicant}
 
 
 const
@@ -1569,10 +1566,9 @@ const
   WPA_ALG_BIP_GMAC_256 = 12;
   WPA_ALG_BIP_CMAC_256 = 13;
 
-{$endif}
 
 var
-  WIFI_DEFAULT_LOG_LEVEL:LongWord = WIFI_LOG_LEVEL_DEBUG; {Minimum level for WIFI messages.  Only messages with level greater than or equal to this will be printed}
+  WIFI_USE_SUPPLICANT : boolean = true;
   WIFIDeviceTableLock:TCriticalSectionHandle = INVALID_HANDLE_VALUE;
 
   WIFIDeviceTable:PWIFIDevice;
@@ -1596,7 +1592,7 @@ var
 
 
   ioctl_txmsg, ioctl_rxmsg : IOCTL_MSG;
-  txglom : boolean = false; // don't know what this is for yet.
+  txglom : boolean = false;
   ioctl_reqid : longword = 1; // ioct request id used to match request to response.
                               // starts at 1 because 0 is reserved for an event entry.
 
@@ -1609,11 +1605,10 @@ var
   macaddress : TMACAddress;
   BackgroundJoinThread : TWirelessReconnectionThread = nil;
 
-{$ifdef supplicant}
   EAPOLQueueLock : TRTLCriticalSection;
 //  L2SendQueueLock : TRTLCriticalSection;
   SupplicantOperatingState : integer; cvar; external;
-  WPASupplicantThread : TWPASupplicantThread;
+  WPASupplicantThread : TWPASupplicantThread = nil;
 
 
 {functions we need to call that are defined by wpa_supplicant}
@@ -1623,7 +1618,6 @@ procedure ultibo_driver_new_packet_data(srcaddr : pbyte; packetbuf : pbyte; len 
 procedure DoNetworkNotify(data : pointer); forward;
 procedure UltiboEloopTerminate; cdecl; external;
 
-{$endif}
 
 procedure sbenable(WIFI : PWIFIDevice); forward;
 function WirelessInit(WIFI : PWIFIDevice) : longword; forward;
@@ -1839,6 +1833,7 @@ var
   Network: PCYW43455Network;
   
   Capabilities:LongWord;
+  k : integer;
 begin
   Result := ERROR_INVALID_PARAMETER;
   
@@ -2011,10 +2006,10 @@ begin
   if MMC_LOG_ENABLED then MMCLogDebug(nil,'SDHCI Host maximum blocks = ' + IntToStr(SDHCI^.MaximumBlockCount));
   {$ENDIF}
 
-  {$ifdef supplicant}
   Network^.EAPOLCompleted:=false;
   Network^.NetworkUpSignal := SemaphoreCreate(0);
-  {$endif}
+  for k := 0 to WPA_KEY_MAX do
+    Network^.ValidKeys[k] := false;
 
   {Host reset done by host start}
     
@@ -2222,7 +2217,7 @@ begin
  PCYW43455Network(Network)^.ReceiveRequestSize:=RECEIVE_REQUEST_PACKET_COUNT * sizeof(IOCTL_MSG); // space for 16 reads; actually more than that as a packet can't be as large as the IOCTL msg allocates
  PCYW43455Network(Network)^.TransmitRequestSize:=ETHERNET_MAX_PACKET_SIZE; //+ LAN78XX_TX_OVERHEAD; don't know what overhead we have yet.
  PCYW43455Network(Network)^.ReceiveEntryCount:=40;
- PCYW43455Network(Network)^.TransmitEntryCount:=4;
+ PCYW43455Network(Network)^.TransmitEntryCount:=40;
  PCYW43455Network(Network)^.ReceivePacketCount:=RECEIVE_REQUEST_PACKET_COUNT * IOCTL_MAX_BLKLEN div (ETHERNET_MIN_PACKET_SIZE);
  PCYW43455Network(Network)^.TransmitPacketCount:=1;
 
@@ -2350,15 +2345,6 @@ begin
  // note this code requires the worker thread to be running otherwise
  // responses won't be received.
  WirelessInit(WIFI);
-
- {$ifdef supplicant}
- //the wpa_supplicant must now be initialized, once we have a mac address (which is done in wirelessinit)
- //the supplicant runs its own event loop, so it runs in a thread to allow this.
- //later on we could consider moving the event loop into the thread execute and getting
- //rid of some C code.
- WPASupplicantThread := TWPASupplicantThread.Create;
- {$endif}
-
 
  {Set State to Open}
  Network^.NetworkState := NETWORK_STATE_OPEN;
@@ -2851,11 +2837,9 @@ begin
  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'WIFIInit Complete');
  {$endif}
 
- {$ifdef supplicant}
  // EAPOL queue locks for use with supplicant
  InitializeCriticalSection(EAPOLQueueLock);
 // InitializeCriticalSection(L2SendQueueLock);
- {$endif}
 
  WIFIInitialized:=True;
 end;
@@ -5154,8 +5138,9 @@ begin
   BlockRead(FirmwareFile, FirmwareP^, FileSize(FirmwareFile));
 
 
-
   fsize := Condense(PChar(FirmwareP), Filesize(FirmwareFile)); // note we deliberately *don't* use fsize here!
+
+  CloseFile(FirmwareFile);
 
   // Although what we've done here is correct, I noticed that ether4330.c only
   // reads the first 2048 bytes of the config which it then condenses, resulting
@@ -5604,6 +5589,7 @@ begin
 
   finally
    freemem(firmwarep);
+   closefile(FirmwareFile);
   end;
 
   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Finished transferring regulatory file');
@@ -5766,11 +5752,16 @@ end;
 
 
 
-{$ifdef supplicant}
 function WirelessJoinNetwork(JoinType : TWIFIJoinType;
                              timeout : integer = 10000) : longword; cdecl;
 begin
   Result := ERROR_SUCCESS;
+  WIFI_USE_SUPPLICANT := true;
+
+  //the wpa_supplicant must now be initialized, once we have a mac address (which is done in wirelessinit)
+  //the supplicant runs its own event loop, so it runs in a thread to allow this.
+  if (WPASupplicantThread = nil) then
+    WPASupplicantThread := TWPASupplicantThread.Create;
 
   if (WPASupplicantThread <> nil) then
     WPASupplicantThread.Start;
@@ -5779,8 +5770,7 @@ begin
     Result := SemaphoreWaitEx(PCYW43455Network(WIFI^.NetworkP)^.NetworkUpSignal, timeout);
 end;
 
-{$else}
-function WirelessJoinNetwork(ssid : string; security_key : string;
+function FirmwareWirelessJoinNetwork(ssid : string; security_key : string;
                              countrycode : string;
                              JoinType : TWIFIJoinType;
                              ReconnectType : TWIFIReconnectionType;
@@ -5808,6 +5798,8 @@ begin
   *)
 
   Result := WIFI_STATUS_INVALID_DATA;
+
+  WIFI_USE_SUPPLICANT := false;
 
   // pass connection details to the retry thread for handling loss of connection.
   BackgroundJoinThread.SetConnectionDetails(SSID, security_key, countrycode, BSSID, UseBSSID, ReconnectType);
@@ -5990,7 +5982,6 @@ begin
 
   WIFIWorkerThread.DoneWithRequest(RequestEntryP);
 end;
-{$endif}
 
 function WirelessLeaveNetwork : longword;
 var
@@ -6001,14 +5992,22 @@ begin
  Result := WIFI_STATUS_SUCCESS;
 
  {disable the automatic reconnection}
- BackgroundJoinThread.FReconnectionType:=WIFIReconnectNever;
+// BackgroundJoinThread.FReconnectionType:=WIFIReconnectNever;
 
  {blank out the SSID to leave the network?}
  fillchar(simplessid, sizeof(simplessid), 0);
  simplessid.SSID_len:=0;
  Result := WirelessIOCTLCommand(WIFI, WLC_SET_SSID, @simplessid, sizeof(simplessid), true, @responseval, 4);
- if (Result <> WIFI_STATUS_SUCCESS) then
-   exit;
+(* if (Result <> WIFI_STATUS_SUCCESS) then
+   exit;*)
+
+ // terminate the supplicant loop if the supplicant is active.
+ if (WIFI_USE_SUPPLICANT) then
+ begin
+    UltiboEloopTerminate;
+    WPASupplicantThread.Terminate;
+    WPASupplicantThread := nil;
+ end;
 end;
 
 function WirelessInit(WIFI : PWIFIDevice) : longword;
@@ -6036,14 +6035,13 @@ begin
  DisableEvent(71);	// E_PROBRESP_MSG
  DisableEvent(20);	// E_TXFAIL
  DisableEvent(124);	//?
- {$ifdef supplicant}
+
  DisableEvent(25);      // we are using event 25 (EAPOL) via packets, not via events, so we don't want the event generated.
                         // broadcom firmware generates these as well as sending packets; we only need one or the other
                         // and we've decided to use packets (channel 2).
 
  DisableEvent(51);	// WLC_E_MULTICAST_DECODE_ERROR. We get this during the authentication process for broadcast
                         // packets on the network (e.g. my home automation devices). Ignore.
- {$endif}
 
  Result := WirelessSetVar(WIFI, 'event_msgs', @eventmask, sizeof(eventmask));
  if Result <> WIFI_STATUS_SUCCESS then
@@ -6302,6 +6300,7 @@ var
  EventRecordP : pwhd_event;
  Framelength : word;
  EtherHeaderP : pether_header;
+ k : integer;
 
 begin
  // the channel has 4 bits flags in the upper nibble and 4 bits channel number in the lower nibble.
@@ -6376,11 +6375,14 @@ begin
           // Set join not completed
           PCYW43455Network(FWIFI^.NetworkP)^.JoinCompleted := False;
 
-          {$ifdef supplicant}
-          // Set EAPOL not completed
-          PCYW43455Network(FWIFI^.NetworkP)^.EAPOLCompleted := False;
-          SupplicantOperatingState:=0;
-          {$endif}
+          if (WIFI_USE_SUPPLICANT) then
+          begin
+            // Set EAPOL not completed
+            PCYW43455Network(FWIFI^.NetworkP)^.EAPOLCompleted := False;
+            for k := 0 to WPA_KEY_MAX do
+              PCYW43455Network(FWIFI^.NetworkP)^.ValidKeys[k] := false;
+            SupplicantOperatingState:=0;
+          end;
 
           {Set Status to Down}
           FWIFI^.NetworkP^.NetworkStatus := NETWORK_STATUS_DOWN;
@@ -6422,23 +6424,20 @@ begin
           EtherHeaderP := pether_header(PByte(ResponseP) + ETHERNET_CRC_SIZE + ETHERNET_HEADER_BYTES);
         end;
 
-{$ifdef supplicant}
         // detect supplicant status. Needs to be more resilient.
-        if (WordSwap(EtherHeaderP^.ethertype) = EAP_OVER_LAN_PROTOCOL_ID)
-           {and (PCYW43455Network(WIFI^.NetworkP)^.JoinCompleted)} then
+        if WIFI_USE_SUPPLICANT and (WordSwap(EtherHeaderP^.ethertype) = EAP_OVER_LAN_PROTOCOL_ID) then
         begin
-         wifiloginfo(nil,'EAPOL network packet received (after join); length='+inttostr(FrameLength - ETHERNET_CRC_SIZE) + ' operatingstate='+inttostr(SupplicantOperatingState));
-           RequestEntryP := WIFIWorkerThread.FindRequestByEvent(longword(WLC_E_EAPOL_MSG));
-           if (RequestEntryP <> nil) and (RequestEntryP^.Callback <> nil) {and (SupplicantOperatingState=0)} then
-           begin
-             // this is kinda dirty but it works.
-             // we pass the packet in the user data pointer instead as this isn't an event.
-             RequestEntryP^.UserDataP := EtherHeaderP;
-             RequestEntryP^.Callback(WLC_E_EAPOL_MSG, nil, RequestEntryP, FrameLength - ETHERNET_HEADER_BYTES);
-           end;
+          wifiloginfo(nil,'EAPOL network packet received (after join); length='+inttostr(FrameLength - ETHERNET_CRC_SIZE) + ' operatingstate='+inttostr(SupplicantOperatingState));
+          RequestEntryP := WIFIWorkerThread.FindRequestByEvent(longword(WLC_E_EAPOL_MSG));
+          if (RequestEntryP <> nil) and (RequestEntryP^.Callback <> nil) {and (SupplicantOperatingState=0)} then
+          begin
+            // this is kinda dirty but it works.
+            // we pass the packet in the user data pointer instead as this isn't an event.
+            RequestEntryP^.UserDataP := EtherHeaderP;
+            RequestEntryP^.Callback(WLC_E_EAPOL_MSG, nil, RequestEntryP, FrameLength - ETHERNET_HEADER_BYTES);
+          end;
         end
         else
-{$endif}
         begin
           // add into this network entry's packet buffer.
           NetworkEntryP^.Count:=NetworkEntryP^.Count+1;
@@ -6487,9 +6486,7 @@ var
   i : integer;
   BytesLeft : longword;
   isfinished : boolean;
-  {$ifdef supplicant}
   KeyP : PWPAKey;
-  {$endif}
   nGlomPackets : integer;
   SubPacketLengthP : PWord;
   GlomDescriptor : TGlomDescriptor;
@@ -6787,25 +6784,26 @@ begin
                           WIFILogError(nil, 'Failed to transmit packet data remainder txseq='+inttostr(txseq)+' lastcredit='+inttostr(LastCredit));
                 end;
 
-                {$ifdef supplicant}
-                // there are two EAPOL messages to be sent by the supplicant - messages 2 & 4.
-                // we want keys to be set after these messages are sent, so we detect the sitution here
-                // and the keys are set in DoNetworkNotify just before the network is brought up.
-
-                if (pether_header(pbyte(packetp^.buffer) + 8 + sizeof(SDPCM_HEADER))^.ethertype = WordSwap(EAP_OVER_LAN_PROTOCOL_ID)) then
+                if (WIFI_USE_SUPPLICANT) then
                 begin
-                  WIFILogDebug(nil, 'Detected transmission of an eapol packet');
+                  // there are two EAPOL messages to be sent by the supplicant - messages 2 & 4.
+                  // we want keys to be set after these messages are sent, so we detect the sitution here
+                  // and the keys are set in DoNetworkNotify just before the network is brought up.
 
-                  // if we are transmitting an EAPOL packet, then we must be sending message 2 or greater.
-                  if (PCYW43455Network(FWIFI^.NetworkP)^.EAPOLCompleted) then
+                  if (pether_header(pbyte(packetp^.buffer) + 8 + sizeof(SDPCM_HEADER))^.ethertype = WordSwap(EAP_OVER_LAN_PROTOCOL_ID)) then
                   begin
-                    WIFILogInfo(nil, 'EAPOL Completed - bringing network up');
+                    WIFILogDebug(nil, 'Detected transmission of an eapol packet');
 
-                    if (WorkerSchedule(0, @DoNetworkNotify, nil, nil) <> ERROR_SUCCESS) then
-                      WIFILogError(nil, 'Failed to schedule task to signify the network is up');
+                    // if we are transmitting an EAPOL packet, then we must be sending message 2 or greater.
+                    if (PCYW43455Network(FWIFI^.NetworkP)^.EAPOLCompleted) then
+                    begin
+                      WIFILogInfo(nil, 'EAPOL Completed - bringing network up');
+
+                      if (WorkerSchedule(0, @DoNetworkNotify, nil, nil) <> ERROR_SUCCESS) then
+                        WIFILogError(nil, 'Failed to schedule task to signify the network is up');
+                    end;
                   end;
                 end;
-                {$endif}
 
               end;
             end;
@@ -6821,7 +6819,6 @@ begin
           SemaphoreSignal(FWIFI^.NetworkP^.TransmitQueue.Wait);
 
           BufferFree(NetworkEntryP);
-
         end;
 
 
@@ -6879,6 +6876,7 @@ begin
     // wifi worker is the source of this sempahore.
 
     if (SemaphoreWaitEx(FConnectionLost, 1000) = ERROR_SUCCESS) then
+    begin
       if (FReconnectionType = WIFIReconnectAlways) then
       begin
         // the connection has been lost. Reconnect. Keep trying indefinitely until
@@ -6886,28 +6884,32 @@ begin
 
         WIFILogInfo(nil, 'Reconnection attempt started');
 
-        {$ifdef supplicant}
-        {request termination of the supplicant eloop. The supplicant thread will restart it to kick off a new
-         connection attempt}
-        UltiboEloopTerminate;
-        {$else}
-        Res := WIFI_STATUS_INVALID_PARAMETER;
-        while (Res <> WIFI_STATUS_SUCCESS) do
+        if (WIFI_USE_SUPPLICANT) then
+          UltiboEloopTerminate   // Request termination of the supplicant eloop.
+                                 // The supplicant thread will restart it to kick off a new
+                                 // connection attempt.
+        else
         begin
-          Res := WirelessJoinNetwork(FSSID, FKey, FCountry, WIFIJoinBlocking, WIFIReconnectNever, FBSSID, FUseBSSID); // do *not* call with WIFIReconnectAlways from this thread.
-          if (Res <> 0) then
+          Res := WIFI_STATUS_INVALID_PARAMETER;
+          while (Res <> WIFI_STATUS_SUCCESS) do
           begin
-            {$ifdef CYW43455_DEBUG}
-            if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Wireless Join returned fail ' + inttostr(res));
-            {$endif}
-          end
-          else
-            WIFILogInfo(nil, 'Successfully reconnected to the WIFI network');
+            Res := FirmwareWirelessJoinNetwork(FSSID, FKey, FCountry, WIFIJoinBlocking, WIFIReconnectNever, FBSSID, FUseBSSID); // do *not* call with WIFIReconnectAlways from this thread.
+            if (Res <> 0) then
+            begin
+              {$ifdef CYW43455_DEBUG}
+              if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Wireless Join returned fail ' + inttostr(res));
+              {$endif}
+            end
+            else
+              WIFILogInfo(nil, 'Successfully reconnected to the WIFI network');
+          end;
         end;
-        {$endif}
       end
       else
+      begin
         WIFILogInfo(nil, 'Not reconnecting as reconnections are disabled');
+      end;
+    end;
   end;
 end;
 
@@ -6933,7 +6935,27 @@ begin
 end;
 
 
-{$ifdef supplicant}
+procedure DoSendDriverNewPacketData(data : pointer);
+var
+  PacketXFerP : PUltiboPacketXFer;
+begin
+ try
+   PacketXFerP := PUltiboPacketXFer(data);
+   try
+    ultibo_driver_new_packet_data(@PacketXFerP^.source_address[0], PacketXFerP^.packetbufferp, PacketXFerP^.DataLength);
+
+   except
+     WIFILogError(nil, 'An exception occurred in the ultibo_driver_new_packet_data' + inttohex(longword(exceptaddr), 8));
+   end;
+
+   FreeMem(PacketXFerP^.packetbufferp);
+   FreeMem(PacketXFerP);
+
+ except
+   WIFILogError(nil, 'An exception occurred in dosenddrivernewpacketdata at ' + inttohex(longword(exceptaddr), 8));
+ end;
+end;
+
 procedure EAPOLCallback(Event : TWIFIEvent;
             EventRecordP : pwhd_event;
             RequestItemP : PWIFIRequestItem;
@@ -6941,6 +6963,7 @@ procedure EAPOLCallback(Event : TWIFIEvent;
 var
   packetbufferp : pbyte;
   EtherHeaderP : pether_header;
+  PacketXFerP : PUltiboPacketXFer;
 begin
   if (Event = WLC_E_EAPOL_MSG) then
   begin
@@ -6949,7 +6972,26 @@ begin
     EtherHeaderP := pether_header(RequestItemP^.UserDataP);
     packetbufferp := PByte(EtherHeaderP) + sizeof(ether_header);
 
-    ultibo_driver_new_packet_data(@EtherHeaderP^.source_address[0], packetbufferp, DataLength);
+    // Instead of sending the packet data directly to the supplicant, we instead
+    // copy it into another structure and then use an ultibo worker task to actually
+    // make the call to the supplicant. The reason for this is that it avoids a
+    // deadlock scenario where the supplicant thread and the wifi worker thread are
+    // are holding the locks which each other need to proceed (the network buffer
+    // lock and the packet queue lock).
+    // This isn't all that efficient but the EAPOL negotiation only happens at
+    // connection time and not at all thereafter.
+
+    getmem(PacketXferP, sizeof(TUltiboPacketXFer));
+    getmem(PacketXFerP^.packetbufferp, DataLength);
+    move(EtherHeaderP^.source_address[0], PacketXFerP^.source_address[0], 6);
+    move(packetbufferp^, PacketXFerP^.packetbufferp^, DataLength);
+    PacketXFerP^.DataLength := DataLength;
+
+    // the task will release the allocated memory.
+    WorkerSchedule(0, @DoSendDriverNewPacketData, PacketXFerP, nil)
+
+    // no longer called directly.
+    // ultibo_driver_new_packet_data(@EtherHeaderP^.source_address[0], packetbufferp, DataLength);
 
   end
   else
@@ -6973,6 +7015,7 @@ var
   RequestEntryP : PWIFIRequestItem;
   extjoinparams : wl_extjoin_params;
   auth_mfp : longword;
+  k : integer;
 
 begin
  fillchar(countrysettings, 0, sizeof(countrysettings));
@@ -7094,11 +7137,13 @@ begin
 
   RequestEntryP := WIFIWorkerThread.AddRequest(0, [WLC_E_SET_SSID, WLC_E_LINK], @JoinCallback, nil);
 
-  {wait for 5 seconds or a completion signal.}
-  SemaphoreWaitEx(RequestEntryP^.Signal, 5000);
-
   {Set EAPOL not completed}
   PCYW43455Network(WIFI^.NetworkP)^.EAPOLCompleted := False;
+  for k := 0 to WPA_KEY_MAX do
+    PCYW43455Network(WIFI^.NetworkP)^.ValidKeys[k] := false;
+
+  {wait for a completion signal or timeout.}
+  SemaphoreWaitEx(RequestEntryP^.Signal, 10000);
 
   if (RequestEntryP^.RegisteredEvents = []) then
   begin
@@ -7134,9 +7179,12 @@ begin
   if (not tryentercriticalsection(EAPOLQueueLock)) then
   begin
     CriticalSectionHandle := TCriticalSectionHandle(EAPOLQueueLock.LockSemaphore);
-    writeln(trace, ' failed to get critical section. ownner=',ThreadGetName(CriticalSectionOwner(CriticalSectionHandle)), ' count=',CriticalSectionCount(CriticalSectionHandle), ' current=',ThreadGetName(ThreadGetCurrent));
+    WIFILogError(nil, trace + ' LockEAPOLPacketQueue failed to get critical section. ownner='+
+                      ThreadGetName(CriticalSectionOwner(CriticalSectionHandle))+
+                      ' count=' + inttostr(CriticalSectionCount(CriticalSectionHandle))+
+                      ' current=' + ThreadGetName(ThreadGetCurrent));
     EnterCriticalSection(EAPOLQueueLock);
-    writeln(trace, 'got critical section');
+    WIFILogError(nil, 'LockEAPOLPacketQueue lock finally acquired');
   end;
 end;
 
@@ -7146,15 +7194,27 @@ begin
 end;
 
 procedure LockSendPacketQueue; cdecl;
+var
+ CriticalSectionHandle:TCriticalSectionHandle;
 begin
- EnterCriticalSection(EAPOLQueueLock);
+  if (not tryentercriticalsection(EAPOLQueueLock)) then
+  begin
+    CriticalSectionHandle := TCriticalSectionHandle(EAPOLQueueLock.LockSemaphore);
+    WIFILogError(nil, 'LockSendPacketQueue failed to get critical section. ownner=' +
+                      ThreadGetName(CriticalSectionOwner(CriticalSectionHandle)) +
+                      ' count=' + inttostr(CriticalSectionCount(CriticalSectionHandle)) +
+                      ' current=' + ThreadGetName(ThreadGetCurrent));
+    EnterCriticalSection(EAPOLQueueLock);
+    WIFILogError(nil, 'LockSendPacketQueue lock finally acquired');
+  end;
+
 //  EnterCriticalSection(L2SendQueueLock);
 end;
 
 procedure UnlockSendPacketQueue; cdecl;
 begin
 //  LeaveCriticalSection(L2SendQueueLock);
- LeaveCriticalSection(EAPOLQueueLock);
+  LeaveCriticalSection(EAPOLQueueLock);
 end;
 
 
@@ -7166,15 +7226,10 @@ var
   KeyP : PWPAKey;
   pairwise : boolean;
 begin
+ try
   Result := 0;
 
-  {check which key is being set as this is our clue how far through the process we are}
-  {key_idx=0 is first, so when we reach 1 we've got the other key from message 3}
-  if (key_idx = 1) then
-  begin
-    {this is the second key, so we're nearing the end of the EAPOL negotiation}
-    PCYW43455Network(WIFI^.NetworkP)^.EAPOLCompleted := true;
-  end;
+  PCYW43455Network(WIFI^.NetworkP)^.ValidKeys[key_idx] := true;
 
   {probably a request to clear the key - ignore for now.}
   if (addr = nil) then
@@ -7216,6 +7271,10 @@ begin
   KeyP^.ivlow := pqword(seq)^ and $ffff;
   if (pairwise) then
     move(addr^, KeyP^.ethaddr[0], 6);
+
+ except
+   WIFILogError(nil, 'Exception in SetKey at ' + inttohex(longword(exceptaddr), 8));
+ end;
 end;
 
 
@@ -7280,24 +7339,20 @@ end;
 procedure DoNetworkNotify(data : pointer);
 var
   KeyP : PWPAKey;
+  k : integer;
 begin
   {set both keys here before bringing up the network.}
-  WIFILogInfo(nil, 'Setting key 0');
+  for k := 0 to WPA_KEY_MAX do
+    if (PCYW43455Network(WIFI^.NetworkP)^.ValidKeys[k]) then
+    begin
+      WIFILogInfo(nil, 'Setting key ' + k.ToString);
 
-  KeyP := @(PCYW43455Network(WIFI^.NetworkP)^.WPAKeys[0]);
-  if (WirelessSetVar(WIFI, 'wsec_key', PByte(KeyP), sizeof(TWPAKey), 'ultibosetkey') <> ERROR_SUCCESS) then
-    WIFILogError(nil, 'Failed to update wsec_key in UltiboSetKey')
-  else
-    WIFILogInfo(nil, 'Successfully set the wsec_key var');
-
-  WIFILogInfo(nil, 'Setting key 1');
-
-  KeyP := @(PCYW43455Network(WIFI^.NetworkP)^.WPAKeys[1]);
-  if (WirelessSetVar(WIFI, 'wsec_key', PByte(KeyP), sizeof(TWPAKey), 'ultibosetkey') <> ERROR_SUCCESS) then
-    WIFILogError(nil, 'Failed to update wsec_key in UltiboSetKey')
-  else
-    WIFILogInfo(nil, 'Successfully set the wsec_key var');
-
+      KeyP := @(PCYW43455Network(WIFI^.NetworkP)^.WPAKeys[k]);
+      if (WirelessSetVar(WIFI, 'wsec_key', PByte(KeyP), sizeof(TWPAKey), 'ultibosetkey') <> ERROR_SUCCESS) then
+        WIFILogError(nil, 'Failed to update wsec_key in UltiboSetKey key=' + k.tostring)
+      else
+        WIFILogInfo(nil, 'Successfully set the wsec_key var key=' + k.tostring);
+    end;
 
   {Set Status to Up}
   WIFI^.NetworkP^.NetworkStatus := NETWORK_STATUS_UP;
@@ -7313,7 +7368,7 @@ end;
 
 procedure UltiboEAPOLComplete; cdecl;
 begin
-  {don't really need this function anymore - leave stub for now but expect to remove it.}
+  PCYW43455Network(WIFI^.NetworkP)^.EAPOLCompleted := true;
   WIFILogInfo(nil, 'EAPOL auth is complete.');
 end;
 
@@ -7328,6 +7383,12 @@ constructor TWPASupplicantThread.create;
 begin
   {the thread is created suspended. We'll let it run when the application asks for a connection.}
   inherited Create(True);
+  FreeOnTerminate := true;
+end;
+
+destructor TWPASupplicantThread.Destroy;
+begin
+  inherited Destroy;
 end;
 
 procedure TWPASupplicantThread.Execute;
@@ -7368,7 +7429,6 @@ begin
   end;
 
 end;
-{$endif}
 
 initialization
   if WIFI_AUTO_INIT then
