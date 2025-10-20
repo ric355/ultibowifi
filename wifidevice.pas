@@ -1542,7 +1542,7 @@ var
   // driver source instead of having to change the supplicant source.
   WPASupplicantLogLevel : integer = MSG_INFO; cvar;
 
-  WIFI_DEFAULT_LOG_LEVEL:LongWord = WIFI_LOG_LEVEL_NONE; {Minimum level for WIFI messages.  Only messages with level greater than or equal to this will be printed}
+  WIFI_DEFAULT_LOG_LEVEL:LongWord = WIFI_LOG_LEVEL_ERROR; {Minimum level for WIFI messages.  Only messages with level greater than or equal to this will be printed}
 
 
 implementation

@@ -65,20 +65,14 @@ INCLUDE += \
 	  -I src/common \
 	  -I src/crypto \
 	  -I src/rsn_supp \
-	  -I src/utils
+	  -I src/utils \
+	  -I $(API_PATH)/include
 
 DEFINE	+= -DCONFIG_DRIVER_ULTIBO -DIEEE8021X_EAPOL
 
 EXTRACLEAN += $(OBJS2) $(OBJS2:.o=.d)
 
-HOME ?= .
-
-AARCH	 ?= 32
-RASPPI	 ?= 3
 PREFIX	 ?= arm-none-eabi-
-
-# see: doc/stdlib-support.txt
-STDLIB_SUPPORT ?= 1
 
 FLOAT_ABI ?= hard
 
@@ -91,11 +85,11 @@ AR	= $(PREFIX)ar
 
 OPTIMIZE ?= -O2
 
-DEFINE	+= -D__DYNAMIC_REENT__ -D__ultibo__ -DRASPPI=$(RASPPI) -DSTDLIB_SUPPORT=$(STDLIB_SUPPORT) \
-	   -D__VCCOREVER__=0x04000000 -U__unix__ -U__linux__ #-DNDEBUG
+DEFINE	+= -D__DYNAMIC_REENT__ -D__LARGE64_FILES -D_REENT_BACKWARD_BINARY_COMPAT -D_POSIX_THREADS -DFD_SETSIZE=1024 -D__ultibo__ \
+		-U__unix__ -U__linux__ #-DNDEBUG
 
 AFLAGS	+= $(ARCH) $(DEFINE) $(INCLUDE) $(OPTIMIZE)
-CFLAGS	+= $(ARCH) -Wall -fsigned-char -ffreestanding $(DEFINE) $(INCLUDE) $(OPTIMIZE) -g
+CFLAGS	+= $(ARCH) -Wall -fsigned-char $(DEFINE) $(INCLUDE) $(OPTIMIZE) -g
 
 #pizero
 
