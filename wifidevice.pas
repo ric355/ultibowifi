@@ -6127,7 +6127,7 @@ end;
 
 constructor TWIFIWorkerThread.Create(CreateSuspended : boolean; AWIFI : PWIFIDevice);
 begin
-  inherited Create(CreateSuspended);
+  inherited Create(CreateSuspended,THREAD_STACK_DEFAULT_SIZE);
   FWIFI := AWIFI;
 
   FRequestQueueP := nil;
@@ -6839,7 +6839,7 @@ end;
 
 constructor TWirelessReconnectionThread.Create;
 begin
-  inherited Create(true);
+  inherited Create(true,THREAD_STACK_DEFAULT_SIZE);
 
   FConnectionLost := SemaphoreCreate(0);
   FUseBSSID := false;
@@ -7382,7 +7382,7 @@ end;
 constructor TWPASupplicantThread.create;
 begin
   {the thread is created suspended. We'll let it run when the application asks for a connection.}
-  inherited Create(True);
+  inherited Create(True,THREAD_STACK_DEFAULT_SIZE);
   FreeOnTerminate := true;
 end;
 
