@@ -26,9 +26,9 @@ firmware:
 	wget -q -O brcmfmac43456-sdio.clm_blob $(BASEURL)/brcm/brcmfmac43456-sdio.clm_blob
 
 firmware5:
-	wget -q -O brcmfmac43455-sdio.raspberrypi,5-model-b.bin $(BASEURL)/cypress/cyfmac43455-sdio-minimal.bin
-	wget -q -O brcmfmac43455-sdio.raspberrypi,5-model-b.txt $(BASEURL)/brcm/brcmfmac43455-sdio.txt
-	wget -q -O brcmfmac43455-sdio.raspberrypi,5-model-b.clm_blob $(BASEURL)/cypress/cyfmac43455-sdio.clm_blob
+	wget -q -O brcmfmac43455-sdio.raspberrypi_5-model-b.bin $(BASEURL)/cypress/cyfmac43455-sdio-minimal.bin
+	wget -q -O brcmfmac43455-sdio.raspberrypi_5-model-b.txt $(BASEURL)/brcm/brcmfmac43455-sdio.txt
+	wget -q -O brcmfmac43455-sdio.raspberrypi_5-model-b.clm_blob $(BASEURL)/cypress/cyfmac43455-sdio.clm_blob
 
 clean:
 	rm -f *.bin *.txt *.clm_blob
