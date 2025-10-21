@@ -1,5 +1,4 @@
 ppas.sh
-*.txt
 *.elf
 *.img
 lib/*
