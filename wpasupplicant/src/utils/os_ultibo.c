@@ -21,7 +21,8 @@ int os_get_reltime(struct os_reltime *t)
 void * os_zalloc(size_t size)
 {
 	void *p = malloc(size);
-	memset(p, 0, size);
+	if (p)
+		memset(p, 0, size);
 	return p;
 }
 

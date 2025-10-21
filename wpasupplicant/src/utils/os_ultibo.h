@@ -3,6 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#include <sys/types.h>
+#include <ctype.h>
+#include <sys/select.h>
 
 #define CONFIG_CRYPTO_INTERNAL
 #define __LITTLE_ENDIAN	1234

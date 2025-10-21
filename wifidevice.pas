@@ -1542,7 +1542,7 @@ var
   // driver source instead of having to change the supplicant source.
   WPASupplicantLogLevel : integer = MSG_INFO; cvar;
 
-  WIFI_DEFAULT_LOG_LEVEL:LongWord = WIFI_LOG_LEVEL_NONE; {Minimum level for WIFI messages.  Only messages with level greater than or equal to this will be printed}
+  WIFI_DEFAULT_LOG_LEVEL:LongWord = WIFI_LOG_LEVEL_ERROR; {Minimum level for WIFI messages.  Only messages with level greater than or equal to this will be printed}
 
 
 implementation
@@ -1584,7 +1584,7 @@ var
     	    ( chipid : $4330; chipidrev : 4; firmwarefilename: 'fw_bcm40183b2.bin'; configfilename: 'bcmdhd.cal.40183.26MHz'; regufilename : ''),
     	    ( chipid : 43362; chipidrev : 0; firmwarefilename: 'fw_bcm40181a0.bin'; configfilename: 'bcmdhd.cal.40181'; regufilename : ''),
     	    ( chipid : 43362; chipidrev : 1; firmwarefilename: 'fw_bcm40181a2.bin'; configfilename: 'bcmdhd.cal.40181'; regufilename : ''),
-    	    ( chipid : 43430; chipidrev : 1; firmwarefilename: 'brcmfmac43430-sdio.bin'; configfilename: 'brcmfmac43430-sdio.txt'; regufilename : ''),
+    	    ( chipid : 43430; chipidrev : 1; firmwarefilename: 'brcmfmac43430-sdio.bin'; configfilename: 'brcmfmac43430-sdio.txt'; regufilename : 'brcmfmac43430-sdio.clm_blob'),
 {Pi Zero2W} ( chipid : 43430; chipidrev : 2; firmwarefilename: 'brcmfmac43436-sdio.bin'; configfilename: 'brcmfmac43436-sdio.txt'; regufilename : 'brcmfmac43436-sdio.clm_blob'),
     	    ( chipid : $4345; chipidrev : 6; firmwarefilename: 'brcmfmac43455-sdio.bin'; configfilename: 'brcmfmac43455-sdio.txt'; regufilename : 'brcmfmac43455-sdio.clm_blob'),
     	    ( chipid : $4345; chipidrev : 9; firmwarefilename: 'brcmfmac43456-sdio.bin'; configfilename: 'brcmfmac43456-sdio.txt'; regufilename : 'brcmfmac43456-sdio.clm_blob')
@@ -6127,7 +6127,7 @@ end;
 
 constructor TWIFIWorkerThread.Create(CreateSuspended : boolean; AWIFI : PWIFIDevice);
 begin
-  inherited Create(CreateSuspended);
+  inherited Create(CreateSuspended,THREAD_STACK_DEFAULT_SIZE);
   FWIFI := AWIFI;
 
   FRequestQueueP := nil;
@@ -6839,7 +6839,7 @@ end;
 
 constructor TWirelessReconnectionThread.Create;
 begin
-  inherited Create(true);
+  inherited Create(true,THREAD_STACK_DEFAULT_SIZE);
 
   FConnectionLost := SemaphoreCreate(0);
   FUseBSSID := false;
@@ -7382,7 +7382,7 @@ end;
 constructor TWPASupplicantThread.create;
 begin
   {the thread is created suspended. We'll let it run when the application asks for a connection.}
-  inherited Create(True);
+  inherited Create(True,THREAD_STACK_DEFAULT_SIZE);
   FreeOnTerminate := true;
 end;
 

@@ -214,6 +214,10 @@ void ultibo_driver_new_packet_data(const u8 *src_addr, void *packetbuf, u16 len)
 
 	wpa_printf(MSG_DEBUG, "Ultibodriver: raw packet data received into supplicant queue; len=%d\n", len);
 	rawpacket = os_zalloc(sizeof(struct ultiborawpacket));
+	if (rawpacket == NULL) {
+		wpa_printf(MSG_ERROR, "Could not allocate memory for rawpacket");
+		return;
+	}
 
 	os_memmove(rawpacket->packetbuf, packetbuf, len);
 	os_memmove(rawpacket->srcaddr, src_addr, ETH_ALEN);
@@ -241,8 +245,19 @@ void UltiboScanResultCallback(char *ssid, void *scanres)
 
 	escanres = (struct brcmf_escan_result_le*)scanres;
 
-	//now we need to add this scan result to a list.
+	//check ie length
+	if (escanres->bss_info_le.ie_length >= 0xffff){
+		wpa_printf(MSG_ERROR, "Discarding invalid scanlistitem (ie_length=%u)", escanres->bss_info_le.ie_length);
+		return;
+	}
+
+    //now we need to add this scan result to a list.
 	scanlistitem = os_zalloc(sizeof(struct scanres_list_item) + escanres->bss_info_le.ie_length);
+	if (scanlistitem == NULL) {
+		wpa_printf(MSG_ERROR, "Could not allocate memory for scanlistitem (ie_length=%u)", escanres->bss_info_le.ie_length);
+		return;
+	}
+
 	os_memmove(&scanlistitem->scanres, escanres, sizeof(struct brcmf_escan_result_le) + escanres->bss_info_le.ie_length);
 	dl_list_add_tail(&scanreslist.list, &scanlistitem->list);
 
