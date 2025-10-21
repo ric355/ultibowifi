@@ -126,9 +126,21 @@ pi4/%.o: %.c
 %.d: %.c
 	@$(CC) $(CFLAGS) -M -MG -MT $*.o -MT $@ -MF $@ $<
 
-clean:
-	@echo "  CLEAN " `pwd`
-	@rm -f *.d *.o *.a *.elf *.lst *.img *.hex *.cir *.map *~ $(EXTRACLEAN)
+all: clean libwpa_supplicant_pizero.a libwpa_supplicant_pi3.a libwpa_supplicant_pi4.a
+
+clean: cleanpizero cleanpi3 cleanpi4
+
+cleanpizero:
+	@echo "Clean PiZero"
+	@rm -f pizero/*.o pizero/*.a $(EXTRACLEAN)
+
+cleanpi3:
+	@echo "Clean Pi3"
+	@rm -f pi3/*.o pi3/*.a $(EXTRACLEAN)
+
+cleanpi4:
+	@echo "Clean Pi4"
+	@rm -f pi4/*.o pi4/*.a $(EXTRACLEAN)
 
 libwpa_supplicant_pizero.a: ARCH = -DAARCH=32 -mcpu=arm1176jzf-s -marm -mfpu=vfp -mfloat-abi=$(FLOAT_ABI)
 libwpa_supplicant_pizero.a: KERNEL=pizero
