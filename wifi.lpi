@@ -43,7 +43,6 @@
               <CompileReasons Compile="False" Build="False" Run="False"/>
             </ExecuteBefore>
             <ExecuteAfter>
-              <Command Value="/home/richard/development/lazarus/ultibo_auto_upload/autoupload /home/richard/development/ultibowifi 192.168.1.83"/>
               <CompileReasons Compile="False" Run="False"/>
             </ExecuteAfter>
           </Other>
@@ -128,7 +127,6 @@
               <CompileReasons Compile="False" Build="False" Run="False"/>
             </ExecuteBefore>
             <ExecuteAfter>
-              <Command Value="/home/richard/development/lazarus/ultibo_auto_upload/autoupload /home/richard/development/ultibowifi 192.168.1.159"/>
               <CompileReasons Compile="False" Run="False"/>
             </ExecuteAfter>
           </Other>
