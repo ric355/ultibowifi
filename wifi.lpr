@@ -227,7 +227,7 @@ var
   cpupercent : double;
 begin
   cpupercent := CPUGetPercentage(core);
-  ConsoleWindowWriteEx(window, 'CPU' + inttostr(core) + ' '  + floattostr(cpupercent) + '%      ', 1, 3+core, COLOR_BLACK, COLOR_WHITE);
+  ConsoleWindowWriteEx(window, 'CPU' + inttostr(core) + ' '  + floattostr(cpupercent) + '%      ', 1, 4+core, COLOR_BLACK, COLOR_WHITE);
 end;
 
 
@@ -418,6 +418,7 @@ begin
 
     end;
 
+    ConsoleWindowWriteln(CPUWindow, 'WIFI Demo Version 1.50');
     ConsoleWindowWriteln(CPUWindow, 'CPU Utilisation');
 
     // Setup a slow blink of the activity LED to give an indcation that the Pi is still alive
