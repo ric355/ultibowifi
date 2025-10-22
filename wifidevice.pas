@@ -6005,7 +6005,9 @@ begin
  if (WIFI_USE_SUPPLICANT) then
  begin
     UltiboEloopTerminate;
-    WPASupplicantThread.Terminate;
+    if (WPASupplicantThread <> nil) then
+      WPASupplicantThread.Terminate;
+
     WPASupplicantThread := nil;
  end;
 end;
