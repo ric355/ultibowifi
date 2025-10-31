@@ -222,7 +222,7 @@ var
 
 begin
   LOGGING_INCLUDE_TICKCOUNT := True;
-  if StrToBoolDef(EnvironmentGet('SERIAL_LOGGING'), False) then
+  if StrToBoolDef(SysUtils.GetEnvironmentVariable('SERIAL_LOGGING'), False) then
   begin
     TopWindow := ConsoleWindowCreate(ConsoleDeviceGetDefault, CONSOLE_POSITION_TOP, TRUE);
     CPUWindow := ConsoleWindowCreate(ConsoleDeviceGetDefault, CONSOLE_POSITION_BOTTOM, FALSE);
@@ -336,7 +336,7 @@ begin
       Sleep(0);
     end;
 
-    WIFIDeviceP := WIFIDeviceFind(0);
+    WIFIDeviceP := PWIFIDevice(MMCDeviceFindByDescription(CYW43455_SDIO_DESCRIPTION));
 
     if (UseSupplicant) then
     begin
@@ -350,7 +350,7 @@ begin
     end
     else
     begin
-      if (SysUtils.GetEnvironmentVariable('WIFISCAN') = '1') then
+      if StrToBoolDef(SysUtils.GetEnvironmentVariable('WIFISCAN'), False) then
       begin
         ConsoleWindowWriteln(TopWindow, 'Performing a WIFI network scan...');
         ScanResultList := TStringList.Create;
