@@ -1417,7 +1417,7 @@ begin
  WIFI^.MMC.MMCState:=MMC_STATE_EJECTED;
  WIFI^.MMC.DeviceInitialize:=SDHCI^.DeviceInitialize;
  WIFI^.MMC.DeviceDeinitialize:=SDHCI^.DeviceDeinitialize;
- WIFI^.MMC.DeviceGetCardDetect:=nil; //SDHCI^.DeviceGetCardDetect; //To Do //TestingSDIO
+ WIFI^.MMC.DeviceGetCardDetect:=SDHCI^.DeviceGetCardDetect;
  WIFI^.MMC.DeviceGetWriteProtect:=SDHCI^.DeviceGetWriteProtect;
  WIFI^.MMC.DeviceSendCommand:=SDHCI^.DeviceSendCommand;
  WIFI^.MMC.DeviceSetIOS:=SDHCI^.DeviceSetIOS;
@@ -2070,8 +2070,6 @@ function WIFIDeviceInitialize(WIFI:PWIFIDevice):LongWord;
 {Reference: Section 3.6 of SD Host Controller Simplified Specification V3.0 partA2_300.pdf}
 var
  SDHCI:PSDHCIHost;
- //Command : TMMCCommand; //To Do //TestingSDIO
- //rcaraw : longword; //To Do //TestingSDIO
  updatevalue : word;
  ioreadyvalue : word;
  chipid : word;
@@ -2128,13 +2126,13 @@ begin
      Exit;
     end;
 
-   {Set Initial Bus Width}
    if WIFI_LOG_ENABLED then WIFILogInfo(nil,'Set bus width');
+   {Set Initial Bus Width}
    Result:=MMCDeviceSetBusWidth(@WIFI^.MMC,MMC_BUS_WIDTH_1);
    if Result <> MMC_STATUS_SUCCESS then Exit;
 
-   {Set Initial Clock}
    if WIFI_LOG_ENABLED then WIFILogInfo(nil,'Set device clock');
+   {Set Initial Clock}
    Result:=MMCDeviceSetClock(@WIFI^.MMC,MMC_BUS_SPEED_DEFAULT);
    if Result <> MMC_STATUS_SUCCESS then
      WIFILogError(nil, 'failed to set the clock speed to default')
@@ -2143,8 +2141,8 @@ begin
      if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Set device clock succeeded');
    {$else} ; {$endif}
 
-   {Perform an SDIO Reset}
    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'SDIO WIFI Device Reset');
+   {Perform an SDIO Reset}
    SDIODeviceReset(@WIFI^.MMC);
 
    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'WIFI Device Go Idle');
@@ -2164,20 +2162,23 @@ begin
      {$endif}
     end
     else
+    begin
       WIFILogError(nil, 'send operation condition failed');
+      Exit;
+    end;
 
    WIFI^.MMC.MMCState:=MMC_STATE_INSERTED;
    WIFI^.MMC.Device.DeviceBus:=DEVICE_BUS_SD;
    WIFI^.MMC.Device.DeviceType:=MMC_TYPE_SDIO;
-   //WIFI^.MMC.RelativeCardAddress:=0; //To Do //TestingSDIO
+   WIFI^.MMC.RelativeCardAddress:=0;
    WIFI^.MMC.OperationCondition := $200000;
 
    {$ifdef CYW43455_DEBUG}
    if WIFI_LOG_ENABLED then WIFILogDebug(nil,'MMC Initialize Card Type is SDIO');
    {$ENDIF}
 
-   {Get the Operation Condition}
    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Get operation condition');
+   {Get the Operation Condition}
    Result:=SDIODeviceSendOperationCondition(@WIFI^.MMC,False);
    if Result <> MMC_STATUS_SUCCESS then Exit;
 
@@ -2191,51 +2192,69 @@ begin
    Result:=MMCDeviceSelectCard(@WIFI^.MMC);
    if Result <> MMC_STATUS_SUCCESS then Exit;
 
-   WIFI^.MMC.BusWidth := MMC_BUS_WIDTH_4; //To Do  //TestingSDIO //See below
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Reading wifi device common registers');
+   {Read the common registers}
+   Result:=SDIODeviceReadCCCR(@WIFI^.MMC);
+   if Result <> MMC_STATUS_SUCCESS then Exit;
 
-   {Set Clock to high speed}
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Reading wifi device common CIS tuples');
+   {Read the common CIS tuples}
+   Result:=SDIODeviceReadCommonCIS(@WIFI^.MMC);
+   if Result <> MMC_STATUS_SUCCESS then Exit;
+
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Switching wifi device to high speed');
+   {Switch to High Speed if supported}
+   Result:=SDIODeviceEnableHighspeed(@WIFI^.MMC);
+   if Result = MMC_STATUS_SUCCESS then
+    begin
+     {Set Timing}
+     Result:=MMCDeviceSetTiming(@WIFI^.MMC,MMC_TIMING_SD_HS);
+     if Result <> MMC_STATUS_SUCCESS then Exit;
+    end
+   else if Result <> MMC_STATUS_UNSUPPORTED_REQUEST then
+    begin
+     Exit;
+    end;
+
    if WIFI_LOG_ENABLED then WIFILogInfo(nil,'Set device clock');
-   Result:=MMCDeviceSetClock(@WIFI^.MMC,SD_BUS_SPEED_HS); //To Do //TestingSDIO //See MMCDeviceInitializeSDIO
-   if Result <> MMC_STATUS_SUCCESS then
-     WIFILogError(nil, 'failed to set the clock speed to default')
-   else
-   begin
-     {$ifdef CYW43455_DEBUG}
-     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Set device clock succeeded');
-     {$endif}
-   end;
+   {Set Clock}
+   Result:=MMCDeviceSetClock(@WIFI^.MMC,SDIODeviceGetMaxClock(@WIFI^.MMC));
+   if Result <> MMC_STATUS_SUCCESS then Exit;
 
-   //To Do //TestingSDIO //See MMCDeviceInitializeSDIO
-   //{Switch to 4 bit bus if supported}
-   //Result:=SDIODeviceEnableWideBus(@WIFI^.MMC);
-   //if Result <> MMC_STATUS_SUCCESS then Exit;
+   {Switch to 4 bit bus if supported}
+   Result:=SDIODeviceEnableWideBus(@WIFI^.MMC);
+   if Result <> MMC_STATUS_SUCCESS then Exit;
 
    {Update Device}
    if not SDHCIHasCMD23(SDHCI) then WIFI^.MMC.Device.DeviceFlags:=WIFI^.MMC.Device.DeviceFlags and not(MMC_FLAG_SET_BLOCK_COUNT);
 
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'setting bus speed via common control registers');
+   //Below is mostly WiFI specific //To Do //TestingSDIO
 
-   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True,BUS_FUNCTION,SDIO_CCCR_SPEED,3,nil);            // emmc sets this to 2.
-   if (Result = MMC_STATUS_SUCCESS) then
-   begin
-     {$ifdef CYW43455_DEBUG}
-     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Successfully updated bus speed register');
-     {$endif}
-   end
-   else
-     WIFILogError(nil, 'Failed to update bus speed register');
+   //if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'setting bus speed via common control registers');
 
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'setting bus interface via common control registers');
+   //Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True,BUS_FUNCTION,SDIO_CCCR_SPEED,3,nil);            // emmc sets this to 2.
+   //if (Result = MMC_STATUS_SUCCESS) then
+   //begin
+   //  {$ifdef CYW43455_DEBUG}
+   //  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Successfully updated bus speed register');
+   //  {$endif}
+   //end
+   //else
+   //  WIFILogError(nil, 'Failed to update bus speed register');
 
-   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True,BUS_FUNCTION,SDIO_CCCR_IF, $2,nil);
-   if (Result = MMC_STATUS_SUCCESS) then
-   begin
-     {$ifdef CYW43455_DEBUG}
-     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Successfully updated bus interface control');
-     {$endif}
-   end
-   else
-     WIFILogError(nil, 'Failed to update bus interface control');
+
+   //if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'setting bus interface via common control registers');
+
+   //Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True,BUS_FUNCTION,SDIO_CCCR_IF, $2,nil);
+   //if (Result = MMC_STATUS_SUCCESS) then
+   //begin
+   //  {$ifdef CYW43455_DEBUG}
+   //  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Successfully updated bus interface control');
+   //  {$endif}
+   //end
+   //else
+   //  WIFILogError(nil, 'Failed to update bus interface control');
+
 
    if WIFI_LOG_ENABLED then WIFILogInfo(nil,'Waiting until the backplane is ready');
    blocksize := 0;
@@ -3764,8 +3783,6 @@ var
   RequestEntryP : PWIFIRequestItem;
   countrysettings : countryparams;
   clen : integer;
-  //extjoinparams : wl_extjoin_params; //To Do //TestingSDIO
-  //bandforchannel : word; //To Do //TestingSDIO
 
 begin
   (*
