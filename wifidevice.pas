@@ -378,8 +378,6 @@ type
       2 : (glom_cmd : IOCTL_GLOM_CMD);
   end;
 
-  TSDIODirection = (sdioRead, sdioWrite);
-
   byte4 = array[1..4] of byte;
 
   TFirmwareEntry = record
@@ -417,8 +415,8 @@ type
    dllctl : longword;
    resetvec : longword;
 
-   SDIOProtect : TSpinHandle;
    macaddress : THardwareAddress;
+   DMABuffer:Pointer;
 
    {additional statistics}
    ReceiveGlomPacketCount:LongWord;              {number of Glom packets received}
@@ -770,17 +768,6 @@ function WIFIHostStart(SDHCI: PSDHCIHost): LongWord;
 
 function WIFIDeviceInitialize(WIFI:PWIFIDevice):LongWord;
 
-function SDIOWIFIDeviceReset(WIFI:PWIFIDevice):LongWord;
-function WIFIDeviceGoIdle(WIFI:PWIFIDevice):LongWord;
-function SDWIFIDeviceSendInterfaceCondition(WIFI:PWIFIDevice):LongWord;
-function SDIOWIFIDeviceSendOperationCondition(WIFI:PWIFIDevice;Probe:Boolean):LongWord;
-function SDIOWIFIDeviceReadWriteDirect(WIFI:PWIFIDevice;Direction : TSDIODirection;Operation,Address:LongWord;Input:Byte;Output:PByte):LongWord;
-function SDIOWIFIDeviceReadWriteExtended(WIFI:PWIFIDevice; Direction : TSDIODirection;
-            Operation, Address : LongWord;
-            Increment : Boolean; Buffer : Pointer;
-            BlockCount, BlockSize : LongWord; trace : string =''): LongWord;
-function WIFIDeviceSendCommand(WIFI:PWIFIDevice;Command:PMMCCommand; txdata : PMMCData = nil):LongWord;
-function WIFIDeviceSetClock(WIFI:PWIFIDevice;Clock:LongWord):LongWord;
 function WIFIDeviceSetBackplaneWindow(WIFI : PWIFIDevice; addr : longword) : longword;
 function WIFIDeviceCoreScan(WIFI : PWIFIDevice) : longint;
 procedure WIFIDeviceRamScan(WIFI : PWIFIDevice);
@@ -789,10 +776,7 @@ function WIFIDeviceDownloadFirmware(WIFI : PWIFIDevice) : Longword;
 procedure sbreset(WIFI : PWIFIDevice; regs : longword; pre : word; ioctl : word);
 procedure sbdisable(WIFI : PWIFIDevice; regs : longword; pre : word; ioctl : word);
 
-function WIFIDeviceSendApplicationCommand(WIFI:PWIFIDevice;Command:PMMCCommand):LongWord;
-
 procedure WIFILogError(WIFI:PWIFIDevice;const AText:String); inline;
-function WIFIDeviceSetIOS(WIFI:PWIFIDevice):LongWord;
 
 {primary function for the user to call to join a wireless network}
 function WirelessJoinNetwork(JoinType : TWIFIJoinType;
@@ -834,9 +818,6 @@ var
   WIFI_LOG_ENABLED : boolean = false;
 
 var
-  // Auto init variable, move to GlobalConfig or restructure during integration
-  WIFI_AUTO_INIT : Boolean = False; //True; // Don't auto init during development
-
   // defines whether to inject waits into packet transmission when the firmware
   // credit value indicates internal buffers are filling up.
   CYW43455_USE_FIRMWARE_CREDIT_VALUE : Boolean = FALSE;
@@ -871,7 +852,7 @@ var
 
   WIFI_USE_SUPPLICANT : boolean = true;
 
-  dodumpregisters : boolean = false;
+  dodumpregisters : boolean;
 
   firmware : array[1..FIRWMARE_OPTIONS_COUNT] of TFirmwareEntry =
     (
@@ -1276,7 +1257,9 @@ begin
    begin
     if (Capabilities and SDHCI_CAN_DO_8BIT) <> 0 then
      begin
-      SDHCI^.Capabilities:=SDHCI^.Capabilities or MMC_CAP_8_BIT_DATA;
+      {Don't report 8 bit data unless the host explicitly adds it to the presets}
+      {Some hosts may be 8 bit capable but only have 4 data lines connected}
+      {SDHCI^.Capabilities:=SDHCI^.Capabilities or MMC_CAP_8_BIT_DATA;}
      end;
    end;
   {Check Presets}
@@ -1284,15 +1267,66 @@ begin
    begin
     SDHCI^.Capabilities:=SDHCI^.Capabilities or SDHCI^.PresetCapabilities;
    end;
+  if (SDHCI^.Quirks and SDHCI_QUIRK_FORCE_1_BIT_DATA) = 0 then
+   begin
+    SDHCI^.Capabilities:=SDHCI^.Capabilities or MMC_CAP_4_BIT_DATA;
+   end;
+  if (SDHCI^.Quirks2 and SDHCI_QUIRK2_HOST_NO_CMD23) <> 0 then
+   begin
+    SDHCI^.Capabilities:=SDHCI^.Capabilities and not(MMC_CAP_CMD23);
+   end;
+  if SDHCI^.PresetCapabilities2 <> 0 then
+   begin
+    SDHCI^.Capabilities2:=SDHCI^.Capabilities2 or SDHCI^.PresetCapabilities2;
+   end;
   {$IFDEF MMC_DEBUG}
   if MMC_LOG_ENABLED then MMCLogDebug(nil,'SDHCI Host capabilities = ' + IntToHex(SDHCI^.Capabilities,8));
+  if MMC_LOG_ENABLED then MMCLogDebug(nil,'SDHCI Host additional capabilities = ' + IntToHex(SDHCI^.Capabilities2,8));
   {$ENDIF}
 
-  {Determine Maximum Blocks}
-  SDHCI^.MaximumBlockCount:=MMC_MAX_BLOCK_COUNT;
+  {Set Maximum Request Size (Limited by SDMA boundary of 512KB)}
+  SDHCI^.MaximumRequestSize:=SIZE_512K;
+
+  {Determine Maximum Block Size}
+  if (SDHCI^.Quirks and SDHCI_QUIRK_FORCE_BLK_SZ_2048) <> 0 then
+   begin
+    SDHCI^.MaximumBlockSize:=2; {512 shl 2 = 2048}
+   end
+  else
+   begin
+    SDHCI^.MaximumBlockSize:=((Capabilities and SDHCI_MAX_BLOCK_MASK) shr SDHCI_MAX_BLOCK_SHIFT);
+    if SDHCI^.MaximumBlockSize >= 3 then
+     begin
+      if MMC_LOG_ENABLED then MMCLogWarn(nil,'SDHCI Invalid maximum block size, assuming 512 bytes');
+
+      SDHCI^.MaximumBlockSize:=0; {512 shl 0 = 512}
+     end;
+   end;
+  SDHCI^.MaximumBlockSize:=512 shl SDHCI^.MaximumBlockSize;
   {$IFDEF MMC_DEBUG}
-  if MMC_LOG_ENABLED then MMCLogDebug(nil,'SDHCI Host maximum blocks = ' + IntToStr(SDHCI^.MaximumBlockCount));
+  if MMC_LOG_ENABLED then MMCLogDebug(nil,'SDHCI Host maximum block size = ' + IntToStr(SDHCI^.MaximumBlockSize));
   {$ENDIF}
+
+  {Determine Maximum Block Count}
+  SDHCI^.MaximumBlockCount:=MMC_MAX_BLOCK_COUNT;
+  if (SDHCI^.Quirks and SDHCI_QUIRK_NO_MULTIBLOCK) <> 0 then SDHCI^.MaximumBlockCount:=1;
+  {$IFDEF MMC_DEBUG}
+  if MMC_LOG_ENABLED then MMCLogDebug(nil,'SDHCI Host maximum block count = ' + IntToStr(SDHCI^.MaximumBlockCount));
+  {$ENDIF}
+
+  {Set Minimum DMA Size}
+  SDHCI^.MinimumDMASize:=MMC_MAX_BLOCK_LEN;
+
+  {Set Maximum PIO Blocks}
+  SDHCI^.MaximumPIOBlocks:=0;
+
+  {Set SDMA Buffer Boundary}
+  SDHCI^.SDMABoundary:=SDHCI_DEFAULT_BOUNDARY_ARG;
+  {$IFDEF MMC_DEBUG}
+  if MMC_LOG_ENABLED then MMCLogDebug(nil,'SDHCI SDMA buffer boundary = ' + IntToStr(1 shl (SDHCI^.SDMABoundary + 12)));
+  {$ENDIF}
+
+  //More still from MMC (SDHCIHostStart) //To Do //TestingSDIO
 
   Network^.EAPOLCompleted:=false;
   Network^.NetworkUpSignal := SemaphoreCreate(0);
@@ -1342,11 +1376,13 @@ end;
 
 function CYW43455DeviceOpen(Network:PNetworkDevice):LongWord;
 var
- Status : longword;
+ Status:longword;
+ SDHCI:PSDHCIHost;
  Entry:PNetworkEntry;
 begin
  Result := ERROR_INVALID_PARAMETER;
 
+ // Under SDIO this section will be handled by SDHCIHostStart
  WIFI:=PWIFIDevice(MMCDeviceCreateEx(SizeOf(TWIFIDevice)));
  if WIFI = nil then
   begin
@@ -1364,24 +1400,35 @@ begin
 
  if WIFI_LOG_ENABLED then WIFILogInfo(nil,'Update WIFI Device');
 
- if PCYW43455Network(Network)^.SDHCI = nil then
+ SDHCI:=PCYW43455Network(Network)^.SDHCI;
+ if SDHCI = nil then
  begin
    WIFILogError(nil,'There was no SDHCI Device to initialise the WIFI device with');
    exit;
  end;
 
- WIFI^.ReceiveGlomPacketCount:=0;
- WIFI^.ReceiveGlomPacketSize:=0;
-
+ {Device}
  WIFI^.MMC.Device.DeviceBus:=DEVICE_BUS_SD;
  WIFI^.MMC.Device.DeviceType:=MMC_TYPE_SDIO;
  WIFI^.MMC.Device.DeviceFlags:=MMC_FLAG_NONE;
- WIFI^.MMC.Device.DeviceData:=PCYW43455Network(Network)^.SDHCI;
+ WIFI^.MMC.Device.DeviceData:=SDHCI;
  WIFI^.MMC.Device.DeviceDescription:=CYW43455_SDIO_DESCRIPTION;
-
- WIFI^.SDIOProtect := SpinCreate;
-
- WIFI^.MMC.DeviceInitialize:=nil;
+ {MMC}
+ WIFI^.MMC.MMCState:=MMC_STATE_EJECTED;
+ WIFI^.MMC.DeviceInitialize:=SDHCI^.DeviceInitialize;
+ WIFI^.MMC.DeviceDeinitialize:=SDHCI^.DeviceDeinitialize;
+ WIFI^.MMC.DeviceGetCardDetect:=nil; //SDHCI^.DeviceGetCardDetect; //To Do //TestingSDIO
+ WIFI^.MMC.DeviceGetWriteProtect:=SDHCI^.DeviceGetWriteProtect;
+ WIFI^.MMC.DeviceSendCommand:=SDHCI^.DeviceSendCommand;
+ WIFI^.MMC.DeviceSetIOS:=SDHCI^.DeviceSetIOS;
+ {Driver}
+ WIFI^.MMC.Voltages:=SDHCI^.Voltages;
+ WIFI^.MMC.Capabilities:=SDHCI^.Capabilities;
+ WIFI^.MMC.Capabilities2:=SDHCI^.Capabilities2;
+ {WIFI}
+ WIFI^.DMABuffer:=DMABufferAllocate(DMAHostGetDefault,IOCTL_MAX_BLKLEN);
+ WIFI^.ReceiveGlomPacketCount:=0;
+ WIFI^.ReceiveGlomPacketSize:=0;
 
  Network^.Device.DeviceData := WIFI;
 
@@ -1396,6 +1443,8 @@ begin
    MMCDeviceDestroy(@WIFI^.MMC);
    Exit;
   end;
+
+ // Under SDIO this section will remain in Open
 
  // set buffering sizes
  PCYW43455Network(Network)^.ReceiveRequestSize:=RECEIVE_REQUEST_PACKET_COUNT * sizeof(IOCTL_MSG); // space for 16 reads; actually more than that as a packet can't be as large as the IOCTL msg allocates
@@ -1442,7 +1491,7 @@ begin
    Entry^.Count:=0;
 
    {Allocate Request Buffer}
-   Entry^.Buffer:= GetMem(Entry^.Size); //may need something different to getmem here?
+   Entry^.Buffer:= DMABufferAllocate(DMAHostGetDefault,Entry^.Size);
    if Entry^.Buffer = nil then
     begin
      if WIFI_LOG_ENABLED then WIFILogError(nil,'CY43455: Failed to allocate receive buffer');
@@ -1492,7 +1541,7 @@ begin
    Entry^.Count:=PCYW43455Network(Network)^.TransmitPacketCount;
 
    {Allocate Request Buffer}
-   Entry^.Buffer:=GetMem(Entry^.Size);
+   Entry^.Buffer:=DMABufferAllocate(DMAHostGetDefault,Entry^.Size);
    if Entry^.Buffer = nil then
     begin
      if WIFI_LOG_ENABLED then WIFILogError(nil,'CY43455: Failed to allocate wifi transmit buffer');
@@ -1903,7 +1952,7 @@ end;
 
 {Initialization Functions}
 procedure WIFIPreInit;
-
+// Under SDIO this is not required
 const
   {$IFDEF RPI}
   SDHOST_DESCRIPTION = BCM2708_SDHOST_DESCRIPTION;
@@ -1918,15 +1967,20 @@ const
 var
   SDHCI: PSDHCIHost;
 begin
+  {$ifdef CYW43455_DEBUG}
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil, '========================= WIFIPreInit =========================');
+  {$endif}
+
   SDHCI := PSDHCIHost(DeviceFindByDescription(SDHOST_DESCRIPTION));
   if SDHCI <> nil then
     SDHCIHostStart(SDHCI);
 end;
 
 procedure WIFIInit;
+// Under SDIO this is not required
 var
   Network:PCYW43455Network;
-  SDHCI : PSDHCIHost;
+  SDHCI: PSDHCIHost;
 begin
  {Check Initialized}
  if WIFIInitialized then Exit;
@@ -1935,6 +1989,8 @@ begin
  WIFI_LOG_ENABLED:=(WIFI_DEFAULT_LOG_LEVEL <> WIFI_LOG_LEVEL_NONE);
 
  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'WIFI Initialize');
+
+ // Under SDIO this all moves to the Bind function
 
  {Create Network}
  Network:=PCYW43455Network(NetworkDeviceCreateEx(SizeOf(TCYW43455Network)));
@@ -2010,51 +2066,12 @@ begin
  WIFIInitialized:=True;
 end;
 
-function WIFIDeviceSetClock(WIFI:PWIFIDevice;Clock:LongWord):LongWord;
-var
- SDHCI:PSDHCIHost;
-begin
- {}
- Result:=MMC_STATUS_INVALID_PARAMETER;
-
- {Check MMC}
- if WIFI = nil then Exit;
-
- if WIFI_LOG_ENABLED then WIFILogInfo(nil,'WIFI Set Clock (Clock=' + IntToStr(Clock) + ')');
-
- {Get SDHCI}
- SDHCI:=PSDHCIHost(WIFI^.MMC.Device.DeviceData);
- if SDHCI = nil then Exit;
-
- {$ifdef CYW43455_DEBUG}
- if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'clock='+inttostr(clock) + ' max freq='+inttostr(sdhci^.MaximumFrequency));
- {$endif}
- {Check Clock}
- if Clock > SDHCI^.MaximumFrequency then
-  begin
-   Clock:=SDHCI^.MaximumFrequency;
-  end;
- if Clock < SDHCI^.MinimumFrequency then
-  begin
-   Clock:=SDHCI^.MinimumFrequency;
-  end;
-
- {Set Clock}
- WIFI^.MMC.Clock:=Clock;
-
- {Set IOS}
- Result:=WIFIDeviceSetIOS(WIFI);
-
- //See: mmc_set_clock in U-Boot mmc.c
- //See:
-end;
-
 function WIFIDeviceInitialize(WIFI:PWIFIDevice):LongWord;
 {Reference: Section 3.6 of SD Host Controller Simplified Specification V3.0 partA2_300.pdf}
 var
  SDHCI:PSDHCIHost;
- Command : TMMCCommand;
- rcaraw : longword;
+ //Command : TMMCCommand; //To Do //TestingSDIO
+ //rcaraw : longword; //To Do //TestingSDIO
  updatevalue : word;
  ioreadyvalue : word;
  chipid : word;
@@ -2111,9 +2128,14 @@ begin
      Exit;
     end;
 
+   {Set Initial Bus Width}
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil,'Set bus width');
+   Result:=MMCDeviceSetBusWidth(@WIFI^.MMC,MMC_BUS_WIDTH_1);
+   if Result <> MMC_STATUS_SUCCESS then Exit;
+
    {Set Initial Clock}
    if WIFI_LOG_ENABLED then WIFILogInfo(nil,'Set device clock');
-   Result:=WIFIDeviceSetClock(WIFI,MMC_BUS_SPEED_DEFAULT);
+   Result:=MMCDeviceSetClock(@WIFI^.MMC,MMC_BUS_SPEED_DEFAULT);
    if Result <> MMC_STATUS_SUCCESS then
      WIFILogError(nil, 'failed to set the clock speed to default')
    {$ifdef CYW43455_DEBUG}
@@ -2123,19 +2145,19 @@ begin
 
    {Perform an SDIO Reset}
    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'SDIO WIFI Device Reset');
-   SDIOWIFIDeviceReset(WIFI);
+   SDIODeviceReset(@WIFI^.MMC);
 
    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'WIFI Device Go Idle');
    {Set the Card to Idle State}
-   WIFIDeviceGoIdle(WIFI);
+   MMCDeviceGoIdle(@WIFI^.MMC);
 
    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'send interface condition request');
    {Get the Interface Condition}
-   SDWIFIDeviceSendInterfaceCondition(WIFI);
+   SDDeviceSendInterfaceCondition(@WIFI^.MMC);
 
    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'send operation condition');
    {Check for an SDIO Card}
-   if SDIOWIFIDeviceSendOperationCondition(WIFI,True) = MMC_STATUS_SUCCESS then
+   if SDIODeviceSendOperationCondition(@WIFI^.MMC,True) = MMC_STATUS_SUCCESS then
     begin
      {$ifdef CYW43455_DEBUG}
      if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'send operation condition successful');
@@ -2144,9 +2166,10 @@ begin
     else
       WIFILogError(nil, 'send operation condition failed');
 
+   WIFI^.MMC.MMCState:=MMC_STATE_INSERTED;
    WIFI^.MMC.Device.DeviceBus:=DEVICE_BUS_SD;
    WIFI^.MMC.Device.DeviceType:=MMC_TYPE_SDIO;
-   WIFI^.MMC.RelativeCardAddress:=0;
+   //WIFI^.MMC.RelativeCardAddress:=0; //To Do //TestingSDIO
    WIFI^.MMC.OperationCondition := $200000;
 
    {$ifdef CYW43455_DEBUG}
@@ -2155,63 +2178,24 @@ begin
 
    {Get the Operation Condition}
    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Get operation condition');
-   Result:=SDIOWIFIDeviceSendOperationCondition(WIFI,False);
-   if Result <> MMC_STATUS_SUCCESS then
-    begin
-//     Exit;
-    end;
+   Result:=SDIODeviceSendOperationCondition(@WIFI^.MMC,False);
+   if Result <> MMC_STATUS_SUCCESS then Exit;
 
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Set card relative address');
-
-   {send CMD3 get relative address}
-   FillChar(Command,SizeOf(TMMCCommand),0);
-   Command.Command:=MMC_CMD_SET_RELATIVE_ADDR;
-   Command.Argument:=0;
-   Command.ResponseType:=MMC_RSP_R6;
-   Command.Data:=nil;
-
-   Result := WIFIDeviceSendCommand(WIFI, @Command);
-   rcaraw := command.response[0];
-   WIFI^.MMC.RelativeCardAddress := (rcaraw shr 16) and $ff;
-   if (Result = MMC_STATUS_SUCCESS) then
-   begin
-      if WIFI_LOG_ENABLED then
-         WIFILogInfo(nil,' Card relative address is ' + inttohex((rcaraw shr 16) and $ff, 2))
-   end
-   else
-     WIFILogError(nil, 'Could not set relative card address; error='+inttostr(Result));
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Get card relative address');
+   {Get Relative Address}
+   Result:=SDDeviceSendRelativeAddress(@WIFI^.MMC);
+   if Result <> MMC_STATUS_SUCCESS then Exit;
 
    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Selecting wifi device with cmd7');
+   {Select Card}
+   Result:=MMCDeviceSelectCard(@WIFI^.MMC);
+   if Result <> MMC_STATUS_SUCCESS then Exit;
 
-   FillChar(Command,SizeOf(TMMCCommand),0);
-   Command.Command:= MMC_CMD_SELECT_CARD;
-   Command.Argument:= rcaraw;
-   Command.ResponseType:=MMC_RSP_R1;
-   Command.Data:=nil;
-
-   Result := WIFIDeviceSendCommand(WIFI, @Command);
-
-   if (Result = MMC_STATUS_SUCCESS) then
-   begin
-    {$ifdef CYW43455_DEBUG}
-     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Device successfully selected response[0]=' + inttohex(command.response[0], 8));
-    {$endif}
-     // for an I/O only card, the status bits are fixed at 0x0f (bits 12:9 of response[0])
-     if (((command.response[0] shr 9) and $f) = $f) then
-     begin
-     {$ifdef CYW43455_DEBUG}
-       if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'The card correctly reads as I/O only')
-     {$endif}
-     end
-     else
-       WIFILogError(nil, 'Something went wrong with the status bits');
-   end
-   else
-     WIFILogError(nil, 'Failed to select the card at rca='+inttohex((rcaraw shr 16) and $ff, 8));
+   WIFI^.MMC.BusWidth := MMC_BUS_WIDTH_4; //To Do  //TestingSDIO //See below
 
    {Set Clock to high speed}
    if WIFI_LOG_ENABLED then WIFILogInfo(nil,'Set device clock');
-   Result:=WIFIDeviceSetClock(WIFI,SD_BUS_SPEED_HS);
+   Result:=MMCDeviceSetClock(@WIFI^.MMC,SD_BUS_SPEED_HS); //To Do //TestingSDIO //See MMCDeviceInitializeSDIO
    if Result <> MMC_STATUS_SUCCESS then
      WIFILogError(nil, 'failed to set the clock speed to default')
    else
@@ -2221,9 +2205,17 @@ begin
      {$endif}
    end;
 
+   //To Do //TestingSDIO //See MMCDeviceInitializeSDIO
+   //{Switch to 4 bit bus if supported}
+   //Result:=SDIODeviceEnableWideBus(@WIFI^.MMC);
+   //if Result <> MMC_STATUS_SUCCESS then Exit;
+
+   {Update Device}
+   if not SDHCIHasCMD23(SDHCI) then WIFI^.MMC.Device.DeviceFlags:=WIFI^.MMC.Device.DeviceFlags and not(MMC_FLAG_SET_BLOCK_COUNT);
+
    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'setting bus speed via common control registers');
 
-   Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite,BUS_FUNCTION,SDIO_CCCR_SPEED,3,nil);            // emmc sets this to 2.
+   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True,BUS_FUNCTION,SDIO_CCCR_SPEED,3,nil);            // emmc sets this to 2.
    if (Result = MMC_STATUS_SUCCESS) then
    begin
      {$ifdef CYW43455_DEBUG}
@@ -2235,7 +2227,7 @@ begin
 
    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'setting bus interface via common control registers');
 
-   Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite,BUS_FUNCTION,SDIO_CCCR_IF, $2,nil);
+   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True,BUS_FUNCTION,SDIO_CCCR_IF, $2,nil);
    if (Result = MMC_STATUS_SUCCESS) then
    begin
      {$ifdef CYW43455_DEBUG}
@@ -2250,8 +2242,8 @@ begin
    retries := 0;
    repeat
      // attempt to set and read back the fn0 block size.
-     result1 := SDIOWIFIDeviceReadWriteDirect(WIFI, sdioWrite, BUS_FUNCTION, SDIO_CCCR_BLKSIZE, WIFI_BAK_BLK_BYTES, nil);
-     result2 := SDIOWIFIDeviceReadWriteDirect(WIFI, sdioRead, BUS_FUNCTION, SDIO_CCCR_BLKSIZE, 1, @blocksize);
+     result1 := SDIODeviceReadWriteDirect(@WIFI^.MMC, True, BUS_FUNCTION, SDIO_CCCR_BLKSIZE, WIFI_BAK_BLK_BYTES, nil);
+     result2 := SDIODeviceReadWriteDirect(@WIFI^.MMC, False, BUS_FUNCTION, SDIO_CCCR_BLKSIZE, 1, @blocksize);
      retries += 1;
      sleep(1);
    until ((result1 = MMC_STATUS_SUCCESS) and (result2 = MMC_STATUS_SUCCESS) and (blocksize = WIFI_BAK_BLK_BYTES)) or (retries > 500);
@@ -2267,13 +2259,13 @@ begin
    // note these are still writes to the common IO area (function 0).
    updatevalue := WIFI_BAK_BLK_BYTES;
    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'setting backplane fn1 block size to 64');
-   Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BUS_FUNCTION, BUS_BAK_BLKSIZE_REG, updatevalue and $ff,nil);
-   Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BUS_FUNCTION, BUS_BAK_BLKSIZE_REG+1,(updatevalue shr 8) and $ff,nil);
+   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BUS_FUNCTION, BUS_BAK_BLKSIZE_REG, updatevalue and $ff,nil);
+   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BUS_FUNCTION, BUS_BAK_BLKSIZE_REG+1,(updatevalue shr 8) and $ff,nil);
 
    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'setting backplane fn2 (radio) block size to 512');
    updatevalue := 512;
-   Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BUS_FUNCTION, BUS_RAD_BLKSIZE_REG, updatevalue and $ff,nil);
-   Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BUS_FUNCTION, BUS_RAD_BLKSIZE_REG+1,(updatevalue shr 8) and $ff,nil);
+   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BUS_FUNCTION, BUS_RAD_BLKSIZE_REG, updatevalue and $ff,nil);
+   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BUS_FUNCTION, BUS_RAD_BLKSIZE_REG+1,(updatevalue shr 8) and $ff,nil);
 
    // we only check the last result here. Needs changing really.
    if (Result = MMC_STATUS_SUCCESS) then
@@ -2287,7 +2279,7 @@ begin
 
    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'IO Enable backplane function 1');
    ioreadyvalue := 0;
-   Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite,BUS_FUNCTION,SDIO_CCCR_IOEx, 1 shl 1,nil);
+   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True,BUS_FUNCTION,SDIO_CCCR_IOEx, 1 shl 1,nil);
    if (Result = MMC_STATUS_SUCCESS) then
    begin
      {$ifdef CYW43455_DEBUG}
@@ -2303,7 +2295,7 @@ begin
    ioreadyvalue := 0;
    while (ioreadyvalue and (1 shl 1)) = 0 do
    begin
-     Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioRead,BUS_FUNCTION, SDIO_CCCR_IORx,  0, @ioreadyvalue);
+     Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,False,BUS_FUNCTION, SDIO_CCCR_IORx,  0, @ioreadyvalue);
      if (Result <> MMC_STATUS_SUCCESS) then
      begin
        WIFILogError(nil, 'Could not read IOReady value');
@@ -2317,9 +2309,9 @@ begin
    {$endif}
 
    chipid := 0;
-   Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioRead,BACKPLANE_FUNCTION,0,  0, @chipid);
-   Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioRead,BACKPLANE_FUNCTION,1,  0, pbyte(@chipid)+1);
-   Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioRead,BACKPLANE_FUNCTION,2,  0, @chipidrev);
+   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,False,BACKPLANE_FUNCTION,0,  0, @chipid);
+   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,False,BACKPLANE_FUNCTION,1,  0, pbyte(@chipid)+1);
+   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,False,BACKPLANE_FUNCTION,2,  0, @chipidrev);
    chipidrev := chipidrev and $f;
    if (Result = MMC_STATUS_SUCCESS) then
    begin
@@ -2366,22 +2358,22 @@ begin
    WIFIDeviceRamScan(WIFI);
 
    // Set clock on function 1
-   Result := SDIOWIFIDeviceReadWriteDirect(WIFI, sdioWrite, BACKPLANE_FUNCTION, BAK_CHIP_CLOCK_CSR_REG, 0, nil);
+   Result := SDIODeviceReadWriteDirect(@WIFI^.MMC, True, BACKPLANE_FUNCTION, BAK_CHIP_CLOCK_CSR_REG, 0, nil);
    if (Result <> MMC_STATUS_SUCCESS) then
      WIFILogError(nil, 'Unable to update config at chip clock csr register');
    MicrosecondDelay(10);
 
    // check active low power clock availability
 
-   Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BACKPLANE_FUNCTION, BAK_CHIP_CLOCK_CSR_REG, 0, nil);
+   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BACKPLANE_FUNCTION, BAK_CHIP_CLOCK_CSR_REG, 0, nil);
    sleep(1);
-   Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BACKPLANE_FUNCTION, BAK_CHIP_CLOCK_CSR_REG, Nohwreq or ReqALP, nil);
+   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BACKPLANE_FUNCTION, BAK_CHIP_CLOCK_CSR_REG, Nohwreq or ReqALP, nil);
 
    // now we keep reading them until we have some availability
    bytevalue := 0;
    while (bytevalue and (HTavail or ALPavail) = 0) do
    begin
-     Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioRead, BACKPLANE_FUNCTION, BAK_CHIP_CLOCK_CSR_REG, 0, @bytevalue);
+     Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,False, BACKPLANE_FUNCTION, BAK_CHIP_CLOCK_CSR_REG, 0, @bytevalue);
      if (Result <> MMC_STATUS_SUCCESS) then
        WIFILogError(nil, 'failed to read clock settings');
      MicrosecondDelay(10);
@@ -2393,14 +2385,14 @@ begin
 
    // finally we can clear active low power request. Not sure if any of this is needed to be honest.
    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'clearing active low power clock request');
-   Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BACKPLANE_FUNCTION, BAK_CHIP_CLOCK_CSR_REG, Nohwreq or ForceALP, nil);
+   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BACKPLANE_FUNCTION, BAK_CHIP_CLOCK_CSR_REG, Nohwreq or ForceALP, nil);
 
    MicrosecondDelay(65);
 
   WIFIDeviceSetBackplaneWindow(WIFI, WIFI^.chipcommon);
 
   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Disable pullups');
-  Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BACKPLANE_FUNCTION, gpiopullup, 0, nil);
+  Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BACKPLANE_FUNCTION, gpiopullup, 0, nil);
   if (Result = MMC_STATUS_SUCCESS) then
   begin
    {$ifdef CYW43455_DEBUG}
@@ -2410,7 +2402,7 @@ begin
   else
     WIFILogError(nil, 'Failed to disable SDIO extra pullups');
 
-  Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BACKPLANE_FUNCTION, Gpiopulldown, 0, nil);
+  Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BACKPLANE_FUNCTION, Gpiopulldown, 0, nil);
   if (Result = MMC_STATUS_SUCCESS) then
   begin
    {$ifdef CYW43455_DEBUG}
@@ -2435,7 +2427,7 @@ begin
    sbenable(WIFI);
 
    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Enabling interrupts for all functions');
-   Result := SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BUS_FUNCTION, SDIO_CCCR_IENx, (INTR_CTL_MASTER_EN or INTR_CTL_FUNC1_EN or INTR_CTL_FUNC2_EN), nil );
+   Result := SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BUS_FUNCTION, SDIO_CCCR_IENx, (INTR_CTL_MASTER_EN or INTR_CTL_FUNC1_EN or INTR_CTL_FUNC2_EN), nil );
    if (Result = MMC_STATUS_SUCCESS) then
    begin
      {$ifdef CYW43455_DEBUG}
@@ -2465,9 +2457,9 @@ begin
                   + inttohex((addr shr 24) and $ff, 8));
  {$endif}
 
- Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BACKPLANE_FUNCTION, BAK_WIN_ADDR_REG, (addr shr 8) and $ff,nil);
- Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BACKPLANE_FUNCTION, BAK_WIN_ADDR_REG+1,(addr shr 16) and $ff,nil);
- Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BACKPLANE_FUNCTION, BAK_WIN_ADDR_REG+2,(addr shr 24) and $ff,nil);
+ Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BACKPLANE_FUNCTION, BAK_WIN_ADDR_REG, (addr shr 8) and $ff,nil);
+ Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BACKPLANE_FUNCTION, BAK_WIN_ADDR_REG+1,(addr shr 16) and $ff,nil);
+ Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BACKPLANE_FUNCTION, BAK_WIN_ADDR_REG+2,(addr shr 24) and $ff,nil);
 
  if (Result = MMC_STATUS_SUCCESS) then
  begin
@@ -2477,1039 +2469,6 @@ begin
  end
  else
    WIFILogError(nil, 'something went wrong in setbackplanewindow');
-end;
-
-function SDIOWIFIDeviceReset(WIFI:PWIFIDevice):LongWord;
-{See: SDIO Simplified Specification V2.0, 4.4 Reset for SDIO}
-var
- Abort:Byte;
- Status:LongWord;
-begin
- {}
- {$ifdef CYW43455_DEBUG}
- if WIFI_LOG_ENABLED then WIFILogDebug(WIFI, 'SDIO WIFI Reset');
- {$endif}
-
- Result:=MMC_STATUS_INVALID_PARAMETER;
-
- {Check WIFI}
- if WIFI = nil then Exit;
-
- {Get Abort Value}
- {$ifdef CYW43455_DEBUG}
- if WIFI_LOG_ENABLED then WIFILogDebug(WIFI, 'get abort value');
- {$endif}
-
- Status:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioRead,BUS_FUNCTION,SDIO_CCCR_ABORT,0,@Abort);
- MicrosecondDelay(20000);
- if Status <> MMC_STATUS_SUCCESS then
-  begin
-   {$ifdef CYW43455_DEBUG}
-   if WIFI_LOG_ENABLED then WIFILogDebug(WIFI, 'WIFI Device Reset - SDIO_CCR_ABORT returned non zero result of ' + inttostr(status));
-   {$endif}
-
-   Abort:=$08;
-  end
- else
-  begin
-   {$ifdef CYW43455_DEBUG}
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'abort value success status');
-   {$endif}
-   Abort:=Abort or $08;
-  end;
-
- {Set Abort Value}
- {$ifdef CYW43455_DEBUG}
- if WIFI_LOG_ENABLED then WIFILogDebug(WIFI, 'Set abort value');
- {$endif}
-
- Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite,BUS_FUNCTION,SDIO_CCCR_ABORT,Abort,nil);
- MicrosecondDelay(20000);
-
- {$ifdef CYW43455_DEBUG}
- if WIFI_LOG_ENABLED then WIFILogDebug(WIFI, 'Result of setting abort='+inttostr(Result));
- {$endif}
-
- //See: sdio_reset in \linux-rpi-3.18.y\drivers\mmc\core\sdio_ops.c
- //
-end;
-
-function WIFIDeviceGoIdle(WIFI:PWIFIDevice):LongWord;
-var
- Status:LongWord;
- Command:TMMCCommand;
-begin
- {}
- Result:=MMC_STATUS_INVALID_PARAMETER;
-
- {Check WIFI}
- if WIFI = nil then Exit;
-
- {$ifdef CYW43455_DEBUG}
- if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Go Idle');
- {$endif}
-
- {Delay 1ms}
- MicrosecondDelay(1000);
-
- {Setup Command}
- FillChar(Command,SizeOf(TMMCCommand),0);
- Command.Command:=MMC_CMD_GO_IDLE_STATE;
- Command.Argument:=0;
- Command.ResponseType:=MMC_RSP_R1;
- Command.Data:=nil;
-
- {Send Command}
- Status:=WIFIDeviceSendCommand(WIFI,@Command);
- if Status <> MMC_STATUS_SUCCESS then
-  begin
-   {$ifdef CYW43455_DEBUG}
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI failed to go idle');
-   {$endif}
-
-   Result:=Status;
-   Exit;
-  end;
-
- {$ifdef CYW43455_DEBUG}
- if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'WIFI successfully went idle');
- {$endif}
-
- {Delay 2ms}
- MicrosecondDelay(2000);
-
- Result:=MMC_STATUS_SUCCESS;
-
- //See: mmc_go_idle in U-Boot mmc.c
- //     mmc_go_idle in \linux-rpi-3.18.y\drivers\mmc\core\mmc_ops.c
-end;
-
-function SDWIFIDeviceSendInterfaceCondition(WIFI:PWIFIDevice):LongWord;
-{See: 4.3.13 of SD Physical Layer Simplified Specification V4.10
-
- CMD8 (SEND_IF_COND) must be invoked to support SD 2.0 cards
- The card must be in Idle State before issuing this command
-
- This command will fail harmlessly for SD 1.0 cards
-}
-var
- Status:LongWord;
- SDHCI:PSDHCIHost;
- Command:TMMCCommand;
-begin
- {}
- Result:=MMC_STATUS_INVALID_PARAMETER;
-
- {Check WIFI}
- if WIFI = nil then Exit;
-
- {$ifdef CYW43455_DEBUG}
- if WIFI_LOG_ENABLED then WIFILogDebug(nil,'SD Send Interface Condition');
- {$endif}
-
- {Get SDHCI}
- SDHCI:=PSDHCIHost(WIFI^.MMC.Device.DeviceData);
- if SDHCI = nil then Exit;
-
- {Setup Command}
- FillChar(Command,SizeOf(TMMCCommand),0);
- Command.Command:=SD_CMD_SEND_IF_COND;
- Command.Argument:=SD_SEND_IF_COND_CHECK_PATTERN;
- if (SDHCI^.Voltages and SD_SEND_IF_COND_VOLTAGE_MASK) <> 0 then
-  begin
-   {Set bit 8 if the host supports voltages between 2.7 and 3.6 V}
-   Command.Argument:=(1 shl 8) or SD_SEND_IF_COND_CHECK_PATTERN;
-  end;
- Command.ResponseType:=MMC_RSP_R7;
- Command.Data:=nil;
-
- {Send Command}
- Status:=WIFIDeviceSendCommand(WIFI,@Command);
- if Status <> MMC_STATUS_SUCCESS then
-  begin
-   Result:=Status;
-   Exit;
-  end;
-
- {Check Response}
-   if (Command.Response[0] and $FF) <> SD_SEND_IF_COND_CHECK_PATTERN then
-    begin
-     WIFILogError(nil,'SD Send Interface Condition failure (Response=' + IntToHex(Command.Response[0] and $FF,8) + ')');
-     Exit;
-    end
-    else
-    begin
-      {$ifdef CYW43455_DEBUG}
-      if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'WIFI Send interface condition check pattern matches');
-      {$endif}
-    end;
-
-   {Get Response}
-   {$ifdef CYW43455_DEBUG}
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Interface Condition Response0=' + IntToHex(Command.Response[0] and $FF,8)
-     + 'Response1=' + IntToHex(Command.Response[1] and $FF,8));
-   {$endif}
-
-   WIFI^.MMC.InterfaceCondition:=Command.Response[0];
-
- Result:=MMC_STATUS_SUCCESS;
-
- //See: mmc_send_if_cond in U-Boot mmc.c
- //See: mmc_send_if_cond in \linux-rpi-3.18.y\drivers\mmc\core\sd_ops.c
-end;
-
-function SDIOWIFIDeviceSendOperationCondition(WIFI:PWIFIDevice;Probe:Boolean):LongWord;
-var
- Status:LongWord;
- Timeout:Integer;
- SDHCI:PSDHCIHost;
- Command:TMMCCommand;
-begin
- {}
- Result:=MMC_STATUS_INVALID_PARAMETER;
-
- {Check WIFI}
- if WIFI = nil then Exit;
-
- {$ifdef CYW43455_DEBUG}
- if WIFI_LOG_ENABLED then WIFILogDebug(nil,'SDIO Send Operation Condition');
- {$ENDIF}
-
- {Get SDHCI}
- SDHCI:=PSDHCIHost(WIFI^.MMC.Device.DeviceData);
- if SDHCI = nil then Exit;
-
- {Setup Command}
- FillChar(Command,SizeOf(TMMCCommand),0);
- Command.Command:=SDIO_CMD_SEND_OP_COND;
- Command.Argument:=0;
- if not(Probe) then
-   Command.Argument:=WIFI^.MMC.OperationCondition;
-
- Command.ResponseType:=MMC_RSP_R4;
- Command.Data:=nil;
-
- {Setup Timeout}
- Timeout:=100;
- {$ifdef CYW43455_DEBUG}
- if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'waiting for non-busy signal from wifi device');
- {$endif}
-
- while Timeout > 0 do
-  begin
-   {Send Command}
-   Status:=WIFIDeviceSendCommand(WIFI,@Command);
-   if Status <> MMC_STATUS_SUCCESS then
-    begin
-     WIFILogError(nil, 'sendoperationcondition devicesendcommand returned failed status ' + inttostr(status));
-     Result:=Status;
-     Exit;
-    end;
-
-   {Single pass only on probe}
-   if Probe then Break;
-
-   if (Command.Response[0] and MMC_OCR_BUSY) <> 0 then Break;
-
-   Dec(Timeout);
-   if Timeout = 0 then
-    begin
-     if WIFI_LOG_ENABLED then WIFILogError(nil,'SDIO Send Operation Condition Busy Status Timeout');
-     Exit;
-    end;
-   MillisecondDelay(10);
-  end;
-
- {$ifdef CYW43455_DEBUG}
- if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'wifi device is ready for action');
- {$endif}
-
- {Get Response}
- {$ifdef CYW43455_DEBUG}
-  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'operation condition returned as ' + inttostr(command.response[0]));
- {$endif}
-
-  WIFI^.MMC.OperationCondition:=Command.Response[0];
-  //To Do //SD_OCR_CCS etc (see: MMC/SD)
-
-  Result:=MMC_STATUS_SUCCESS;
-
-  //See: mmc_send_io_op_cond in \linux-rpi-3.18.y\drivers\mmc\core\sdio_ops.c
-end;
-
-function WIFIDeviceSetIOS(WIFI:PWIFIDevice):LongWord;
-var
- Value:Byte;
- SDHCI:PSDHCIHost;
-begin
- {}
- Result:=MMC_STATUS_INVALID_PARAMETER;
-
- {Check WIFI}
- if WIFI = nil then Exit;
-
- {$ifdef CYW43455_DEBUG}
- if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Set IOS');
- {$endif}
-
- {Check Set IOS}
- if Assigned(WIFI^.MMC.DeviceSetIOS) then
-  begin
-   Result:=WIFI^.MMC.DeviceSetIOS(@WIFI^.MMC);
-  end
- else
-  begin
-   {Default Method}
-   {Get SDHCI}
-   SDHCI:=PSDHCIHost(WIFI^.MMC.Device.DeviceData);
-   if SDHCI = nil then Exit;
-
-   {Set Control Register}
-   SDHCIHostSetControlRegister(SDHCI);
-
-   {Check Clock}
-   if WIFI^.MMC.Clock <> SDHCI^.Clock then
-    begin
-     SDHCIHostSetClock(SDHCI,WIFI^.MMC.Clock);
-     SDHCI^.Clock:=WIFI^.MMC.Clock;
-    end;
-
-   {Set Power}
-   SDHCIHostSetPower(SDHCI,FirstBitSet(SDHCI^.Voltages));
-
-   {Set Bus Width}
-   WIFI^.MMC.BusWidth := MMC_BUS_WIDTH_4;
-   Value:=SDHCIHostReadByte(SDHCI,SDHCI_HOST_CONTROL);
-(*   if WIFI^.MMC.BusWidth = MMC_BUS_WIDTH_8 then
-    begin
-     Value:=Value and not(SDHCI_CTRL_4BITBUS);
-     if (SDHCIGetVersion(SDHCI) >= SDHCI_SPEC_300) or ((SDHCI^.Quirks2 and SDHCI_QUIRK2_USE_WIDE8) <> 0) then
-      begin
-       Value:=Value or SDHCI_CTRL_8BITBUS;
-      end;
-    end
-   else
-    begin*)
-     if SDHCIGetVersion(SDHCI) >= SDHCI_SPEC_300 then
-      begin
-       {$ifdef CYW43455_DEBUG}
-       if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'turn off 8 bit bus');
-       {$endif}
-
-       Value:=Value and not(SDHCI_CTRL_8BITBUS);
-      end;
-
-     if WIFI^.MMC.BusWidth = MMC_BUS_WIDTH_4 then
-      begin
-       {$ifdef CYW43455_DEBUG}
-       if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'set 4 bit bus');
-       {$endif}
-
-       Value:=Value or SDHCI_CTRL_4BITBUS;
-      end
-     else
-      begin
-       {$ifdef CYW43455_DEBUG}
-       if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'turn off 4 bit bus');
-       {$endif}
-
-       Value:=Value and not(SDHCI_CTRL_4BITBUS);
-      end;
-    (*end;*)
-
-   // block gap control
-   SDHCIHostWriteByte(SDHCI, SDHCI_BLOCK_GAP_CONTROL, 0);
-   SDHCIHostWriteByte(SDHCI, SDHCI_POWER_CONTROL, 0);
-
-   {Update Bus Width}
-   SDHCI^.BusWidth:=WIFI^.MMC.BusWidth;
-
-   {Check Clock}
-   if WIFI^.MMC.Clock > 26000000 then
-    begin
-     Value:=Value or SDHCI_CTRL_HISPD;
-    end
-   else
-    begin
-     Value:=Value and not(SDHCI_CTRL_HISPD);
-    end;
-   if (SDHCI^.Quirks and SDHCI_QUIRK_NO_HISPD_BIT) <> 0 then
-    begin
-     Value:=Value and not(SDHCI_CTRL_HISPD);
-    end;
-   //To Do //More here (Reset SD Clock Enable / Re-enable SD Clock) //See: bcm2835_mmc_set_ios in \linux-rpi-3.18.y\drivers\mmc\host\bcm2835-mmc.c
-                 //Even more quirks                                       //See: sdhci_do_set_ios in \linux-rpi-3.18.y\drivers\mmc\host\sdhci.c
-   SDHCIHostWriteByte(SDHCI,SDHCI_HOST_CONTROL,Value);
-
-   {Update Timing}
-   SDHCI^.Timing:=WIFI^.MMC.Timing;
-
-   Result:=MMC_STATUS_SUCCESS;
-  end;
-
- //See: mmc_set_ios in mmc.c
- //     sdhci_set_ios in sdhci.c
- //See: bcm2835_mmc_set_ios in \linux-rpi-3.18.y\drivers\mmc\host\bcm2835-mmc.c
- //     sdhci_do_set_ios in \linux-rpi-3.18.y\drivers\mmc\host\sdhci.c
-end;
-
-function SDIOWIFIDeviceReadWriteDirect(WIFI:PWIFIDevice; Direction : TSDIODirection; Operation,Address:LongWord; Input:Byte; Output:PByte):LongWord;
-var
- Status:LongWord;
- SDHCI:PSDHCIHost;
- Command:TMMCCommand;
-begin
- {}
- Result:=MMC_STATUS_INVALID_PARAMETER;
-
- {Check WIFI}
- if WIFI = nil then Exit;
-
- SpinLock(WIFI^.SDIOProtect);
- try
-   {$ifdef CYW43455_SDHCI_DEBUG}
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'sdio read write direct address='+inttohex(address, 8) + ' value='+inttohex(input, 2)
-       + ' direction='+inttostr(ord(direction)) +' [0=read, 1=write]');
-   {$endif}
-
-   {Get SDHCI}
-   SDHCI:=PSDHCIHost(WIFI^.MMC.Device.DeviceData);
-   if SDHCI = nil then Exit;
-
-   {Check Operation}
-   if Operation > 7 then Exit;
-
-   {Check Address}
-   if (Address and not($0001FFFF)) <> 0 then Exit;
-
-   {Setup Command}
-   FillChar(Command,SizeOf(TMMCCommand),0);
-   Command.Command:=SDIO_CMD_RW_DIRECT;
-   Command.Argument:=0;
-   Command.ResponseType:=MMC_RSP_R5;
-   Command.Data:=nil;
-
-   {Setup Argument}
-   if Direction = sdioWrite then Command.Argument:=$80000000;
-   Command.Argument:=Command.Argument or (Operation shl 28);
-   if (Direction = sdioWrite) and (Output <> nil) then Command.Argument:=Command.Argument or $08000000;
-   Command.Argument:=Command.Argument or (Address shl 9);
-   Command.Argument:=Command.Argument or Input;
-
-   {Send Command}
-   Status:=WIFIDeviceSendCommand(WIFI,@Command);
-   if Status <> MMC_STATUS_SUCCESS then
-    begin
-     {$ifdef CYW43455_SDHCI_DEBUG}
-     if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFIDeviceCommand returne fail status of ' + inttostr(result));
-     {$endif}
-
-     Result:=Status;
-     Exit;
-    end;
-
-   {Check Result}
-   {$ifdef CYW43455_SDHCI_DEBUG}
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'check result (response[0]='+inttostr(command.response[0]));
-   {$endif}
-
-   if (Command.Response[0] and SDIO_RSP_R5_ERROR) <> 0 then Exit;
-   if (Command.Response[0] and SDIO_RSP_R5_FUNCTION_NUMBER) <> 0 then Exit;
-   if (Command.Response[0] and SDIO_RSP_R5_OUT_OF_RANGE) <> 0 then Exit;
-
-   {Get Output}
-   if Output <> nil then
-       Output^:=Command.Response[0] and $FF;
-
-   Result:=MMC_STATUS_SUCCESS;
-
- finally
-   SpinUnlock(WIFI^.SDIOProtect);
- end;
-
- //See: mmc_io_rw_direct_host in \linux-rpi-3.18.y\drivers\mmc\core\sdio_ops.c
- //
-end;
-
-{SDIO_CMD_RW_DIRECT argument format:
-      [31] R/W flag
-      [30:28] Function number
-      [27] RAW flag
-      [25:9] Register address
-      [7:0] Data}
-
-function SDIOWIFIDeviceReadWriteExtended(WIFI:PWIFIDevice;
-            Direction: TSDIODirection;
-            Operation, Address : LongWord;
-            Increment : Boolean; Buffer : Pointer;
-            BlockCount, BlockSize : LongWord;trace : string = '') : LongWord;
-var
- Status:LongWord;
- SDHCI:PSDHCIHost;
- Command:TMMCCommand;
- MMCData : TMMCData;
-begin
- {}
- Result:=MMC_STATUS_INVALID_PARAMETER;
-
- {Check WIFI}
- if WIFI = nil then Exit;
-
- SpinLock(WIFI^.SDIOProtect);
- try
-   {$ifdef CYW43455_SDHCI_DEBUG}
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'SDIOReadWriteExtended ' + inttostr(ord(direction)) + ' [0=read, 1=write] ' + inttostr(operation)
-     + ' address=0x' + inttohex(address, 8)
-     + ' buf=0x'+inttohex(longword(buffer), 8)
-     + ' blockcount='+inttostr(blockcount)
-     + ' blocksize='+inttostr(blocksize)
-     + ' callerid='+inttostr(callerid));
-   {$endif}
-
-   {Get SDHCI}
-   SDHCI:=PSDHCIHost(WIFI^.MMC.Device.DeviceData);
-   if SDHCI = nil then Exit;
-
-   {Check Operation}
-   if Operation > 7 then Exit;
-
-   {$ifdef CYW43455_SDHCI_DEBUG}
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'check address='+inttohex(address, 8));
-   {$endif}
-
-   {Check Address}
-   if (Address and not($0001FFFF)) <> 0 then Exit;
-
-   {Setup Command}
-   FillChar(Command,SizeOf(TMMCCommand),0);
-   Command.Command:=SDIO_CMD_RW_EXTENDED;
-   Command.Argument:=0;
-   Command.ResponseType:=MMC_RSP_R1;
-   Command.Data:=nil;
-
-   Command.Data := @MMCData;
-   MMCData.Data := Buffer;
-
-   MMCData.Blocksize := BlockSize;
-   MMCData.BlockCount := blockcount;
-
-   if (direction = sdioWrite) then
-     MMCData.Flags := MMC_DATA_WRITE
-   else
-     MMCData.Flags := MMC_DATA_READ;
-
-   {SDIO_CMD_RW_EXTENDED argument format:
-         [31] R/W flag
-         [30:28] Function number
-         [27] Block mode
-         [26] Increment address
-         [25:9] Register address
-         [8:0] Byte/block count}
-
-   {Setup Argument}
-   if (direction = sdioWrite) then Command.Argument:=$80000000;
-   Command.Argument:=Command.Argument or (Operation shl 28);   // adds in function number
-   if increment then
-      Command.Argument := Command.Argument or (1 shl 26);     // add in increment flag
-   Command.Argument:=Command.Argument or (Address shl 9);
-
-   if (blockcount = 0) then
-     Command.Argument := Command.Argument or BlockSize        // byte mode; blocksize=bytes
-   else
-   begin
-     Command.Argument := Command.Argument or (1 shl 27);      // set block mode bit
-     Command.Argument := Command.Argument or BlockCount;
-   end;
-
-   {$ifdef CYW43455_SDHCI_DEBUG}
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'send command. argument ended up being ' + inttohex(command.argument, 8));
-   {$endif}
-
-   Status:=WIFIDeviceSendCommand(WIFI,@Command);  // send command
-
-   if Status <> MMC_STATUS_SUCCESS then
-    begin
-     {$ifdef CYW43455_SDHCI_DEBUG}
-     if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFIDeviceSendCommand returned status of ' + inttostr(result));
-     {$endif}
-
-     Result:=Status;
-     Exit;
-    end;
-
-   {Check Result}
-   {$ifdef CYW43455_SDHCI_DEBUG}
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'check result command.response[0]='+inttohex(command.response[0], 8));
-   {$endif}
-
-   if (Command.Response[0] and SDIO_RSP_R5_ERROR) <> 0 then
-    begin
-     {$ifdef CYW43455_SDHCI_DEBUG}
-     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'command response contains R5 Error');
-     {$endif}
-
-     Exit;
-    end;
-   if (Command.Response[0] and SDIO_RSP_R5_FUNCTION_NUMBER) <> 0 then
-    begin
-     {$ifdef CYW43455_SDHCI_DEBUG}
-     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'command response contains R5 function number');
-     {$endif}
-
-     Exit;
-    end;
-   if (Command.Response[0] and SDIO_RSP_R5_OUT_OF_RANGE) <> 0 then
-    begin
-     {$ifdef CYW43455_SDHCI_DEBUG}
-     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'command response contains R5 out of range');
-     {$endif}
-
-     Exit;
-    end;
-
-   {$ifdef CYW43455_SDHCI_DEBUG}
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'returning success');
-   {$endif}
-
-   Result:=MMC_STATUS_SUCCESS;
-
- finally
-   SpinUnlock(WIFI^.SDIOProtect);
- end;
-
- //See: mmc_io_rw_extended in \linux-rpi-3.18.y\drivers\mmc\core\sdio_ops.c
- //
-end;
-
-function WIFIDeviceSendCommand(WIFI:PWIFIDevice;Command:PMMCCommand; txdata : PMMCData = nil):LongWord;
-var
- Mask:LongWord;
- TransferMode:LongWord;
- Flags:LongWord;
- Status:LongWord;
- Timeout:LongWord;
- SDHCI:PSDHCIHost;
-begin
- {}
- Result:=MMC_STATUS_INVALID_PARAMETER;
-
- {Check WIFI}
- if WIFI = nil then Exit;
-
- {$ifdef CYW43455_SDHCI_DEBUG}
- if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command ' + inttostr(command^.Command) + ' status='+inttostr(command^.Status));
- {$endif}
-
- {Check Send Command}
- if Assigned(WIFI^.MMC.DeviceSendCommand) then
-  begin
-   Result:=WIFI^.MMC.DeviceSendCommand(@WIFI^.MMC,Command);
-  end
- else
-  begin
-   {Default Method}
-   {Check Command}
-   if Command = nil then Exit;
-
-   {Get SDHCI}
-   SDHCI:=PSDHCIHost(WIFI^.MMC.Device.DeviceData);
-   if SDHCI = nil then Exit;
-
-   {Acquire the Lock}
-   if MutexLock(WIFI^.MMC.Lock) = ERROR_SUCCESS then
-    begin
-     try
-      {Setup Status}
-      Command^.Status:=MMC_STATUS_NOT_PROCESSED;
-      try
-       {Update Statistics}
-       Inc(SDHCI^.RequestCount);
-
-       {Wait Timeout (10ms)}
-       Timeout:=1000;
-       Mask:=SDHCI_CMD_INHIBIT;
-       if (Command^.Data <> nil) or ((Command^.ResponseType and MMC_RSP_BUSY) <> 0) then
-        begin
-         Mask:=Mask or SDHCI_DATA_INHIBIT;
-        end;
-
-       {We shouldn't wait for data inihibit for stop commands, even though they might use busy signaling}
-       if Command^.Command = MMC_CMD_STOP_TRANSMISSION then
-        begin
-         Mask:=Mask and not(SDHCI_DATA_INHIBIT);
-        end;
-
-       {Wait for Command Inhibit and optionally Data Inhibit to be clear}
-       while (SDHCIHostReadLong(SDHCI,SDHCI_PRESENT_STATE) and Mask) <> 0 do
-        begin
-         if Timeout = 0 then
-          begin
-           WIFILogError(nil,'WIFI Send Command Inhibit Timeout');
-           Command^.Status:=MMC_STATUS_TIMEOUT;
-           Exit;
-          end;
-
-         Dec(Timeout);
-         MicrosecondDelay(10);
-        end;
-
-       {Check Response Type}
-       if ((Command^.ResponseType and MMC_RSP_136) <> 0) and ((Command^.ResponseType and MMC_RSP_BUSY) <> 0) then
-        begin
-         if WIFI_LOG_ENABLED then WIFILogError(nil,'MMC Send Command Invalid Response Type');
-         Command^.Status:=MMC_STATUS_INVALID_PARAMETER;
-         Exit;
-        end;
-
-       {Setup Command Flags}
-       if (Command^.ResponseType and MMC_RSP_PRESENT) = 0 then
-        begin
-         Flags:=SDHCI_CMD_RESP_NONE;
-        end
-       else if (Command^.ResponseType and MMC_RSP_136) <> 0 then
-        begin
-         Flags:=SDHCI_CMD_RESP_LONG;
-        end
-       else if (Command^.ResponseType and MMC_RSP_BUSY) <> 0 then
-        begin
-         Flags:=SDHCI_CMD_RESP_SHORT_BUSY;
-        end
-       else
-        begin
-         Flags:=SDHCI_CMD_RESP_SHORT;
-        end;
-
-       if (Command^.ResponseType and MMC_RSP_CRC) <> 0 then
-        begin
-         Flags:=Flags or SDHCI_CMD_CRC;
-        end;
-       if (Command^.ResponseType and MMC_RSP_OPCODE) <> 0 then
-        begin
-         Flags:=Flags or SDHCI_CMD_INDEX;
-        end;
-       {CMD19 is special in that the Data Present Select should be set}
-       if (Command^.Data <> nil) or (Command^.Command = MMC_CMD_SEND_TUNING_BLOCK) or (Command^.Command = MMC_CMD_SEND_TUNING_BLOCK_HS200) then
-        begin
-         {$ifdef CYW43455_SDHCI_DEBUG}
-         if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'adding sdhci_cmd_data flag to the flags for this command');
-         {$endif}
-
-         Flags:=Flags or SDHCI_CMD_DATA;
-        end;
-
-       {Write Timeout Control}
-       if (Command^.Data <> nil) or ((Command^.ResponseType and MMC_RSP_BUSY) <> 0) then
-        begin
-         {$ifdef CYW43455_SDHCI_DEBUG}
-         if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFISendCommand SDHCI_TIMEOUT_CONTROL (Value=' + IntToHex(SDHCI_TIMEOUT_VALUE,8) + ')');
-         {$ENDIF}
-         SDHCIHostWriteByte(SDHCI,SDHCI_TIMEOUT_CONTROL,SDHCI_TIMEOUT_VALUE);
-        end;
-
-       {Check Data}
-       if (command^.data = nil) then
-        begin
-         {$ifdef CYW43455_SDHCI_DEBUG}
-         if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'writing a standard command; status='+inttostr(command^.status));
-         {$endif}
-
-         {Setup Transfer Mode}
-         TransferMode:=SDHCIHostReadWord(SDHCI,SDHCI_TRANSFER_MODE);
-
-         {Clear Auto CMD settings for non data CMDs}
-         TransferMode:=TransferMode and not(SDHCI_TRNS_AUTO_CMD12 or SDHCI_TRNS_AUTO_CMD23);
-
-         {Clear Block Count, Multi, Read and DMA for non data CMDs}
-         TransferMode:=TransferMode and not(SDHCI_TRNS_BLK_CNT_EN or SDHCI_TRNS_MULTI or SDHCI_TRNS_READ or SDHCI_TRNS_DMA);
-
-         {Write Argument}
-         {$ifdef CYW43455_SDHCI_DEBUG}
-         if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command SDHCI_ARGUMENT (Value=' + IntToHex(Command^.Argument,8) + ')');
-         {$ENDIF}
-
-         SDHCIHostWriteLong(SDHCI,SDHCI_ARGUMENT,Command^.Argument);
-
-         {Write Transfer TransferMode}
-         {$ifdef CYW43455_SDHCI_DEBUG}
-         if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command SDHCI_TRANSFER_MODE (Value=' + IntToHex(TransferMode,8) + ')');
-         {$ENDIF}
-
-         SDHCIHostWriteWord(SDHCI,SDHCI_TRANSFER_MODE,TransferMode);
-        end
-       else
-        begin
-         {Setup Data}
-         Command^.Data^.BlockOffset:=0;
-         if (Command^.Data^.BlockCount = 0) then
-            Command^.Data^.BlocksRemaining := 1
-         else
-           Command^.Data^.BlocksRemaining:=Command^.Data^.BlockCount;  // not sure if code expects there always to be a block count
-         Command^.Data^.BytesTransfered:=0;
-
-         {$ifdef CYW43455_SDHCI_DEBUG}
-         if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'blockcount='+inttostr(command^.data^.blockcount) + ' blocksize='+inttostr(command^.data^.blocksize));
-         {$endif}
-
-         {Setup Transfer TransferMode}
-         TransferMode := 0;
-         if (Command^.Data^.BlockCount > 0) then
-          begin
-           {$ifdef CYW43455_SDHCI_DEBUG}
-           if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'enabling block transfer TransferMode');
-           {$endif}
-           TransferMode:=SDHCI_TRNS_BLK_CNT_EN;
-           TransferMode:=TransferMode or SDHCI_TRNS_MULTI;
-
-          // TransferMode:=TransferMode or SDHCI_TRNS_AUTO_CMD12; //To Do //Testing (This works, need to sort out properly where it fits, plus SDHCI_TRNS_AUTO_CMD23)
-
-           //To Do //SDHCI_TRNS_AUTO_CMD12 //SDHCI_TRNS_AUTO_CMD23 //SDHCI_ARGUMENT2 //See: sdhci_set_transfer_mode
-                   //See 1.15 Block Count in the SD Host Controller Simplified Specifications
-          end;
-         if (txdata <> nil) then
-         begin
-            if ((txdata^.Flags and MMC_DATA_READ) <> 0) then
-              TransferMode := TransferMode or SDHCI_TRNS_READ;
-         end
-         else
-         if (Command^.Data^.Flags and MMC_DATA_READ) <> 0 then
-          begin
-           {$ifdef CYW43455_SDHCI_DEBUG}
-           if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Add read flag to transfer mode');
-           {$endif}
-
-           TransferMode:=TransferMode or SDHCI_TRNS_READ;
-          end;
-
-//         TransferMode := TransferMode or SDHCI_TRNS_R5;  //should be an R5 response for an SDIO device (for a cmd53 -- needs some changes so it works generically)
-// by not including this we should expect an R1 response.
-
-         {Setup DMA Address}
-         //TransferMode |= SDHCI_TRNS_DMA;
-         //Address:=
-         //To Do
-
-         {Setup Interrupts}
-         SDHCI^.Interrupts:=SDHCI^.Interrupts or (SDHCI_INT_DATA_AVAIL or SDHCI_INT_SPACE_AVAIL or SDHCI_INT_DATA_END);
-         SDHCIHostWriteLong(SDHCI,SDHCI_INT_ENABLE,SDHCI^.Interrupts);
-         SDHCIHostWriteLong(SDHCI,SDHCI_SIGNAL_ENABLE,SDHCI^.Interrupts);
-         //To Do //Different for DMA //Should we disable these again after the command ? //Yes, probably
-
-         {Write DMA Address}
-         //To Do
-         //SDHCIHostWriteLong(SDHCI,SDHCI_DMA_ADDRESS,Address);
-
-         {Write Block Size}
-         {$ifdef CYW43455_SDHCI_DEBUG}
-         if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command SDHCI_BLOCK_SIZE (Value=' + IntToStr(Command^.Data^.BlockSize) + ') makeblocksize='+inttohex(SDHCIMakeBlockSize(SDHCI_DEFAULT_BOUNDARY_ARG,Command^.Data^.BlockSize), 8));
-         {$endif}
-
-         SDHCIHostWriteWord(SDHCI,SDHCI_BLOCK_SIZE,SDHCIMakeBlockSize(SDHCI_DEFAULT_BOUNDARY_ARG,Command^.Data^.BlockSize));
-
-         {Write Block Count}
-         {$ifdef CYW43455_SDHCI_DEBUG}
-         if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command SDHCI_BLOCK_COUNT (Value=' + IntToStr(Command^.Data^.BlockCount) + ')');
-         {$endif}
-
-         SDHCIHostWriteWord(SDHCI,SDHCI_BLOCK_COUNT,Command^.Data^.BlockCount);
-
-         {Write Argument}
-         {$ifdef CYW43455_SDHCI_DEBUG}
-         if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command SDHCI_ARGUMENT (Value=' + IntToHex(Command^.Argument,8) + ')');
-         {$endif}
-
-         SDHCIHostWriteLong(SDHCI,SDHCI_ARGUMENT,Command^.Argument);
-
-         {Write Transfer TransferMode}
-         {$ifdef CYW43455_SDHCI_DEBUG}
-         if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command SDHCI_TRANSFER_MODE (Value=' + IntToHex(TransferMode,8) + ')');
-         {$endif}
-
-         SDHCIHostWriteWord(SDHCI,SDHCI_TRANSFER_MODE,TransferMode);
-        end;
-
-       {Setup Command}
-       SDHCI^.Command:=Command;
-
-       try
-        {Write Command}
-
-        {$ifdef CYW43455_SDHCI_DEBUG}
-        if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command SDHCI_COMMAND cmd=' + inttostr(command^.command) + '  value written to cmd register=' + IntToHex(SDHCIMakeCommand(Command^.Command,Flags),8) + ') status='+inttostr(command^.status));
-        {$endif}
-
-        if (dodumpregisters) and (command^.Command = SDIO_CMD_RW_EXTENDED) then
-        begin
-          dumpregisters(WIFI);
-          dodumpregisters := false;
-        end;
-
-        SDHCIHostWriteWord(SDHCI,SDHCI_COMMAND,SDHCIMakeCommand(Command^.Command,Flags));
-
-        {Wait for Completion}   // short timeout for a read command.
-        if SDHCI^.Command^.Data = nil then // need to go back to test for data=nil
-         begin
-          {Update Statistics}
-          Inc(SDHCI^.CommandRequestCount);
-
-          {Wait for Signal with Timeout (100ms)}
-          Status:=SemaphoreWaitEx(SDHCI^.Wait,500);  // increased during debug
-          if Status <> ERROR_SUCCESS then
-           begin
-            if Status = ERROR_WAIT_TIMEOUT then
-             begin
-              {$ifdef CYW43455_SDHCI_DEBUG}
-              if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command Response (short) Timeout');
-              {$endif}
-
-              Command^.Status:=MMC_STATUS_TIMEOUT;
-              Exit;
-             end
-            else
-             begin
-              {$ifdef CYW43455_SDHCI_DEBUG}
-              if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command Response (short) Failure, result='+inttostr(status));
-              {$endif}
-
-              Command^.Status:=MMC_STATUS_HARDWARE_ERROR;
-              Exit;
-             end;
-           end
-          else
-          begin
-           {$ifdef CYW43455_SDHCI_DEBUG}
-           if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'semaphore wait succeeded command=' + inttostr(command^.Command) + ' status=' + inttostr(command^.Status));
-           {$endif}
-          end;
-         end
-        else
-         begin
-          {Update Statistics}
-          Inc(SDHCI^.DataRequestCount);
-
-          {Update Statistics}
-          Inc(SDHCI^.PIODataTransferCount);
-
-          {Wait for Signal with Timeout (5000ms)}
-          Status:=SemaphoreWaitEx(SDHCI^.Wait,5000);
-          if Status <> ERROR_SUCCESS then
-           begin
-            if Status = ERROR_WAIT_TIMEOUT then
-             begin
-              WIFILogError(nil,'WIFI Send Data Response Timeout');
-              Command^.Status:=MMC_STATUS_TIMEOUT;
-              Exit;
-             end
-            else
-             begin
-              WIFILogError(nil,'MMC Send Data Response Failure');
-              Command^.Status:=MMC_STATUS_HARDWARE_ERROR;
-              Exit;
-             end;
-           end
-           else
-           begin
-            {$ifdef CYW43455_SDHCI_DEBUG}
-            if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'wait returned success');
-            {$endif}
-           end;
-         end;
-
-       finally
-        {Reset Command}
-        SDHCI^.Command:=nil;
-       end;
-      finally
-       {Check Reset Required}
-       if Command^.Status <> MMC_STATUS_SUCCESS then //To Do //More see: sdhci_tasklet_finish //SDHCI_QUIRK_RESET_AFTER_REQUEST and SDHCI_QUIRK_CLOCK_BEFORE_RESET
-        begin
-         SDHCIHostReset(SDHCI,SDHCI_RESET_CMD);
-         SDHCIHostReset(SDHCI,SDHCI_RESET_DATA);
-        end;
-
-       {Check Status}
-       if Command^.Status <> MMC_STATUS_SUCCESS then
-        begin
-         {Update Statistics}
-         Inc(SDHCI^.RequestErrors);
-
-         {Return Result}
-         Result:=Command^.Status;
-        end;
-      end;
-
-     finally
-      {Release the Lock}
-      MutexUnlock(WIFI^.MMC.Lock);
-     end;
-    end;
-
-   {$ifdef CYW43455_SDHCI_DEBUG}
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI Send Command completed: ' + MMCStatusToString(Command^.Status));
-   {$endif}
-
-   if Command^.Status = MMC_STATUS_SUCCESS then Result:=MMC_STATUS_SUCCESS;
-  end;
-
- //See: mmc_send_cmd in mmc.c
- //     sdhci_send_command in sdhci.c
- //See: bcm2835_mmc_send_command in \linux-rpi-3.18.y\drivers\mmc\host\bcm2835-mmc.c
- //     sdhci_send_command in \linux-rpi-3.18.y\drivers\mmc\host\sdhci.c
-end;
-
-function WIFIDeviceSendApplicationCommand(WIFI:PWIFIDevice;Command:PMMCCommand):LongWord;
-var
- Status:LongWord;
- SDHCI:PSDHCIHost;
- ApplicationCommand:TMMCCommand;
-begin
- {}
- Result:=MMC_STATUS_INVALID_PARAMETER;
-
- {Check MMC}
- if WIFI = nil then Exit;
-
- {$ifdef CYW43455_DEBUG}
- if WIFI_LOG_ENABLED then WIFILogDebug(nil,'SD Send Application Command');
- {$ENDIF}
-
- {Get SDHCI}
- SDHCI:=PSDHCIHost(WIFI^.MMC.Device.DeviceData);
- if SDHCI = nil then Exit;
-
- {Setup Application Command}
- FillChar(ApplicationCommand,SizeOf(TMMCCommand),0);
- ApplicationCommand.Command:=MMC_CMD_APP_CMD;
- ApplicationCommand.Argument:=(WIFI^.MMC.RelativeCardAddress shl 16);
- ApplicationCommand.ResponseType:= MMC_RSP_R1;
- ApplicationCommand.Data:=nil;
-
- {Send Application Command}
- Status:=WIFIDeviceSendCommand(WIFI,@ApplicationCommand);
- if Status <> MMC_STATUS_SUCCESS then
-  begin
-   Result:=Status;
-   Exit;
-  end;
-
- {Check Response}
-  if (ApplicationCommand.Response[0] and MMC_RSP_R1_APP_CMD) = 0 then
-   begin
-    if WIFI_LOG_ENABLED then WIFILogError(nil,'SD Send Application Command Not Supported');
-    Command^.Status:=MMC_STATUS_UNSUPPORTED_REQUEST;
-    Exit;
-   end;
-
- {Send Command}
- Status:=WIFIDeviceSendCommand(WIFI,Command);
- if Status <> MMC_STATUS_SUCCESS then
-  begin
-   Result:=Status;
-   Exit;
-  end;
-
- Result:=MMC_STATUS_SUCCESS;
-
- //See: mmc_wait_for_app_cmd in \linux-rpi-3.18.y\drivers\mmc\core\sd_ops.c
 end;
 
 function WIFIDeviceCoreScan(WIFI : PWIFIDevice) : longint;
@@ -3545,13 +2504,13 @@ begin
  Result := WIFIDeviceSetBackplaneWindow(WIFI, BAK_BASE_ADDR);
 
  // read 32 bits containing chip id and other info
- Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioRead,BACKPLANE_FUNCTION,0,  0, pbyte(@chipidbuf));
+ Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,False,BACKPLANE_FUNCTION,0,  0, pbyte(@chipidbuf));
  if (Result <> MMC_STATUS_SUCCESS) then
     WIFILogError(nil, 'failed to read the first byte of the chip id');
 
- Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioRead,BACKPLANE_FUNCTION,1,  0, pbyte(@chipidbuf)+1);
- Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioRead,BACKPLANE_FUNCTION,2,  0, pbyte(@chipidbuf)+2);
- Result:=SDIOWIFIDeviceReadWriteDirect(WIFI,sdioRead,BACKPLANE_FUNCTION,2,  0, pbyte(@chipidbuf)+3);
+ Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,False,BACKPLANE_FUNCTION,1,  0, pbyte(@chipidbuf)+1);
+ Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,False,BACKPLANE_FUNCTION,2,  0, pbyte(@chipidbuf)+2);
+ Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,False,BACKPLANE_FUNCTION,2,  0, pbyte(@chipidbuf)+3);
 
  {$ifdef CYW43455_DEBUG}
  chipid := chipidbuf  and CID_ID_MASK;
@@ -3562,7 +2521,7 @@ begin
 
  // read pointer to core info structure.
  // 63*4 is yucky. Could do with a proper address definition for it.
- Result := SDIOWIFIDeviceReadWriteExtended(WIFI, sdioRead, BACKPLANE_FUNCTION, 63*4, true, @addressbytes[1], 0, 4);
+ Result := SDIODeviceReadWriteExtended(@WIFI^.MMC, False, BACKPLANE_FUNCTION, 63*4, true, @addressbytes[1], 0, 4);
  address := plongint(@addressbytes[1])^;
 
  {$ifdef CYW43455_DEBUG}
@@ -3576,7 +2535,7 @@ begin
 
  try
    // read the core info from the device
-   Result := SDIOWIFIDeviceReadWriteExtended(WIFI, sdioRead, BACKPLANE_FUNCTION, address, true, @buf[0], 8, 64);
+   Result := SDIODeviceReadWriteExtended(@WIFI^.MMC, False, BACKPLANE_FUNCTION, address, true, @buf[0], 8, 64);
    if (Result <> MMC_STATUS_SUCCESS) then
    begin
      WIFILogError(nil, 'Failed to read Core information from the SDIO device.');
@@ -3702,21 +2661,23 @@ begin
 end;
 
 function cfgreadl(WIFI : PWIFIDevice; addr : longword; trace : string = '') : longword;
-var
-  v : longword;
 begin
-  v := 0;
-  Result := SDIOWIFIDeviceReadWriteExtended(WIFI, sdioRead, BACKPLANE_FUNCTION, (addr and $1ffff) or $8000, true, @v, 0, 4, trace);
+  PLongWord(WIFI^.DMABuffer)^ := 0;
+
+  Result := SDIODeviceReadWriteExtended(@WIFI^.MMC, False, BACKPLANE_FUNCTION, (addr and $1ffff) or $8000, true, WIFI^.DMABuffer, 0, 4);
   if (Result <> MMC_STATUS_SUCCESS) then
     WIFILogError(nil, 'Failed to read config item 0x'+inttohex(addr, 8) + ' result='+inttostr(Result));
-  Result := v;
+
+  Result := PLongWord(WIFI^.DMABuffer)^;
 end;
 
 procedure cfgwritel(WIFI : PWIFIDevice; addr : longword; v : longword; trace : string = '');
 var
   Result : longword;
 begin
- Result := SDIOWIFIDeviceReadWriteExtended(WIFI, sdioWrite, BACKPLANE_FUNCTION, (addr and $1ffff) or $8000, true, @v, 0, 4, trace);
+ PLongWord(WIFI^.DMABuffer)^ := v;
+
+ Result := SDIODeviceReadWriteExtended(@WIFI^.MMC, True, BACKPLANE_FUNCTION, (addr and $1ffff) or $8000, true, WIFI^.DMABuffer, 0, 4);
  if (Result <> MMC_STATUS_SUCCESS) then
    WIFILogError(nil,'Failed to update config item 0x'+inttohex(addr, 8));
 end;
@@ -3725,7 +2686,7 @@ procedure cfgw(WIFI : PWIFIDevice; offset : longword; value : byte);
 var
   Result : longword;
 begin
-  Result := SDIOWIFIDeviceReadWriteDirect(WIFI, sdioWrite, BACKPLANE_FUNCTION, offset, value, nil);
+  Result := SDIODeviceReadWriteDirect(@WIFI^.MMC, True, BACKPLANE_FUNCTION, offset, value, nil);
   if (Result <> MMC_STATUS_SUCCESS) then
     WIFILogError(nil, 'Failed to write config item 0x'+inttohex(offset, 8));
 end;
@@ -3735,7 +2696,7 @@ var
   Res : longword;
   value : byte;
 begin
-  Res := SDIOWIFIDeviceReadWriteDirect(WIFI, sdioRead, BACKPLANE_FUNCTION, offset, 0, @value);
+  Res := SDIODeviceReadWriteDirect(@WIFI^.MMC, False, BACKPLANE_FUNCTION, offset, 0, @value);
   if (Res <> MMC_STATUS_SUCCESS) then
     WIFILogError(nil, 'Failed to read config item 0x'+inttohex(offset, 8));
 
@@ -3799,10 +2760,10 @@ begin
       addr := addr or $8000;
 
     if (n < WIFI_BAK_BLK_BYTES) then
-      Res := SDIOWIFIDeviceReadWriteExtended(WIFI, sdioWrite, BACKPLANE_FUNCTION, addr, true, buf, 0, n)
+      Res := SDIODeviceReadWriteExtended(@WIFI^.MMC, True, BACKPLANE_FUNCTION, addr, true, buf, 0, n)
     else
     begin
-      Res := SDIOWIFIDeviceReadWriteExtended(WIFI, sdioWrite, BACKPLANE_FUNCTION, addr, true, buf, n div WIFI_BAK_BLK_BYTES, WIFI_BAK_BLK_BYTES);
+      Res := SDIODeviceReadWriteExtended(@WIFI^.MMC, True, BACKPLANE_FUNCTION, addr, true, buf, n div WIFI_BAK_BLK_BYTES, WIFI_BAK_BLK_BYTES);
       n := (n div WIFI_BAK_BLK_BYTES) * WIFI_BAK_BLK_BYTES;
     end;
 
@@ -4050,7 +3011,7 @@ begin
   // zero out an address of some sort which is at the top of the ram?
   lastramvalue := 0;
   WIFIDeviceSetBackplaneWindow(WIFI, WIFI^.rambase + WIFI^.socramsize - 4);
-  SDIOWIFIDeviceReadWriteExtended(WIFI, sdioWrite, BACKPLANE_FUNCTION, (WIFI^.rambase + WIFI^.socramsize - 4) and $7fff{ or $8000}, true, @lastramvalue, 0, 4);
+  SDIODeviceReadWriteExtended(@WIFI^.MMC, True, BACKPLANE_FUNCTION, (WIFI^.rambase + WIFI^.socramsize - 4) and $7fff{ or $8000}, true, @lastramvalue, 0, 4);
 
   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Starting WIFI firmware load...');
 
@@ -4090,7 +3051,7 @@ begin
   assignfile(FirmwareFile, FirmwareFilename);
   reset(FirmwareFile);
   fsize := filesize(FirmwareFile);
-  getmem(firmwarep, fsize);
+  firmwarep := DMABufferAllocate(DMAHostGetDefault, fsize);
   blockread(FirmwareFile, firmwarep^, fsize);
   closefile(FirmwareFile);
 
@@ -4102,7 +3063,6 @@ begin
   {$ifdef CYW43455_DEBUG}
   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Reset vector of 0x' + inttohex(WIFI^.resetvec, 8) + ' copied out of firmware');
   {$endif}
-
 
   off := 0;
   if (fsize > FIRMWARE_CHUNK_SIZE) then
@@ -4140,7 +3100,7 @@ begin
   else
     chunksize := fsize;
 
-  freemem(firmwarep);
+  DMABufferRelease(firmwarep);
 
   // now we need to upload the configuration to ram
 
@@ -4162,7 +3122,7 @@ begin
   if (fsize mod 4 <> 0) then
     fsize := ((fsize div 4) + 1) * 4;
 
-  GetMem(firmwarep, fsize);
+  firmwarep := DMABufferAllocate(DMAHostGetDefault, fsize);
   BlockRead(FirmwareFile, FirmwareP^, FileSize(FirmwareFile));
 
   fsize := Condense(PChar(FirmwareP), Filesize(FirmwareFile)); // note we deliberately *don't* use fsize here!
@@ -4199,7 +3159,7 @@ begin
       chunksize := bytesleft;
   end;
 
-  Freemem(firmwarep);
+  DMABufferRelease(firmwarep);
 
   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Finished transferring config file to socram');
 
@@ -4278,8 +3238,8 @@ begin
   cfgwritel(WIFI, WIFI^.sdregs + Intmask, FrameInt or MailboxInt or Fcchange);
 
   // enable function 2
-  SDIOWIFIDeviceReadWriteDirect(WIFI, sdioRead, BUS_FUNCTION, SDIO_CCCR_IOEx, 0, @iobits);
-  SDIOWIFIDeviceReadWriteDirect(WIFI, sdioWrite, BUS_FUNCTION, SDIO_CCCR_IOEx, iobits or SDIO_FUNC_ENABLE_2, nil);
+  SDIODeviceReadWriteDirect(@WIFI^.MMC, False, BUS_FUNCTION, SDIO_CCCR_IOEx, 0, @iobits);
+  SDIODeviceReadWriteDirect(@WIFI^.MMC, True, BUS_FUNCTION, SDIO_CCCR_IOEx, iobits or SDIO_FUNC_ENABLE_2, nil);
 
   // now wait for function 2 to be ready
   i := 0;
@@ -4293,7 +3253,7 @@ begin
       exit;
     end;
 
-    SDIOWIFIDeviceReadWriteDirect(WIFI, sdioRead, BUS_FUNCTION, SDIO_CCCR_IORx, 0, @iobits);
+    SDIODeviceReadWriteDirect(@WIFI^.MMC, False, BUS_FUNCTION, SDIO_CCCR_IORx, 0, @iobits);
 
     Sleep(100);
   end;
@@ -4301,7 +3261,7 @@ begin
   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Radio function (f2) successfully enabled');
 
   // enable interrupts.
-  SDIOWIFIDeviceReadWriteDirect(WIFI,sdioWrite, BUS_FUNCTION, SDIO_CCCR_IENx, (INTR_CTL_MASTER_EN or INTR_CTL_FUNC1_EN or INTR_CTL_FUNC2_EN), nil );
+  SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BUS_FUNCTION, SDIO_CCCR_IENx, (INTR_CTL_MASTER_EN or INTR_CTL_FUNC1_EN or INTR_CTL_FUNC2_EN), nil );
 
   ints := 0;
   while (ints = 0) do
@@ -4326,7 +3286,7 @@ begin
 
   // It seems like we need to execute a read first to kick things off. If we don't do this the first
   // IOCTL command response will be an empty one rather than the one for the IOCTL we sent.
-  if (SDIOWIFIDeviceReadWriteExtended(WIFI, sdioRead, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, @ioctl_rxmsg, 0, 64) <> MMC_STATUS_SUCCESS) then
+  if (SDIODeviceReadWriteExtended(@WIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, @ioctl_rxmsg, 0, 64) <> MMC_STATUS_SUCCESS) then
      WIFILogError(nil, 'Unsuccessful initial read from WIFI function 2 (packets)')
   else
   begin
@@ -4440,7 +3400,7 @@ begin
   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'sending ' + inttostr(TransmitLen) + ' bytes to the wifi device');
   {$endif}
 
-  Res := SDIOWIFIDeviceReadWriteExtended(WIFI, sdioWrite, WLAN_FUNCTION, BAK_BASE_ADDR and $1FFFF{ SB_32BIT_WIN}, false, msgp, 0, TransmitLen);
+  Res := SDIODeviceReadWriteExtended(@WIFI^.MMC, True, WLAN_FUNCTION, BAK_BASE_ADDR and $1FFFF{ SB_32BIT_WIN}, false, msgp, 0, TransmitLen);
   Result := Res;
   if (Res <> MMC_STATUS_SUCCESS) then
     WIFILogError(nil, 'failed to send cmd53 for ioctl command ' + inttostr(res));
@@ -4804,8 +3764,8 @@ var
   RequestEntryP : PWIFIRequestItem;
   countrysettings : countryparams;
   clen : integer;
-  extjoinparams : wl_extjoin_params;
-  bandforchannel : word;
+  //extjoinparams : wl_extjoin_params; //To Do //TestingSDIO
+  //bandforchannel : word; //To Do //TestingSDIO
 
 begin
   (*
@@ -5073,13 +4033,7 @@ begin
  if Result <> MMC_STATUS_SUCCESS then
    exit;
 
- if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'WIFI Current MAC address is '
-         + IntToHex(WIFI^.macaddress[0], 2) + ':'
-         + IntToHex(WIFI^.macaddress[1], 2) + ':'
-         + IntToHex(WIFI^.macaddress[2], 2) + ':'
-         + IntToHex(WIFI^.macaddress[3], 2) + ':'
-         + IntToHex(WIFI^.macaddress[4], 2) + ':'
-         + IntToHex(WIFI^.macaddress[5], 2));
+ if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Current MAC address is ' + HardwareAddressToString(WIFI^.macaddress,':'));
 
  // upload regulatory file - can't set country and join a network without this.
  Result := WIFIDeviceUploadRegulatoryFile(WIFI);
@@ -5557,7 +4511,7 @@ begin
 
          if (istatus and $40 = $40) then
          begin
-           if SDIOWIFIDeviceReadWriteExtended(FWIFI, sdioRead, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, ResponseP, 0, SDPCM_HEADER_SIZE) <> MMC_STATUS_SUCCESS then
+           if SDIODeviceReadWriteExtended(@FWIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, ResponseP, 0, SDPCM_HEADER_SIZE) <> MMC_STATUS_SUCCESS then
            begin
              WIFILogError(nil, 'Error trying to read SDPCM header');
              exit;
@@ -5594,13 +4548,13 @@ begin
                begin
                  if (blockcount > 0) then
                  begin
-                   if SDIOWIFIDeviceReadWriteExtended(FWIFI, sdioRead, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep)+SDPCM_HEADER_SIZE, blockcount, 512) <> MMC_STATUS_SUCCESS then
+                   if SDIODeviceReadWriteExtended(@FWIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep)+SDPCM_HEADER_SIZE, blockcount, 512) <> MMC_STATUS_SUCCESS then
                      WIFILogError(nil, 'Error trying to read blocks for ioctl response');
                  end;
 
                  if (remainder > 0) then
                  begin
-                   if SDIOWIFIDeviceReadWriteExtended(FWIFI, sdioRead, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep)+SDPCM_HEADER_SIZE + blockcount*512, 0, remainder) <> MMC_STATUS_SUCCESS then
+                   if SDIODeviceReadWriteExtended(@FWIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep)+SDPCM_HEADER_SIZE + blockcount*512, 0, remainder) <> MMC_STATUS_SUCCESS then
                      WIFILogError(nil, 'Error trying to read blocks for ioctl response (len='+inttostr(responsep^.len)+')');
                  end;
 
@@ -5685,7 +4639,7 @@ begin
                    WIFILogError(nil, 'WIFIWorkern: Could not read a large message into an undersized buffer (len='+inttostr(responsep^.len)+')');
 
                // read next sdpcm header (may not be one present in which case everything will be zero including length)
-               if (not isFinished) and (SDIOWIFIDeviceReadWriteExtended(FWIFI, sdioRead, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, ResponseP, 0, SDPCM_HEADER_SIZE, 'worker4') <> MMC_STATUS_SUCCESS) then
+               if (not isFinished) and (SDIODeviceReadWriteExtended(@FWIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, ResponseP, 0, SDPCM_HEADER_SIZE) <> MMC_STATUS_SUCCESS) then
                begin
                  WIFILogError(nil, 'Error trying to read SDPCM header (repeat)');
                  exit;
@@ -5785,14 +4739,14 @@ begin
                 //send data
                 if (blockcount > 0) then
                 begin
-                  if SDIOWIFIDeviceReadWriteExtended(FWIFI, sdioWrite, WLAN_FUNCTION,
+                  if SDIODeviceReadWriteExtended(@FWIFI^.MMC, True, WLAN_FUNCTION,
                         BAK_BASE_ADDR and $1ffff, false, PacketP^.Buffer, blockcount, 512) <> MMC_STATUS_SUCCESS then
                           WIFILogError(nil, 'Failed to transmit packet data blocks txseq='+inttostr(txseq)+' lastcredit='+inttostr(LastCredit));
                 end;
 
                 if (remainder > 0) then
                 begin
-                  if SDIOWIFIDeviceReadWriteExtended(FWIFI, sdioWrite, WLAN_FUNCTION,
+                  if SDIODeviceReadWriteExtended(@FWIFI^.MMC, True, WLAN_FUNCTION,
                         BAK_BASE_ADDR and $1ffff, false, PacketP^.Buffer + blockcount*512, 0, remainder) <> MMC_STATUS_SUCCESS then
                           WIFILogError(nil, 'Failed to transmit packet data remainder txseq='+inttostr(txseq)+' lastcredit='+inttostr(LastCredit));
                 end;
@@ -6433,7 +5387,5 @@ begin
 end;
 
 initialization
-  if WIFI_AUTO_INIT then
-    WIFIInit;
 
 end.
