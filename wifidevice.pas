@@ -83,7 +83,7 @@ const
   IOCTL_MAX_BLKLEN = 2048;
   SDPCM_HEADER_SIZE = 8;
   CDC_HEADER_SIZE = 16;
-  IOCL_LEN_BYTES = 4;
+  IOCTL_LEN_BYTES = 4;
   ETHERNET_HEADER_BYTES = 14;
 
   RECEIVE_REQUEST_PACKET_COUNT = 16;
@@ -852,8 +852,6 @@ var
 
   WIFI_USE_SUPPLICANT : boolean = true;
 
-  dodumpregisters : boolean;
-
   firmware : array[1..FIRWMARE_OPTIONS_COUNT] of TFirmwareEntry =
     (
       	    ( chipid : $4330; chipidrev : 3; firmwarefilename: 'fw_bcm40183b1.bin'; configfilename: 'bcmdhd.cal.40183.26MHz'; regufilename : ''),
@@ -1094,6 +1092,7 @@ end;
 {==============================================================================}
 
 function WIFIHostStart(SDHCI: PSDHCIHost): LongWord;
+// Under SDIO this is not required
 // Overwridden SDHCIHostStart method for the Arasan SDHCI controller
 var
   {$IFNDEF RPI4}
@@ -1430,6 +1429,12 @@ begin
  WIFI^.ReceiveGlomPacketCount:=0;
  WIFI^.ReceiveGlomPacketSize:=0;
 
+ if not(DMA_CACHE_COHERENT) then
+  begin
+   {Clean Cache (Dest)}
+   CleanDataCacheRange(PtrUInt(WIFI^.DMABuffer), IOCTL_MAX_BLKLEN);
+  end;
+
  Network^.Device.DeviceData := WIFI;
 
  if WIFI_LOG_ENABLED then WIFILogInfo(nil,'WIFIDeviceInitialize');
@@ -1484,9 +1489,9 @@ begin
    // pi zero has a different data offset as the header is 4 bytes longer.
    // actually a firmware version thing. Other versions may be different too.
    if (WIFI^.ChipId = CHIP_ID_PI_ZEROW) and (WIFI^.ChipIdRev = 1) then
-     Entry^.Offset:= ETHERNET_HEADER_BYTES + IOCL_LEN_BYTES + 4
+     Entry^.Offset:= ETHERNET_HEADER_BYTES + IOCTL_LEN_BYTES + 4
    else
-     Entry^.Offset:= ETHERNET_HEADER_BYTES + IOCL_LEN_BYTES; // + SDPCM_HEADER_SIZE + CDC_HEADER_SIZE;  // packet data starts after this point.
+     Entry^.Offset:= ETHERNET_HEADER_BYTES + IOCTL_LEN_BYTES; // + SDPCM_HEADER_SIZE + CDC_HEADER_SIZE;  // packet data starts after this point.
 
    Entry^.Count:=0;
 
@@ -1497,6 +1502,12 @@ begin
      if WIFI_LOG_ENABLED then WIFILogError(nil,'CY43455: Failed to allocate receive buffer');
 
      Exit;
+    end;
+
+   if not(DMA_CACHE_COHERENT) then
+    begin
+     {Clean Cache (Dest)}
+     CleanDataCacheRange(PtrUInt(Entry^.Buffer), Entry^.Size);
     end;
 
    {Initialize Packets}
@@ -1547,6 +1558,12 @@ begin
      if WIFI_LOG_ENABLED then WIFILogError(nil,'CY43455: Failed to allocate wifi transmit buffer');
 
      Exit;
+    end;
+
+   if not(DMA_CACHE_COHERENT) then
+    begin
+     {Clean Cache (Dest)}
+     CleanDataCacheRange(PtrUInt(Entry^.Buffer), Entry^.Size);
     end;
 
    {Initialize Packets}
@@ -2075,9 +2092,9 @@ var
  chipid : word;
  chipidrev : byte;
  bytevalue : byte;
- blocksize : byte;
- result1, result2 : longword;
- retries : word;
+ //blocksize : byte; //To Do //TestingSDIO
+ //result1, result2 : longword; //To Do //TestingSDIO
+ //retries : word; //To Do //TestingSDIO
 begin
  {}
  try
@@ -2171,7 +2188,6 @@ begin
    WIFI^.MMC.Device.DeviceBus:=DEVICE_BUS_SD;
    WIFI^.MMC.Device.DeviceType:=MMC_TYPE_SDIO;
    WIFI^.MMC.RelativeCardAddress:=0;
-   WIFI^.MMC.OperationCondition := $200000;
 
    {$ifdef CYW43455_DEBUG}
    if WIFI_LOG_ENABLED then WIFILogDebug(nil,'MMC Initialize Card Type is SDIO');
@@ -2230,45 +2246,19 @@ begin
 
    //Below is mostly WiFI specific //To Do //TestingSDIO
 
-   //if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'setting bus speed via common control registers');
-
-   //Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True,BUS_FUNCTION,SDIO_CCCR_SPEED,3,nil);            // emmc sets this to 2.
-   //if (Result = MMC_STATUS_SUCCESS) then
-   //begin
-   //  {$ifdef CYW43455_DEBUG}
-   //  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Successfully updated bus speed register');
-   //  {$endif}
-   //end
-   //else
-   //  WIFILogError(nil, 'Failed to update bus speed register');
-
-
-   //if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'setting bus interface via common control registers');
-
-   //Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True,BUS_FUNCTION,SDIO_CCCR_IF, $2,nil);
-   //if (Result = MMC_STATUS_SUCCESS) then
-   //begin
-   //  {$ifdef CYW43455_DEBUG}
-   //  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Successfully updated bus interface control');
-   //  {$endif}
-   //end
-   //else
-   //  WIFILogError(nil, 'Failed to update bus interface control');
-
-
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil,'Waiting until the backplane is ready');
-   blocksize := 0;
-   retries := 0;
-   repeat
-     // attempt to set and read back the fn0 block size.
-     result1 := SDIODeviceReadWriteDirect(@WIFI^.MMC, True, BUS_FUNCTION, SDIO_CCCR_BLKSIZE, WIFI_BAK_BLK_BYTES, nil);
-     result2 := SDIODeviceReadWriteDirect(@WIFI^.MMC, False, BUS_FUNCTION, SDIO_CCCR_BLKSIZE, 1, @blocksize);
-     retries += 1;
-     sleep(1);
-   until ((result1 = MMC_STATUS_SUCCESS) and (result2 = MMC_STATUS_SUCCESS) and (blocksize = WIFI_BAK_BLK_BYTES)) or (retries > 500);
-
-   if (retries > 500) then
-     WIFILogError(nil, 'the backplane was not ready');
+   //if WIFI_LOG_ENABLED then WIFILogInfo(nil,'Waiting until the backplane is ready');
+   //blocksize := 0;
+   //retries := 0;
+   //repeat
+   //  // attempt to set and read back the fn0 block size.
+   //  result1 := SDIODeviceReadWriteDirect(@WIFI^.MMC, True, BUS_FUNCTION, SDIO_CCCR_BLKSIZE, WIFI_BAK_BLK_BYTES, nil);
+   //  result2 := SDIODeviceReadWriteDirect(@WIFI^.MMC, False, BUS_FUNCTION, SDIO_CCCR_BLKSIZE, 1, @blocksize);
+   //  retries += 1;
+   //  sleep(1);
+   //until ((result1 = MMC_STATUS_SUCCESS) and (result2 = MMC_STATUS_SUCCESS) and (blocksize = WIFI_BAK_BLK_BYTES)) or (retries > 500);
+   //
+   //if (retries > 500) then
+   //  WIFILogError(nil, 'the backplane was not ready');
 
    // if we get here we have successfully set the fn0 block size in CCCR and therefore the backplane is up.
 
@@ -2500,7 +2490,7 @@ const
   CID_TYPE_SHIFT = 28;
 
 var
- buf : array[0..511] of byte;
+ buf : PByte;
  i, coreid, corerev : integer;
  addr : longint;
  addressbytes : array[1..4] of byte;
@@ -2517,9 +2507,15 @@ begin
 
  Result := MMC_STATUS_INVALID_PARAMETER;
 
- // set backplane window
- fillchar(buf, sizeof(buf), 0);
+ buf := DMABufferAllocate(DMAHostGetDefault, Corescansz);
 
+ if not(DMA_CACHE_COHERENT) then
+  begin
+   // Clean Cache (Dest)
+   CleanDataCacheRange(PtrUInt(buf), Corescansz);
+  end;
+
+ // set backplane window
  Result := WIFIDeviceSetBackplaneWindow(WIFI, BAK_BASE_ADDR);
 
  // read 32 bits containing chip id and other info
@@ -2554,7 +2550,7 @@ begin
 
  try
    // read the core info from the device
-   Result := SDIODeviceReadWriteExtended(@WIFI^.MMC, False, BACKPLANE_FUNCTION, address, true, @buf[0], 8, 64);
+   Result := SDIODeviceReadWriteExtended(@WIFI^.MMC, False, BACKPLANE_FUNCTION, address, true, buf, 8, 64);
    if (Result <> MMC_STATUS_SUCCESS) then
    begin
      WIFILogError(nil, 'Failed to read Core information from the SDIO device.');
@@ -2651,6 +2647,8 @@ begin
        end;
       i := i + 4;
     end;
+
+    DMABufferRelease(buf);
 
     if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Corescan completed.');
 
@@ -3011,7 +3009,7 @@ function WIFIDeviceDownloadFirmware(WIFI : PWIFIDevice) : Longword;
 var
  FirmwareFile : file of byte;
  firmwarep : pbyte;
- comparebuf : pbyte;
+ //comparebuf : pbyte; //To Do //TestingSDIO
  off : longword;
  fsize : longword;
  i : integer;
@@ -3071,6 +3069,13 @@ begin
   reset(FirmwareFile);
   fsize := filesize(FirmwareFile);
   firmwarep := DMABufferAllocate(DMAHostGetDefault, fsize);
+
+  if not(DMA_CACHE_COHERENT) then
+   begin
+    // Clean Cache (Dest)
+    CleanDataCacheRange(PtrUInt(firmwarep), fsize);
+   end;
+
   blockread(FirmwareFile, firmwarep^, fsize);
   closefile(FirmwareFile);
 
@@ -3093,14 +3098,13 @@ begin
   if (fsize mod 4 <> 0) then
     fsize := ((fsize div 4) + 1) * 4;
 
-  getmem(comparebuf, fsize);
+  //getmem(comparebuf, fsize); //To Do //TestingSDIO
 
   {$ifdef CYW43455_DEBUG}
   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Bytes to transfer: ' + inttostr(fsize));
   {$endif}
 
   bytestransferred := 0;
-  dodumpregisters := false;
 
   while bytestransferred < fsize do
   begin
@@ -3142,6 +3146,13 @@ begin
     fsize := ((fsize div 4) + 1) * 4;
 
   firmwarep := DMABufferAllocate(DMAHostGetDefault, fsize);
+
+  if not(DMA_CACHE_COHERENT) then
+   begin
+    // Clean Cache (Dest)
+    CleanDataCacheRange(PtrUInt(firmwarep), fsize);
+   end;
+
   BlockRead(FirmwareFile, FirmwareP^, FileSize(FirmwareFile));
 
   fsize := Condense(PChar(FirmwareP), Filesize(FirmwareFile)); // note we deliberately *don't* use fsize here!
@@ -4295,7 +4306,7 @@ begin
         // thread waiting to be signaled for the response.
 
         SequenceNumber := (responseP^.cmd.flags >> 16) and $ffff;
-        RequestEntryP := WIFIWorkerThread.FindRequest(SequenceNumber);
+        RequestEntryP := FindRequest(SequenceNumber);
 
         if (RequestEntryP <> nil) then
         begin
@@ -4380,7 +4391,7 @@ begin
         // see if there are any requests interested in this event, and if so trigger
         // the callbacks. We only do the first one at the moment; we need a list eventually.
 
-        RequestEntryP := WIFIWorkerThread.FindRequestByEvent(EventRecordP^.whd_event.event_type);
+        RequestEntryP := FindRequestByEvent(EventRecordP^.whd_event.event_type);
         if (RequestEntryP <> nil) and (RequestEntryP^.Callback <> nil) then
         begin
           RequestEntryP^.Callback(TWIFIEvent(EventRecordP^.whd_event.event_type), EventRecordP, RequestEntryP, 0);
@@ -4412,7 +4423,7 @@ begin
         if WIFI_USE_SUPPLICANT and (WordSwap(EtherHeaderP^.ethertype) = EAP_OVER_LAN_PROTOCOL_ID) then
         begin
           wifiloginfo(nil,'EAPOL network packet received (after join); length='+inttostr(FrameLength - ETHERNET_CRC_SIZE) + ' operatingstate='+inttostr(SupplicantOperatingState));
-          RequestEntryP := WIFIWorkerThread.FindRequestByEvent(longword(WLC_E_EAPOL_MSG));
+          RequestEntryP := FindRequestByEvent(longword(WLC_E_EAPOL_MSG));
           if (RequestEntryP <> nil) and (RequestEntryP^.Callback <> nil) {and (SupplicantOperatingState=0)} then
           begin
             // this is kinda dirty but it works.
@@ -4462,8 +4473,8 @@ end;
 procedure TWIFIWorkerThread.Execute;
 var
   istatus : longword;
-  responseP  : PIOCTL_MSG = @ioctl_rxmsg;
-  blockcount, remainder : longword;
+  responseP  : PIOCTL_MSG; // = @ioctl_rxmsg; //To Do //TestingSDIO
+  blockcount, remainder, offset : longword;
   NetworkEntryP : PNetworkEntry;
   PacketP : PNetworkPacket;
   txlen : longword;
@@ -4511,6 +4522,7 @@ begin
      if MutexLock(FWIFI^.NetworkP^.Lock) = ERROR_SUCCESS then
      begin
       try
+         ResponseP := nil;
          NetworkEntryP:=BufferGet(FWIFI^.NetworkP^.ReceiveQueue.Buffer);
          if (NetworkEntryP <> nil) then
          begin
@@ -4526,7 +4538,7 @@ begin
          // look at the network device to see if there is any data to receive,
          // only if we had an interrupt flag
 
-         if (istatus and $40 = $40) then
+         if (ResponseP <> nil) and (NetworkEntryP <> nil) and (istatus and $40 = $40) then
          begin
            if SDIODeviceReadWriteExtended(@FWIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, ResponseP, 0, SDPCM_HEADER_SIZE) <> MMC_STATUS_SUCCESS then
            begin
@@ -4550,13 +4562,16 @@ begin
 
                if (ResponseP^.Len > SDPCM_HEADER_SIZE) then
                begin
-                 blockcount := (ResponseP^.Len-SDPCM_HEADER_SIZE) div 512;
-                 remainder := (ResponseP^.Len-SDPCM_HEADER_SIZE) mod 512;
+                 blockcount := ResponseP^.Len div 512; //(ResponseP^.Len-SDPCM_HEADER_SIZE) div 512; //To Do //TestingSDIO
+                 remainder := ResponseP^.Len mod 512; //(ResponseP^.Len-SDPCM_HEADER_SIZE) mod 512; //To Do //TestingSDIO
+
+                 if blockcount = 0 then
+                   Dec(remainder, SDPCM_HEADER_SIZE);
                end
                else
                begin
                 blockcount := 0;
-                remainder := ResponseP^.Len-SDPCM_HEADER_SIZE;
+                remainder := 0; // ResponseP^.Len-SDPCM_HEADER_SIZE; //To Do //TestingSDIO
                end;
 
                LastCredit := ResponseP^.Cmd.sdpcmheader.credit;
@@ -4565,14 +4580,28 @@ begin
                begin
                  if (blockcount > 0) then
                  begin
-                   if SDIODeviceReadWriteExtended(@FWIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep)+SDPCM_HEADER_SIZE, blockcount, 512) <> MMC_STATUS_SUCCESS then
-                     WIFILogError(nil, 'Error trying to read blocks for ioctl response');
+                   // Read the rest of first block to alignment for DMA (PIO)
+                   if SDIODeviceReadWriteExtended(@FWIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep) + SDPCM_HEADER_SIZE, 0, 512 - SDPCM_HEADER_SIZE) <> MMC_STATUS_SUCCESS then
+                     WIFILogError(nil, 'Error trying to read first block for ioctl response');
+
+                   if (blockcount > 1) then
+                   begin
+                     // Read the full blocks as a single request (DMA)
+                     if SDIODeviceReadWriteExtended(@FWIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep) + 512, blockcount - 1, 512) <> MMC_STATUS_SUCCESS then
+                       WIFILogError(nil, 'Error trying to read blocks for ioctl response');
+                   end;
                  end;
 
                  if (remainder > 0) then
                  begin
-                   if SDIODeviceReadWriteExtended(@FWIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep)+SDPCM_HEADER_SIZE + blockcount*512, 0, remainder) <> MMC_STATUS_SUCCESS then
-                     WIFILogError(nil, 'Error trying to read blocks for ioctl response (len='+inttostr(responsep^.len)+')');
+                   if blockcount = 0 then
+                     offset := SDPCM_HEADER_SIZE
+                   else
+                     offset := 0;
+
+                   // Read the partial last block (PIO)
+                   if SDIODeviceReadWriteExtended(@FWIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep) + offset + blockcount * 512, 0, remainder) <> MMC_STATUS_SUCCESS then
+                     WIFILogError(nil, 'Error trying to read remainder for ioctl response (len='+inttostr(responsep^.len)+')');
                  end;
 
                   if ((responseP^.cmd.sdpcmheader.chan and $f) <= 2) then
@@ -4677,6 +4706,7 @@ begin
                                     := NetworkEntryP;
             {Update Count}
             Inc(FWIFI^.NetworkP^.ReceiveQueue.Count);
+
             {Signal Packet Received}
             SemaphoreSignal(FWIFI^.NetworkP^.ReceiveQueue.Wait);
           end
