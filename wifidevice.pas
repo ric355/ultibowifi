@@ -78,13 +78,13 @@ const
   CYW43455_EVENT_FLAG_FLUSHTXQ    = $02;  // bit 1
   CYW43455_EVENT_FLAG_GROUP       = $04;  // but 2
 
-  CHIP_ID_PI_ZEROW = $a9a6; // 43430
+  //CHIP_ID_PI_ZEROW = $a9a6; // 43430 //To Do //TestingSDIO
 
   IOCTL_MAX_BLKLEN = 2048;
   SDPCM_HEADER_SIZE = 8;
-  //CDC_HEADER_SIZE = 16; //To Do //TestingSDIO
   IOCTL_LEN_BYTES = 4;
-  ETHERNET_HEADER_BYTES = 14;
+  //ETHERNET_HEADER_BYTES = 14; //To Do //TestingSDIO
+  BCDC_HEADER_SIZE = 4;
 
   RECEIVE_REQUEST_PACKET_COUNT = 16;
 
@@ -200,8 +200,6 @@ const
   SB_32BIT_WIN = $8000;
 
   WIFI_NAME_PREFIX = 'WIFI';    {Name prefix for WIFI Devices}
-
-  //OPERATION_IO_RW_DIRECT = 6; //To Do //TestingSDIO
 
   MAX_GLOM_PACKETS = 20; // maximum number of packets allowed in glomming (superpackets).
 
@@ -343,6 +341,14 @@ type
      flow,                 // flow control bits, reserved for tx
      credit : byte;        // maximum sequence number allowed by firmware for Tx
      reserved : word;      // reserved
+  end;
+
+  PBCDC_HEADER = ^BCDC_HEADER;
+  BCDC_HEADER = record
+    flags,                // flags contain protocol and checksum info
+    priority,             // 802.1d priority and USB flow control info (bit 4:7)
+    flags2,               // additional flags containing dongle interface index
+    data_offset : byte;   // start of packet data. header is following by firmware signals
   end;
 
   IOCTL_CMDP = ^IOCTL_CMD;
@@ -1470,7 +1476,7 @@ begin
 
  // set buffering sizes
  PCYW43455Network(Network)^.ReceiveRequestSize:=RECEIVE_REQUEST_PACKET_COUNT * sizeof(IOCTL_MSG); // space for 16 reads; actually more than that as a packet can't be as large as the IOCTL msg allocates
- PCYW43455Network(Network)^.TransmitRequestSize:=SizeOf(IOCTL_MSG); //ETHERNET_MAX_PACKET_SIZE; //+ LAN78XX_TX_OVERHEAD; don't know what overhead we have yet. //To Do //TestingSDIO
+ PCYW43455Network(Network)^.TransmitRequestSize:=SizeOf(IOCTL_MSG);
  PCYW43455Network(Network)^.ReceiveEntryCount:=40;
  PCYW43455Network(Network)^.TransmitEntryCount:=40;
  PCYW43455Network(Network)^.ReceivePacketCount:=RECEIVE_REQUEST_PACKET_COUNT * IOCTL_MAX_BLKLEN div (ETHERNET_MIN_PACKET_SIZE);
@@ -1503,13 +1509,15 @@ begin
    {Initialize Entry}
    Entry^.Size:=PCYW43455Network(Network)^.ReceiveRequestSize;
 
-   // pi zero has a different data offset as the header is 4 bytes longer.
-   // actually a firmware version thing. Other versions may be different too.
-   if (WIFI^.ChipId = CHIP_ID_PI_ZEROW) and (WIFI^.ChipIdRev = 1) then
-     Entry^.Offset:= ETHERNET_HEADER_BYTES + IOCTL_LEN_BYTES + 4
-   else
-     Entry^.Offset:= ETHERNET_HEADER_BYTES + IOCTL_LEN_BYTES; // + SDPCM_HEADER_SIZE + CDC_HEADER_SIZE;  // packet data starts after this point.
+   //To Do //TestingSDIO
+   //// pi zero has a different data offset as the header is 4 bytes longer.
+   //// actually a firmware version thing. Other versions may be different too.
+   //if (WIFI^.ChipId = CHIP_ID_PI_ZEROW) and (WIFI^.ChipIdRev = 1) then
+   //  Entry^.Offset:= ETHERNET_HEADER_BYTES + IOCTL_LEN_BYTES + 4
+   //else
+   //  Entry^.Offset:= ETHERNET_HEADER_BYTES + IOCTL_LEN_BYTES; // + SDPCM_HEADER_SIZE + CDC_HEADER_SIZE;  // packet data starts after this point.
 
+   Entry^.Offset:=0; // The actual offset if variable and is accounted for when receiving a packet
    Entry^.Count:=0;
 
    {Allocate Request Buffer}
@@ -4301,6 +4309,8 @@ var
  Framelength : word;
  EtherHeaderP : pether_header;
  k : integer;
+ BCDCHeaderP : PBCDC_HEADER;
+ Offset : LongWord;
 
 begin
  // the channel has 4 bits flags in the upper nibble and 4 bits channel number in the lower nibble.
@@ -4316,7 +4326,7 @@ begin
         if (RequestEntryP <> nil) then
         begin
           // this isn't very efficient and will need attention later.
-         getmem(RequestEntryP^.MsgP, ResponseP^.Len); //Sizeof(IOCTL_MSG) //To Do //TestingSDIO
+         getmem(RequestEntryP^.MsgP, ResponseP^.Len);
          move(ResponseP^, RequestEntryP^.MsgP^, ResponseP^.Len);
 
          // tell the waiting thread the response is ready.
@@ -4331,14 +4341,24 @@ begin
         if (ResponseP^.len <= responsep^.cmd.sdpcmheader.hdrlen) then
           exit;
 
+        // Get BCDC Header (which is after the SDPCM_HEADER)
+        BCDCHeaderP := PBCDC_HEADER(PByte(responseP) + responseP^.cmd.sdpcmheader.hdrlen);
+
+        // Get Data Offset
+        Offset := responseP^.cmd.sdpcmheader.hdrlen + BCDC_HEADER_SIZE + (BCDCHeaderP^.data_offset shl 2);
+
+        //To Do //TestingSDIO
         // for the Pi Zero, the header structure is a different size. Don't know what the
         // extra 4 bytes represent yet. Note the packet data offset for channel 2 has to be
         // adjusted as well but this is done during init.
 
-        if (FWIFI^.ChipId = CHIP_ID_PI_ZEROW) and (FWIFI^.ChipIdRev = 1) then
-          EventRecordP := pwhd_event(pbyte(responsep)+responsep^.cmd.sdpcmheader.hdrlen + 8)
-        else
-          EventRecordP := pwhd_event(pbyte(responsep)+responsep^.cmd.sdpcmheader.hdrlen + 4);
+        //if (FWIFI^.ChipId = CHIP_ID_PI_ZEROW) and (FWIFI^.ChipIdRev = 1) then
+        //  EventRecordP := pwhd_event(pbyte(responsep)+responsep^.cmd.sdpcmheader.hdrlen + 8)
+        //else
+        //  EventRecordP := pwhd_event(pbyte(responsep)+responsep^.cmd.sdpcmheader.hdrlen + 4);
+
+        // Get the Event Record
+        EventRecordP := pwhd_event(pbyte(responsep) + Offset);
 
         EventRecordP^.whd_event.status := NetSwapLong(EventRecordP^.whd_event.status);
         EventRecordP^.whd_event.event_type := NetSwapLong(EventRecordP^.whd_event.event_type);
@@ -4412,29 +4432,40 @@ begin
    // network packet
    2: begin
       try
-        // account for different header length in pi zero
-        if (FWIFI^.ChipId = CHIP_ID_PI_ZEROW) and (FWIFI^.ChipIdRev = 1) then
-        begin
-          FrameLength := responseP^.len - 8 - ETHERNET_HEADER_BYTES;
-          EtherHeaderP := pether_header(PByte(ResponseP) + ETHERNET_CRC_SIZE + ETHERNET_HEADER_BYTES + 4);
-        end
-        else
-        begin
-          FrameLength := responseP^.len - 4 - ETHERNET_HEADER_BYTES;
-          EtherHeaderP := pether_header(PByte(ResponseP) + ETHERNET_CRC_SIZE + ETHERNET_HEADER_BYTES);
-        end;
+        // Get BCDC Header (which is after the SDPCM_HEADER)
+        BCDCHeaderP := PBCDC_HEADER(PByte(responseP) + responseP^.cmd.sdpcmheader.hdrlen);
+
+        // Get Data Offset
+        Offset := responseP^.cmd.sdpcmheader.hdrlen + BCDC_HEADER_SIZE + (BCDCHeaderP^.data_offset shl 2);
+
+        //To Do //TestingSDIO
+        //// account for different header length in pi zero
+        //if (FWIFI^.ChipId = CHIP_ID_PI_ZEROW) and (FWIFI^.ChipIdRev = 1) then
+        //begin
+        //  FrameLength := responseP^.len - 8 - ETHERNET_HEADER_BYTES;
+        //  EtherHeaderP := pether_header(PByte(ResponseP) + ETHERNET_CRC_SIZE + ETHERNET_HEADER_BYTES + 4);
+        //end
+        //else
+        //begin
+        //  FrameLength := responseP^.len - 4 - ETHERNET_HEADER_BYTES;
+        //  EtherHeaderP := pether_header(PByte(ResponseP) + ETHERNET_CRC_SIZE + ETHERNET_HEADER_BYTES);
+        //end;
+
+        FrameLength := responseP^.len - Offset;
+        EtherHeaderP := pether_header(PByte(ResponseP) + Offset);
 
         // detect supplicant status. Needs to be more resilient.
         if WIFI_USE_SUPPLICANT and (WordSwap(EtherHeaderP^.ethertype) = EAP_OVER_LAN_PROTOCOL_ID) then
         begin
-          wifiloginfo(nil,'EAPOL network packet received (after join); length='+inttostr(FrameLength - ETHERNET_CRC_SIZE) + ' operatingstate='+inttostr(SupplicantOperatingState));
+          //wifiloginfo(nil,'EAPOL network packet received (after join); length='+inttostr(FrameLength - ETHERNET_CRC_SIZE) + ' operatingstate='+inttostr(SupplicantOperatingState)); //To Do //TestingSDIO
+          wifiloginfo(nil,'EAPOL network packet received (after join); length='+inttostr(FrameLength) + ' operatingstate='+inttostr(SupplicantOperatingState));
           RequestEntryP := FindRequestByEvent(longword(WLC_E_EAPOL_MSG));
           if (RequestEntryP <> nil) and (RequestEntryP^.Callback <> nil) {and (SupplicantOperatingState=0)} then
           begin
             // this is kinda dirty but it works.
             // we pass the packet in the user data pointer instead as this isn't an event.
             RequestEntryP^.UserDataP := EtherHeaderP;
-            RequestEntryP^.Callback(WLC_E_EAPOL_MSG, nil, RequestEntryP, FrameLength - ETHERNET_HEADER_BYTES);
+            RequestEntryP^.Callback(WLC_E_EAPOL_MSG, nil, RequestEntryP, FrameLength); // - ETHERNET_HEADER_BYTES //To Do //TestingSDIO
           end;
         end
         else
@@ -4443,8 +4474,8 @@ begin
           NetworkEntryP^.Count:=NetworkEntryP^.Count+1;
 
           NetworkEntryP^.Packets[NetworkEntryP^.Count - 1].Buffer:=ResponseP;
-          NetworkEntryP^.Packets[NetworkEntryP^.Count - 1].Data:=Pointer(ResponseP) + NetworkEntryP^.Offset;
-          NetworkEntryP^.Packets[NetworkEntryP^.Count - 1].Length:=FrameLength - ETHERNET_CRC_SIZE;
+          NetworkEntryP^.Packets[NetworkEntryP^.Count - 1].Data:=EtherHeaderP;   //Pointer(ResponseP) + NetworkEntryP^.Offset //To Do //TestingSDIO
+          NetworkEntryP^.Packets[NetworkEntryP^.Count - 1].Length:=FrameLength;  // - ETHERNET_CRC_SIZE //To Do //TestingSDIO
 
           {Update Statistics}
           Inc(FWIFI^.NetworkP^.ReceiveCount);
@@ -5341,9 +5372,6 @@ begin
                                                 mod PCYW43455Network(WIFI^.NetworkP)^.TransmitEntryCount] := NetworkEntryP;
           {Update Count}
           Inc(WIFI^.NetworkP^.TransmitQueue.Count);
-
-          //{Signal Packet Received} //To Do //TestingSDIO
-          //SemaphoreSignal(WIFI^.NetworkP^.TransmitQueue.Wait); //To Do //TestingSDIO
 
           {Release the Lock}
           MutexUnlock(WIFI^.NetworkP^.Lock);
