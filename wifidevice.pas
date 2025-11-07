@@ -51,7 +51,7 @@ const
   MSG_ERROR = 5;
 
 
-  EAP_OVER_LAN_PROTOCOL_ID = $888E;
+  //EAP_OVER_LAN_PROTOCOL_ID = $888E; //To Do //TestingSDIO
   WPA2_SECURITY = $00400000;        // Flag to enable WPA2 Security
   AES_ENABLED   = $0004;            // Flag to enable AES Encryption
   WHD_SECURITY_WPA2_AES_PSK = (WPA2_SECURITY or AES_ENABLED);
@@ -78,15 +78,17 @@ const
   CYW43455_EVENT_FLAG_FLUSHTXQ    = $02;  // bit 1
   CYW43455_EVENT_FLAG_GROUP       = $04;  // but 2
 
-  //CHIP_ID_PI_ZEROW = $a9a6; // 43430 //To Do //TestingSDIO
-
   IOCTL_MAX_BLKLEN = 2048;
   SDPCM_HEADER_SIZE = 8;
   IOCTL_LEN_BYTES = 4;
-  //ETHERNET_HEADER_BYTES = 14; //To Do //TestingSDIO
   BCDC_HEADER_SIZE = 4;
 
   RECEIVE_REQUEST_PACKET_COUNT = 16;
+
+  // BCDC Header Flags
+  BCDC_PROTOCOL_VERSION = 2;  // Protocol version
+  BCDC_VERSION_MASK = $f0;    // Protocol version mask
+  BCDC_VERSION_SHIFT = 4;     // Protocol version shift
 
   // wifi control commands
   WLC_GET_VAR = 262;
@@ -94,7 +96,7 @@ const
 
   WHD_MSG_IFNAME_MAX = 16;
 
-  ETHER_ADDR_LEN = 6;
+  //ETHER_ADDR_LEN = 6; //To Do //TestingSDIO
   BSS_TYPE_ANY = 2;
   SCAN_TYPE_PASSIVE = 1;
   SSID_MAX_LEN = 32;
@@ -217,17 +219,18 @@ type
     ivhigh : longword;
     ivlow : word;
     pad2 : array[1..10] of byte;
-    ethaddr : array[0..5] of byte;
+    ethaddr : THardwareAddress;
     pad3 : array[1..2] of byte;
   end;
 
   TWIFIJoinType = (WIFIJoinBlocking, WIFIJoinBackground);
   TWIFIReconnectionType = (WIFIReconnectNever, WIFIReconnectAlways);
 
-  pether_addr = ^ether_addr;
-  ether_addr = record
-    octet : array[0..ETHER_ADDR_LEN-1] of byte;
-  end;
+  //To Do //TestingSDIO
+  //pether_addr = ^ether_addr;
+  //ether_addr = record
+  //  octet : array[0..ETHER_ADDR_LEN-1] of byte;
+  //end;
 
   countryparams = record
     country_ie : array[1..4] of char;
@@ -247,7 +250,7 @@ type
 
   wl_scan_params = record
     ssid : wlc_ssid;
-    bssid : ether_addr;
+    bssid : THardwareAddress;
     bss_type : byte;
     scan_type : byte;
     nprobes : longword;
@@ -295,7 +298,7 @@ type
   end;
 
   wl_join_assoc_params = record
-    bssid : ether_addr;
+    bssid : THardwareAddress;
     bssid_cnt : word;
     chanspec_num : longword;
     chanspec_list : array[0..1] of word;
@@ -440,8 +443,8 @@ type
 
   pether_header = ^ether_header;
   ether_header = record
-      destination_address : array[0..5] of byte;
-      source_address : array[0..5] of byte;
+      destination_address : THardwareAddress;
+      source_address : THardwareAddress;
       ethertype : word;
   end;
 
@@ -461,7 +464,7 @@ type
       reason : longword;                               // Reason code (if applicable)
       auth_type : longword;                            // WLC_E_AUTH
       datalen : longword;                              // data buf
-      addr : array[0..5] of byte;                      // Station address (if applicable)
+      addr : THardwareAddress;                         // Station address (if applicable)
       ifname : array[0..WHD_MSG_IFNAME_MAX-1] of char; // name of the packet incoming interface
       ifidx : byte;                                    // destination OS i/f index
       bsscfgidx : byte;                                // source bsscfg index
@@ -647,7 +650,7 @@ type
   wl_bss_info = record
       version : longword;                       // version field
       length : longword;                        // byte length of data in this record, starting at version and including IEs
-      BSSID : ether_addr;                       // Unique 6-byte MAC address
+      BSSID : THardwareAddress;                 // Unique 6-byte MAC address
       beacon_period : word;                     // Interval between two consecutive beacon frames. Units are Kusec
       capability : word;                        // Capability information
       SSID_len : byte;                          // SSID length
@@ -700,7 +703,7 @@ type
 
   PUltiboPacketXFer = ^ TUltiboPacketXFer;
   TUltiboPacketXFer = record
-    source_address : array[0..5] of byte;
+    source_address : THardwareAddress;
     packetbufferp : PByte;
     DataLength : longint;
   end;
@@ -735,14 +738,14 @@ type
 
     FConnectionLost : TSemaphoreHandle;
     FSSID : string;
-    FBSSID : ether_addr;
+    FBSSID : THardwareAddress;
     FUseBSSID : boolean;
     FKey : string;
     FCountry : string;
     FReconnectionType : TWIFIReconnectionType;
   public
     constructor Create(AWIFI : PWIFIDevice);
-    procedure SetConnectionDetails(aSSID, aKey, aCountry : string; BSSID : ether_addr; useBSSID : boolean; aReconnectionType : TWIFIReconnectionType);
+    procedure SetConnectionDetails(aSSID, aKey, aCountry : string; BSSID : THardwareAddress; useBSSID : boolean; aReconnectionType : TWIFIReconnectionType);
     destructor Destroy; override;
     procedure Execute; override;
   end;
@@ -808,7 +811,7 @@ procedure UltiboMonotonicTimeProc(var epoch : longint; var millisecond : integer
 procedure WirelessScan(UserCallback : TWIFIScanUserCallback; WaitTime : Longint = 10000); cdecl; public name 'WirelessScan';
 function SupplicantWirelessJoinNetwork(ssid : PChar; authkey : PByte;
                              authkeylen : longword;
-                             bssid : Pether_addr;
+                             bssid : PHardwareAddress;
                              usebssid : boolean = false) : longword; cdecl; public name 'SupplicantWirelessJoinNetwork';
 procedure LockEAPOLPacketQueue(trace : pchar); cdecl; public name 'LockEAPOLPacketQueue';
 procedure UnlockEAPOLPacketQueue; cdecl; public name 'UnlockEAPOLPacketQueue';
@@ -826,7 +829,7 @@ function FirmwareWirelessJoinNetwork(ssid : string; security_key : string;
                              countrycode : string;
                              JoinType : TWIFIJoinType;
                              ReconnectType : TWIFIReconnectionType;
-                             bssid : ether_addr;
+                             bssid : THardwareAddress;
                              usebssid : boolean = false) : longword; cdecl;
 
 function WirelessLeaveNetwork : longword;
@@ -1508,15 +1511,6 @@ begin
   begin
    {Initialize Entry}
    Entry^.Size:=PCYW43455Network(Network)^.ReceiveRequestSize;
-
-   //To Do //TestingSDIO
-   //// pi zero has a different data offset as the header is 4 bytes longer.
-   //// actually a firmware version thing. Other versions may be different too.
-   //if (WIFI^.ChipId = CHIP_ID_PI_ZEROW) and (WIFI^.ChipIdRev = 1) then
-   //  Entry^.Offset:= ETHERNET_HEADER_BYTES + IOCTL_LEN_BYTES + 4
-   //else
-   //  Entry^.Offset:= ETHERNET_HEADER_BYTES + IOCTL_LEN_BYTES; // + SDPCM_HEADER_SIZE + CDC_HEADER_SIZE;  // packet data starts after this point.
-
    Entry^.Offset:=0; // The actual offset if variable and is accounted for when receiving a packet
    Entry^.Count:=0;
 
@@ -1573,7 +1567,7 @@ begin
   begin
    {Initialize Entry}
    Entry^.Size:=PCYW43455Network(Network)^.TransmitRequestSize;
-   Entry^.Offset:=sizeof(SDPCM_HEADER)+8;
+   Entry^.Offset:=IOCTL_LEN_BYTES + SDPCM_HEADER_SIZE + BCDC_HEADER_SIZE; //sizeof(SDPCM_HEADER)+8; //To Do //TestingSDIO
    Entry^.Count:=PCYW43455Network(Network)^.TransmitPacketCount;
 
    {Allocate Request Buffer}
@@ -1810,7 +1804,7 @@ begin
   begin
    {Update Entry}
    Entry^.Size:=PCYW43455Network(Network)^.TransmitRequestSize;
-   Entry^.Offset:=sizeof(SDPCM_HEADER)+8;
+   Entry^.Offset:=IOCTL_LEN_BYTES + SDPCM_HEADER_SIZE + BCDC_HEADER_SIZE; //sizeof(SDPCM_HEADER)+8; //To Do //TestingSDIO
    Entry^.Count:=PCYW43455Network(Network)^.TransmitPacketCount;
 
    {Update First Packet}
@@ -3647,12 +3641,12 @@ begin
                   + ' buflen = '+inttostr(scanresultp^.buflen)
                   + ' channel = ' +inttostr(scanresultp^.bss_info[1].chanspec and $ff)
                   + ' chanspec = ' +inttohex(scanresultp^.bss_info[1].chanspec, 8)
-                  + ' BSSID = ' +inttohex(scanresultp^.bss_info[1].BSSID.octet[0], 2) + ':'
-                  + inttohex(scanresultp^.bss_info[1].BSSID.octet[1], 2) + ':'
-                  + inttohex(scanresultp^.bss_info[1].BSSID.octet[2], 2) + ':'
-                  + inttohex(scanresultp^.bss_info[1].BSSID.octet[3], 2) + ':'
-                  + inttohex(scanresultp^.bss_info[1].BSSID.octet[4], 2) + ':'
-                  + inttohex(scanresultp^.bss_info[1].BSSID.octet[5], 2);
+                  + ' BSSID = ' +inttohex(scanresultp^.bss_info[1].BSSID[0], 2) + ':'
+                  + inttohex(scanresultp^.bss_info[1].BSSID[1], 2) + ':'
+                  + inttohex(scanresultp^.bss_info[1].BSSID[2], 2) + ':'
+                  + inttohex(scanresultp^.bss_info[1].BSSID[3], 2) + ':'
+                  + inttohex(scanresultp^.bss_info[1].BSSID[4], 2) + ':'
+                  + inttohex(scanresultp^.bss_info[1].BSSID[5], 2);
 
     if (eventrecordp^.whd_event.status = 8) then
       s := s + ' Partial scan result';
@@ -3706,7 +3700,7 @@ begin
   scanparams.sync_id:=NetSwapWord($1234);
   scanparams.params.scan_type := SCAN_TYPE_PASSIVE;
   scanparams.params.bss_type := BSS_TYPE_ANY;
-  fillchar(scanparams.params.bssid.octet[0], sizeof(ether_addr), $ff);  // broadcast address
+  fillchar(scanparams.params.bssid[0], sizeof(THardwareAddress), $ff);  // broadcast address
   scanparams.params.nprobes := $ffffffff;
   scanparams.params.active_time := $ffffffff;
   scanparams.params.passive_time := $ffffffff;
@@ -3783,7 +3777,7 @@ function FirmwareWirelessJoinNetwork(ssid : string; security_key : string;
                              countrycode : string;
                              JoinType : TWIFIJoinType;
                              ReconnectType : TWIFIReconnectionType;
-                             bssid : ether_addr;
+                             bssid : THardwareAddress;
                              usebssid : boolean = false) : longword; cdecl;
 var
   WIFI:PWIFIDevice;
@@ -4347,16 +4341,6 @@ begin
         // Get Data Offset
         Offset := responseP^.cmd.sdpcmheader.hdrlen + BCDC_HEADER_SIZE + (BCDCHeaderP^.data_offset shl 2);
 
-        //To Do //TestingSDIO
-        // for the Pi Zero, the header structure is a different size. Don't know what the
-        // extra 4 bytes represent yet. Note the packet data offset for channel 2 has to be
-        // adjusted as well but this is done during init.
-
-        //if (FWIFI^.ChipId = CHIP_ID_PI_ZEROW) and (FWIFI^.ChipIdRev = 1) then
-        //  EventRecordP := pwhd_event(pbyte(responsep)+responsep^.cmd.sdpcmheader.hdrlen + 8)
-        //else
-        //  EventRecordP := pwhd_event(pbyte(responsep)+responsep^.cmd.sdpcmheader.hdrlen + 4);
-
         // Get the Event Record
         EventRecordP := pwhd_event(pbyte(responsep) + Offset);
 
@@ -4438,26 +4422,13 @@ begin
         // Get Data Offset
         Offset := responseP^.cmd.sdpcmheader.hdrlen + BCDC_HEADER_SIZE + (BCDCHeaderP^.data_offset shl 2);
 
-        //To Do //TestingSDIO
-        //// account for different header length in pi zero
-        //if (FWIFI^.ChipId = CHIP_ID_PI_ZEROW) and (FWIFI^.ChipIdRev = 1) then
-        //begin
-        //  FrameLength := responseP^.len - 8 - ETHERNET_HEADER_BYTES;
-        //  EtherHeaderP := pether_header(PByte(ResponseP) + ETHERNET_CRC_SIZE + ETHERNET_HEADER_BYTES + 4);
-        //end
-        //else
-        //begin
-        //  FrameLength := responseP^.len - 4 - ETHERNET_HEADER_BYTES;
-        //  EtherHeaderP := pether_header(PByte(ResponseP) + ETHERNET_CRC_SIZE + ETHERNET_HEADER_BYTES);
-        //end;
-
+        // Get the Ethernet packet and frame length
         FrameLength := responseP^.len - Offset;
         EtherHeaderP := pether_header(PByte(ResponseP) + Offset);
 
         // detect supplicant status. Needs to be more resilient.
-        if WIFI_USE_SUPPLICANT and (WordSwap(EtherHeaderP^.ethertype) = EAP_OVER_LAN_PROTOCOL_ID) then
+        if WIFI_USE_SUPPLICANT and (WordSwap(EtherHeaderP^.ethertype) = PACKET_TYPE_EAPOL) then //EAP_OVER_LAN_PROTOCOL_ID //To Do //TestingSDIO
         begin
-          //wifiloginfo(nil,'EAPOL network packet received (after join); length='+inttostr(FrameLength - ETHERNET_CRC_SIZE) + ' operatingstate='+inttostr(SupplicantOperatingState)); //To Do //TestingSDIO
           wifiloginfo(nil,'EAPOL network packet received (after join); length='+inttostr(FrameLength) + ' operatingstate='+inttostr(SupplicantOperatingState));
           RequestEntryP := FindRequestByEvent(longword(WLC_E_EAPOL_MSG));
           if (RequestEntryP <> nil) and (RequestEntryP^.Callback <> nil) {and (SupplicantOperatingState=0)} then
@@ -4465,7 +4436,7 @@ begin
             // this is kinda dirty but it works.
             // we pass the packet in the user data pointer instead as this isn't an event.
             RequestEntryP^.UserDataP := EtherHeaderP;
-            RequestEntryP^.Callback(WLC_E_EAPOL_MSG, nil, RequestEntryP, FrameLength); // - ETHERNET_HEADER_BYTES //To Do //TestingSDIO
+            RequestEntryP^.Callback(WLC_E_EAPOL_MSG, nil, RequestEntryP, FrameLength);
           end;
         end
         else
@@ -4474,8 +4445,8 @@ begin
           NetworkEntryP^.Count:=NetworkEntryP^.Count+1;
 
           NetworkEntryP^.Packets[NetworkEntryP^.Count - 1].Buffer:=ResponseP;
-          NetworkEntryP^.Packets[NetworkEntryP^.Count - 1].Data:=EtherHeaderP;   //Pointer(ResponseP) + NetworkEntryP^.Offset //To Do //TestingSDIO
-          NetworkEntryP^.Packets[NetworkEntryP^.Count - 1].Length:=FrameLength;  // - ETHERNET_CRC_SIZE //To Do //TestingSDIO
+          NetworkEntryP^.Packets[NetworkEntryP^.Count - 1].Data:=EtherHeaderP;
+          NetworkEntryP^.Packets[NetworkEntryP^.Count - 1].Length:=FrameLength;
 
           {Update Statistics}
           Inc(FWIFI^.NetworkP^.ReceiveCount);
@@ -4524,6 +4495,8 @@ var
   PrevResponseP : PIOCTL_MSG;
   LastCredit : byte;
   seqdiff : integer;
+  SDPCMHeaderP : PSDPCM_HEADER;
+  BCDCHeaderP : PBCDC_HEADER;
 
 begin
   {$ifdef CYW43455_DEBUG}
@@ -4767,20 +4740,33 @@ begin
             begin
               PacketP:=@NetworkEntryP^.Packets[i];
 
-              //write an sdpcm header
               if (PacketP <> nil) then
               begin
-                PSDPCM_HEADER(PacketP^.Buffer+4)^.chan:=2;
-                PSDPCM_HEADER(PacketP^.Buffer+4)^.nextlen := 0;
-                PSDPCM_HEADER(PacketP^.Buffer+4)^.hdrlen:=sizeof(SDPCM_HEADER)+4;
-                PSDPCM_HEADER(PacketP^.Buffer+4)^.credit := 0;
-                PSDPCM_HEADER(PacketP^.Buffer+4)^.flow := 0;
-                PSDPCM_HEADER(PacketP^.Buffer+4)^.seq:=txseq;
-                PSDPCM_HEADER(PacketP^.Buffer+4)^.reserved := 0;
+                // Get SDPCM Header
+                SDPCMHeaderP := PSDPCM_HEADER(PacketP^.Buffer + IOCTL_LEN_BYTES);
 
-                // we still don't know what this part of the header is.
-                // just having to replicate what is in circle at the moment.
-                (PLongword(PacketP^.Buffer)+3)^ := NetSwapLong($20000000);
+                //write an sdpcm header
+                SDPCMHeaderP^.chan:=2;
+                SDPCMHeaderP^.nextlen := 0;
+                SDPCMHeaderP^.hdrlen:=IOCTL_LEN_BYTES + SDPCM_HEADER_SIZE;
+                SDPCMHeaderP^.credit := 0;
+                SDPCMHeaderP^.flow := 0;
+                SDPCMHeaderP^.seq:=txseq;
+                SDPCMHeaderP^.reserved := 0;
+
+                //To Do //TestingSDIO
+                //// we still don't know what this part of the header is.
+                //// just having to replicate what is in circle at the moment.
+                //(PLongword(PacketP^.Buffer)+3)^ := NetSwapLong($20000000);
+
+                // Get BCDC Header
+                BCDCHeaderP := PBCDC_HEADER(PacketP^.Buffer + SDPCMHeaderP^.hdrlen);
+
+                // Write BCDC Header
+                BCDCHeaderP^.flags := BCDC_PROTOCOL_VERSION shl BCDC_VERSION_SHIFT;
+                BCDCHeaderP^.priority := 0;
+                BCDCHeaderP^.flags2 := 0;
+                BCDCHeaderP^.data_offset := 0;
 
                 // needs thread protection?
                 if (txseq < 255) then
@@ -4806,7 +4792,7 @@ begin
                   end;
                 end;
 
-                PIOCTL_MSG(PacketP^.Buffer)^.len := PacketP^.length+sizeof(SDPCM_HEADER)+4+4;  // 4 for end of sdpcm header, 4 for length itself?
+                PIOCTL_MSG(PacketP^.Buffer)^.len := PacketP^.length + IOCTL_LEN_BYTES + SDPCM_HEADER_SIZE + BCDC_HEADER_SIZE; //+sizeof(SDPCM_HEADER)+4+4  // 4 for end of sdpcm header, 4 for length itself? //To Do //TestingSDIO
                 PIOCTL_MSG(PacketP^.Buffer)^.notlen := not PIOCTL_MSG(PacketP^.Buffer)^.len;
 
                 // calculate transmission sizes
@@ -4839,7 +4825,8 @@ begin
                   // we want keys to be set after these messages are sent, so we detect the sitution here
                   // and the keys are set in DoNetworkNotify just before the network is brought up.
 
-                  if (pether_header(pbyte(packetp^.buffer) + 8 + sizeof(SDPCM_HEADER))^.ethertype = WordSwap(EAP_OVER_LAN_PROTOCOL_ID)) then
+                  //if (pether_header(pbyte(packetp^.buffer) + 8 + sizeof(SDPCM_HEADER))^.ethertype = WordSwap(EAP_OVER_LAN_PROTOCOL_ID)) then //To Do //TestingSDIO
+                  if (pether_header(pbyte(packetp^.buffer) + IOCTL_LEN_BYTES + SDPCM_HEADER_SIZE + BCDC_HEADER_SIZE)^.ethertype = WordSwap(PACKET_TYPE_EAPOL)) then //EAP_OVER_LAN_PROTOCOL_ID //To Do //TestingSDIO
                   begin
                     WIFILogDebug(nil, 'Detected transmission of an eapol packet');
 
@@ -4903,7 +4890,7 @@ begin
 end;
 
 procedure TWirelessReconnectionThread.SetConnectionDetails(aSSID, aKey, aCountry : string;
-          BSSID : ether_addr; useBSSID : boolean; aReconnectionType : TWIFIReconnectionType);
+          BSSID : THardwareAddress; useBSSID : boolean; aReconnectionType : TWIFIReconnectionType);
 begin
   FSSID := aSSID;
   FKey := aKey;
@@ -5047,7 +5034,7 @@ end;
 
 function SupplicantWirelessJoinNetwork(ssid : PChar; authkey : PByte;
                              authkeylen : longword;
-                             bssid : Pether_addr;
+                             bssid : PHardwareAddress;
                              usebssid : boolean = false) : longword; cdecl;
 var
   WIFI:PWIFIDevice;
@@ -5162,9 +5149,9 @@ begin
 
   {configure bssid}
   if (usebssid) then
-     move(bssid^.octet[0], extjoinparams.assoc_params.bssid.octet[0], 6) { bssid}
+     move(bssid^[0], extjoinparams.assoc_params.bssid[0], HARDWARE_ADDRESS_SIZE) { bssid}
   else
-     fillchar(extjoinparams.assoc_params.bssid.octet[0], 6, $ff); { empty}
+     fillchar(extjoinparams.assoc_params.bssid[0], HARDWARE_ADDRESS_SIZE, $ff); { empty}
 
   {configure channel info}
   if (chan <> 0) then

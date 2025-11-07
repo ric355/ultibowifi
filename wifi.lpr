@@ -58,12 +58,12 @@ procedure WIFIScanCallback(ssid : string; ScanResultP : pwl_escan_result);
 var
   ssidstr : string;
 begin
-  ssidstr := ssid + ' ' + inttohex(ScanResultP^.bss_info[1].BSSID.octet[0],2) + ':'
-                            + inttohex(ScanResultP^.bss_info[1].BSSID.octet[1],2) + ':'
-                            + inttohex(ScanResultP^.bss_info[1].BSSID.octet[2],2) + ':'
-                            + inttohex(ScanResultP^.bss_info[1].BSSID.octet[3],2) + ':'
-                            + inttohex(ScanResultP^.bss_info[1].BSSID.octet[4],2) + ':'
-                            + inttohex(ScanResultP^.bss_info[1].BSSID.octet[5],2);
+  ssidstr := ssid + ' ' + inttohex(ScanResultP^.bss_info[1].BSSID[0],2) + ':'
+                            + inttohex(ScanResultP^.bss_info[1].BSSID[1],2) + ':'
+                            + inttohex(ScanResultP^.bss_info[1].BSSID[2],2) + ':'
+                            + inttohex(ScanResultP^.bss_info[1].BSSID[3],2) + ':'
+                            + inttohex(ScanResultP^.bss_info[1].BSSID[4],2) + ':'
+                            + inttohex(ScanResultP^.bss_info[1].BSSID[5],2);
 
   if (ScanResultList <> nil) and (ScanResultList.Indexof(ssidstr) < 0) then
     ScanResultList.Add(ssidstr);
@@ -213,7 +213,7 @@ begin
 end;
 
 var
-  BSSID : ether_addr;
+  BSSID : THardwareAddress;
   LedStatus : boolean;
   CPUWindow : TWindowHandle;
   WIFIDeviceP : PWIFIDevice;
@@ -382,12 +382,12 @@ begin
         if (BSSIDStr <> '') then
         begin
           ConsoleWindowWriteln(TopWindow, 'Using BSSID configuration ' + BSSIDStr + ' from cmdline.txt');
-          bssid.octet[0] := hex2dec(copy(BSSIDStr, 1, 2));
-          bssid.octet[1] := hex2dec(copy(BSSIDStr, 4, 2));
-          bssid.octet[2] := hex2dec(copy(BSSIDStr, 7, 2));
-          bssid.octet[3] := hex2dec(copy(BSSIDStr, 10, 2));
-          bssid.octet[4] := hex2dec(copy(BSSIDStr, 13, 2));
-          bssid.octet[5] := hex2dec(copy(BSSIDStr, 16, 2));
+          bssid[0] := hex2dec(copy(BSSIDStr, 1, 2));
+          bssid[1] := hex2dec(copy(BSSIDStr, 4, 2));
+          bssid[2] := hex2dec(copy(BSSIDStr, 7, 2));
+          bssid[3] := hex2dec(copy(BSSIDStr, 10, 2));
+          bssid[4] := hex2dec(copy(BSSIDStr, 13, 2));
+          bssid[5] := hex2dec(copy(BSSIDStr, 16, 2));
         end
         else
           ConsoleWindowWriteln(TopWindow, 'Letting the Cypress firmware determine the best network interface from the SSID');
