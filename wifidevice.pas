@@ -78,11 +78,11 @@ const
   CYW43455_EVENT_FLAG_FLUSHTXQ    = $02;  // bit 1
   CYW43455_EVENT_FLAG_GROUP       = $04;  // but 2
 
-  CHIP_ID_PI_ZEROW = $a9a6;
+  CHIP_ID_PI_ZEROW = $a9a6; // 43430
 
   IOCTL_MAX_BLKLEN = 2048;
   SDPCM_HEADER_SIZE = 8;
-  CDC_HEADER_SIZE = 16;
+  //CDC_HEADER_SIZE = 16; //To Do //TestingSDIO
   IOCTL_LEN_BYTES = 4;
   ETHERNET_HEADER_BYTES = 14;
 
@@ -201,7 +201,7 @@ const
 
   WIFI_NAME_PREFIX = 'WIFI';    {Name prefix for WIFI Devices}
 
-  OPERATION_IO_RW_DIRECT = 6;
+  //OPERATION_IO_RW_DIRECT = 6; //To Do //TestingSDIO
 
   MAX_GLOM_PACKETS = 20; // maximum number of packets allowed in glomming (superpackets).
 
@@ -425,6 +425,7 @@ type
 
    macaddress : THardwareAddress;
    DMABuffer:Pointer;
+   DMAAlignment:LongWord;
 
    {additional statistics}
    ReceiveGlomPacketCount:LongWord;              {number of Glom packets received}
@@ -883,13 +884,8 @@ var
 
   txseq : byte = 1; // ioctl tx sequence number.
 
-  //WIFI:PWIFIDevice; //To Do //TestingSDIO
-  //WIFIWorkerThread : TWIFIWorkerThread; //To Do //TestingSDIO
-  //BackgroundJoinThread : TWirelessReconnectionThread = nil; //To Do //TestingSDIO
-
   EAPOLQueueLock : TRTLCriticalSection;
   SupplicantOperatingState : integer; cvar; external;
-  //WPASupplicantThread : TWPASupplicantThread = nil; //To Do //TestingSDIO
 
 {functions we need to call that are defined by wpa_supplicant}
 procedure SetUltiboMacAddress(AMacAddress : PChar); cdecl; external;
@@ -1390,6 +1386,7 @@ var
  Status:longword;
  SDHCI:PSDHCIHost;
  Entry:PNetworkEntry;
+ DMAProperties:TDMAProperties;
 begin
  Result := ERROR_INVALID_PARAMETER;
 
@@ -1447,6 +1444,13 @@ begin
    CleanDataCacheRange(PtrUInt(WIFI^.DMABuffer), IOCTL_MAX_BLKLEN);
   end;
 
+ // Get DMA properties
+ if DMAHostProperties(DMAHostGetDefault,@DMAProperties) = ERROR_SUCCESS then
+  begin
+   // Save DMA alignment
+   WIFI^.DMAAlignment:=DMAProperties.Alignment;
+  end;
+
  // Save Wireless Device
  Network^.Device.DeviceData := WIFI;
 
@@ -1466,7 +1470,7 @@ begin
 
  // set buffering sizes
  PCYW43455Network(Network)^.ReceiveRequestSize:=RECEIVE_REQUEST_PACKET_COUNT * sizeof(IOCTL_MSG); // space for 16 reads; actually more than that as a packet can't be as large as the IOCTL msg allocates
- PCYW43455Network(Network)^.TransmitRequestSize:=ETHERNET_MAX_PACKET_SIZE; //+ LAN78XX_TX_OVERHEAD; don't know what overhead we have yet.
+ PCYW43455Network(Network)^.TransmitRequestSize:=SizeOf(IOCTL_MSG); //ETHERNET_MAX_PACKET_SIZE; //+ LAN78XX_TX_OVERHEAD; don't know what overhead we have yet. //To Do //TestingSDIO
  PCYW43455Network(Network)^.ReceiveEntryCount:=40;
  PCYW43455Network(Network)^.TransmitEntryCount:=40;
  PCYW43455Network(Network)^.ReceivePacketCount:=RECEIVE_REQUEST_PACKET_COUNT * IOCTL_MAX_BLKLEN div (ETHERNET_MIN_PACKET_SIZE);
@@ -1844,21 +1848,8 @@ begin
  Result:=ERROR_NOT_READY;
  if Network^.NetworkState <> NETWORK_STATE_OPEN then Exit;
 
- {Acquire the Lock}
- if MutexLock(Network^.Lock) = ERROR_SUCCESS then
-  begin
-   try
-    {Free Entry (Receive Buffer)}
-    Result:=BufferFree(Entry);
-   finally
-    {Release the Lock}
-    MutexUnlock(Network^.Lock);
-   end;
-  end
- else
-  begin
-   Result:=ERROR_CAN_NOT_COMPLETE;
-  end;
+ {Free Entry (Receive Buffer)}
+ Result:=BufferFree(Entry);
 end;
 
 function CYW43455BufferReceive(Network:PNetworkDevice;var Entry:PNetworkEntry):LongWord;
@@ -1887,22 +1878,20 @@ begin
    {Acquire the Lock}
    if MutexLock(Network^.Lock) = ERROR_SUCCESS then
     begin
-     try
-      {Remove Entry}
-      Entry:=Network^.ReceiveQueue.Entries[Network^.ReceiveQueue.Start];
+     {Remove Entry}
+     Entry:=Network^.ReceiveQueue.Entries[Network^.ReceiveQueue.Start];
 
-      {Update Start}
-      Network^.ReceiveQueue.Start:=(Network^.ReceiveQueue.Start + 1) mod PCYW43455Network(Network)^.ReceiveEntryCount;
+     {Update Start}
+     Network^.ReceiveQueue.Start:=(Network^.ReceiveQueue.Start + 1) mod PCYW43455Network(Network)^.ReceiveEntryCount;
 
-      {Update Count}
-      Dec(Network^.ReceiveQueue.Count);
+     {Update Count}
+     Dec(Network^.ReceiveQueue.Count);
 
-      {Return Result}
-      Result:=ERROR_SUCCESS;
-     finally
-      {Release the Lock}
-      MutexUnlock(Network^.Lock);
-     end;
+     {Return Result}
+     Result:=ERROR_SUCCESS;
+
+     {Release the Lock}
+     MutexUnlock(Network^.Lock);
     end
    else
     begin
@@ -1944,30 +1933,28 @@ begin
     {Acquire the Lock}
     if MutexLock(Network^.Lock) = ERROR_SUCCESS then
      begin
-      try
-       {Check Empty}
-       Empty:=(Network^.TransmitQueue.Count = 0);
+      {Check Empty}
+      Empty:=(Network^.TransmitQueue.Count = 0);
 
-       {Add Entry}
-       Network^.TransmitQueue.Entries[(Network^.TransmitQueue.Start + Network^.TransmitQueue.Count) mod PCYW43455Network(Network)^.TransmitEntryCount]:=Entry;
+      {Add Entry}
+      Network^.TransmitQueue.Entries[(Network^.TransmitQueue.Start + Network^.TransmitQueue.Count) mod PCYW43455Network(Network)^.TransmitEntryCount]:=Entry;
 
-       {Update Count}
-       Inc(Network^.TransmitQueue.Count);
+      {Update Count}
+      Inc(Network^.TransmitQueue.Count);
 
-       {Check Empty}
-       if Empty then
-        begin
-         {Start Transmit}
-         // this needs to be filled in with something!
-         //LAN78XXTransmitStart(PLAN78XXNetwork(Network));
-        end;
+      {Check Empty}
+      if Empty then
+       begin
+        {Start Transmit}
+        // this needs to be filled in with something!
+        //LAN78XXTransmitStart(PLAN78XXNetwork(Network));
+       end;
 
-       {Return Result}
-       Result:=ERROR_SUCCESS;
-      finally
-       {Release the Lock}
-       MutexUnlock(Network^.Lock);
-      end;
+      {Return Result}
+      Result:=ERROR_SUCCESS;
+
+      {Release the Lock}
+      MutexUnlock(Network^.Lock);
      end
     else
      begin
@@ -4329,7 +4316,7 @@ begin
         if (RequestEntryP <> nil) then
         begin
           // this isn't very efficient and will need attention later.
-         getmem(RequestEntryP^.MsgP, Sizeof(IOCTL_MSG));
+         getmem(RequestEntryP^.MsgP, ResponseP^.Len); //Sizeof(IOCTL_MSG) //To Do //TestingSDIO
          move(ResponseP^, RequestEntryP^.MsgP^, ResponseP^.Len);
 
          // tell the waiting thread the response is ready.
@@ -4464,12 +4451,12 @@ begin
           Inc(FWIFI^.NetworkP^.ReceiveBytes,NetworkEntryP^.Packets[NetworkEntryP^.Count - 1].Length);
 
           // update bytesleft from current packet read
-          bytesleft := bytesleft - ResponseP^.len;
+          bytesleft := bytesleft - RoundUp(ResponseP^.len, FWIFI^.DMAAlignment);
 
           // check enough bytes left for a worst case packet for the next read.
           if (bytesleft > sizeof(IOCTL_MSG)) then
           begin
-            ResponseP := PIOCTL_MSG(PByte(ResponseP)+ResponseP^.Len);
+            ResponseP := PIOCTL_MSG(PByte(ResponseP) + RoundUp(ResponseP^.Len, FWIFI^.DMAAlignment));
           end
           else
           begin
@@ -4499,7 +4486,6 @@ var
   i : integer;
   BytesLeft : longword;
   isfinished : boolean;
-  //KeyP : PWPAKey; //To Do //TestingSDIO
   nGlomPackets : integer;
   SubPacketLengthP : PWord;
   GlomDescriptor : TGlomDescriptor;
@@ -4558,7 +4544,7 @@ begin
 
          if (ResponseP <> nil) and (NetworkEntryP <> nil) and (istatus and $40 = $40) then
          begin
-           if SDIODeviceReadWriteExtended(@FWIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, ResponseP, 0, SDPCM_HEADER_SIZE) <> MMC_STATUS_SUCCESS then
+           if SDIODeviceReadWriteExtended(@FWIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, ResponseP, 0, IOCTL_LEN_BYTES) <> MMC_STATUS_SUCCESS then
            begin
              WIFILogError(nil, 'Error trying to read SDPCM header');
              exit;
@@ -4578,13 +4564,13 @@ begin
                if ((responsep^.len + responsep^.notlen) <> $ffff) then
                   WIFILogError(nil, 'IOCTL Header length failure: len='+inttohex(responsep^.len, 8) + ' notlen='+inttohex(responsep^.notlen, 8));
 
-               if (ResponseP^.Len > SDPCM_HEADER_SIZE) then
+               if (ResponseP^.Len > IOCTL_LEN_BYTES) then
                begin
                  blockcount := ResponseP^.Len div 512;
                  remainder := ResponseP^.Len mod 512;
 
                  if blockcount = 0 then
-                   Dec(remainder, SDPCM_HEADER_SIZE);
+                   Dec(remainder, IOCTL_LEN_BYTES);
                end
                else
                begin
@@ -4598,8 +4584,8 @@ begin
                begin
                  if (blockcount > 0) then
                  begin
-                   // Read the rest of first block to alignment for DMA (PIO)
-                   if SDIODeviceReadWriteExtended(@FWIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep) + SDPCM_HEADER_SIZE, 0, 512 - SDPCM_HEADER_SIZE) <> MMC_STATUS_SUCCESS then
+                   // Read the rest of first block to maintain alignment for DMA (PIO)
+                   if SDIODeviceReadWriteExtended(@FWIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep) + IOCTL_LEN_BYTES, 0, 512 - IOCTL_LEN_BYTES) <> MMC_STATUS_SUCCESS then
                      WIFILogError(nil, 'Error trying to read first block for ioctl response');
 
                    if (blockcount > 1) then
@@ -4613,7 +4599,7 @@ begin
                  if (remainder > 0) then
                  begin
                    if blockcount = 0 then
-                     offset := SDPCM_HEADER_SIZE
+                     offset := IOCTL_LEN_BYTES
                    else
                      offset := 0;
 
@@ -4703,7 +4689,7 @@ begin
                    WIFILogError(nil, 'WIFIWorkern: Could not read a large message into an undersized buffer (len='+inttostr(responsep^.len)+')');
 
                // read next sdpcm header (may not be one present in which case everything will be zero including length)
-               if (not isFinished) and (SDIODeviceReadWriteExtended(@FWIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, ResponseP, 0, SDPCM_HEADER_SIZE) <> MMC_STATUS_SUCCESS) then
+               if (not isFinished) and (SDIODeviceReadWriteExtended(@FWIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, ResponseP, 0, IOCTL_LEN_BYTES) <> MMC_STATUS_SUCCESS) then
                begin
                  WIFILogError(nil, 'Error trying to read SDPCM header (repeat)');
                  exit;
@@ -5039,7 +5025,6 @@ var
   chan : integer;
   countrysettings : countryparams;
   res : longword;
-  //data : array[0..1] of longword; //To Do //TestingSDIO
   responseval : longword;
   wpa_auth : longword;
   RequestEntryP : PWIFIRequestItem;
@@ -5322,58 +5307,59 @@ begin
   WIFI := PWIFIDevice(MMCDeviceFindByDescription(CYW43455_SDIO_DESCRIPTION)); //To Do //TestingSDIO // Pass priv pointer from supplicant ?
   if WIFI = nil then Exit;
 
-  if MutexLock(WIFI^.NetworkP^.Lock) = ERROR_SUCCESS then
-  begin
-
+  try
     {get transmit buffer.}
-    try
-      NetworkEntryP:=BufferGet(WIFI^.NetworkP^.TransmitQueue.Buffer);
+    NetworkEntryP:=BufferGet(WIFI^.NetworkP^.TransmitQueue.Buffer);
+    if (NetworkEntryP <> nil) and (NetworkEntryP^.Buffer <> nil) then
+    begin
+      {get packet list pointer}
+      TransmitBufferP := NetworkEntryP^.Buffer;
 
-      if (NetworkEntryP <> nil) then
+      {increment packet count - should almost always be zero at this point?}
+      NetworkEntryP^.Count:=1;
+
+      {setup packet entry}
+      NetworkEntryP^.Packets[NetworkEntryP^.Count-1].Buffer:=TransmitBufferP;
+      NetworkEntryP^.Packets[NetworkEntryP^.Count-1].Data:=Pointer(TransmitBufferP) + NetworkEntryP^.Offset;
+      NetworkEntryP^.Packets[NetworkEntryP^.Count-1].Length:=Len;
+
+      {need to byte swap the protocol id apparently?}
+      pether_header(PacketBufferP)^.ethertype := WordSwap(pether_header(PacketBufferP)^.ethertype);
+
+      {not sure if this is right either!}
+      {move data into packet}
+      move(PacketBufferP^, NetworkEntryP^.Packets[NetworkEntryP^.Count-1].Data^, len);
+
+      {Wait for Entry}
+      if SemaphoreWait(WIFI^.NetworkP^.TransmitQueue.Wait) = ERROR_SUCCESS then
       begin
-        if (NetworkEntryP^.Buffer <> nil) then
+        {Acquire the Lock}
+        if MutexLock(WIFI^.NetworkP^.Lock) = ERROR_SUCCESS then
         begin
-          {get packet list pointer}
-          TransmitBufferP := NetworkEntryP^.Buffer;
-
-          {increment packet count - should almost always be zero at this point?}
-          NetworkEntryP^.Count:=1;
-
-          {setup packet entry}
-          NetworkEntryP^.Packets[NetworkEntryP^.Count-1].Buffer:=TransmitBufferP;
-          NetworkEntryP^.Packets[NetworkEntryP^.Count-1].Data:=Pointer(TransmitBufferP) + NetworkEntryP^.Offset;
-          NetworkEntryP^.Packets[NetworkEntryP^.Count-1].Length:=Len;
-
-          {need to byte swap the protocol id apparently?}
-          pether_header(PacketBufferP)^.ethertype := WordSwap(pether_header(PacketBufferP)^.ethertype);
-
-          {not sure if this is right either!}
-          {move data into packet}
-          move(PacketBufferP^, NetworkEntryP^.Packets[NetworkEntryP^.Count-1].Data^, len);
-
-          {populate entries for transmission???}
-          WIFI^.NetworkP^.TransmitQueue.Entries[(WIFI^.NetworkP^.TransmitQueue.Start
-                                + WIFI^.NetworkP^.TransmitQueue.Count)
-                                mod  PCYW43455Network(WIFI^.NetworkP)^.TransmitEntryCount]
-                                  := NetworkEntryP;
+          {Add Entry}
+          WIFI^.NetworkP^.TransmitQueue.Entries[(WIFI^.NetworkP^.TransmitQueue.Start + WIFI^.NetworkP^.TransmitQueue.Count)
+                                                mod PCYW43455Network(WIFI^.NetworkP)^.TransmitEntryCount] := NetworkEntryP;
           {Update Count}
           Inc(WIFI^.NetworkP^.TransmitQueue.Count);
 
-          {Signal Packet Received}
-          SemaphoreSignal(WIFI^.NetworkP^.TransmitQueue.Wait);
-        end;
-      end;
+          //{Signal Packet Received} //To Do //TestingSDIO
+          //SemaphoreSignal(WIFI^.NetworkP^.TransmitQueue.Wait); //To Do //TestingSDIO
 
-    except
-      on e : exception do
-        WIFILogInfo(nil, 'Exception in sendsupplicantl2packet : ' + e.message + ' at address ' + inttohex(longword(exceptaddr), 8));
-    end;
-
-    MutexUnlock(WIFI^.NetworkP^.Lock);
-
-  end
-  else
-    WIFILogError(nil, 'Failed to get network lock!!');
+          {Release the Lock}
+          MutexUnlock(WIFI^.NetworkP^.Lock);
+        end
+        else
+          WIFILogError(nil, 'Failed to get network lock!!');
+      end
+      else
+        WIFILogError(nil, 'Failed to wait for transmit semaphore');
+    end
+    else
+      WIFILogError(nil, 'Failed to get a transmit buffer!');
+  except
+    on e : exception do
+      WIFILogInfo(nil, 'Exception in sendsupplicantl2packet : ' + e.message + ' at address ' + inttohex(longword(exceptaddr), 8));
+  end;
 end;
 
 procedure DoNetworkNotify(data : pointer);
