@@ -6,18 +6,12 @@ uses
   overrides,
   {$IFDEF RPI}
   RaspberryPi,
-  BCM2835,
-  BCM2708,
   {$ENDIF}
   {$IFDEF RPI3}
   RaspberryPi3,
-  BCM2837,
-  BCM2710,
   {$ENDIF}
   {$IFDEF RPI4}
   RaspberryPi4,
-  BCM2838,
-  BCM2711,
   {$ENDIF}
   GlobalConfig,
   GlobalConst,
@@ -32,13 +26,9 @@ uses
   RemoteShell,
   logoutput,
   console,
-  framebuffer,
-  gpio,
-  mmc,
   devices,
+  MMC,
   wifidevice,
-  Ultibo,
-//  vishell,
   Logging,
   Network,
   Winsock2,
@@ -49,17 +39,13 @@ uses
   syscalls,
   ip,
   transport,
-  Iphlpapi
-  ;
-
-//{$DEFINE SERIAL_LOGGING}
+  Iphlpapi;
 
 var
   SSID : string;
   key : string;
   Country : string;
   TopWindow : THandle;
-  Winsock2TCPClient : TWinsock2TCPClient;
   IPAddress : string;
   i : integer;
   HTTPListener : THTTPListener;
@@ -67,9 +53,6 @@ var
   Status : Longword;
   CYW43455Network: PCYW43455Network;
   BSSIDStr : string;
-  StdoutToLogging : boolean = false;
-  LoggingLine : string = '';
-
 
 procedure WIFIScanCallback(ssid : string; ScanResultP : pwl_escan_result);
 var
@@ -85,7 +68,6 @@ begin
   if (ScanResultList <> nil) and (ScanResultList.Indexof(ssidstr) < 0) then
     ScanResultList.Add(ssidstr);
 end;
-
 
 function GetMACAddress(const AdapterName: String): String;
 // Get the MAC address of an adapter using the IP Helper API
@@ -230,7 +212,6 @@ begin
   ConsoleWindowWriteEx(window, 'CPU' + inttostr(core) + ' '  + floattostr(cpupercent) + '%      ', 1, 4+core, COLOR_BLACK, COLOR_WHITE);
 end;
 
-
 var
   BSSID : ether_addr;
   LedStatus : boolean;
@@ -240,58 +221,71 @@ var
   UseSupplicant : boolean;
 
 begin
-  ConsoleFramebufferDeviceAdd(FramebufferDeviceGetDefault);
-  CONSOLE_LOGGING_POSITION := CONSOLE_POSITION_RIGHT;
-  TopWindow := ConsoleWindowCreate(ConsoleDeviceGetDefault, CONSOLE_POSITION_LEFT,TRUE);
-  CPUWindow := ConsoleWindowCreate(ConsoleDeviceGetDefault, CONSOLE_POSITION_BOTTOMLEFT, FALSE);
-
   LOGGING_INCLUDE_TICKCOUNT := True;
-  {$IFDEF SERIAL_LOGGING}
-  SERIAL_REGISTER_LOGGING := True;
-  SerialLoggingDeviceAdd(SerialDeviceGetDefault);
-  LoggingDeviceSetDefault(LoggingDeviceFindByType(LOGGING_TYPE_SERIAL));
-  {$ELSE}
-  StdoutToLogging := true;
-  if (SysUtils.GetEnvironmentVariable('FILESYS_LOGGING_FILE') <> '') then
+  if StrToBoolDef(EnvironmentGet('SERIAL_LOGGING'), False) then
   begin
-    StdOutToLogging := true;
-    LoggingDeviceSetDefault(LoggingDeviceFindByType(LOGGING_TYPE_FILE));
+    TopWindow := ConsoleWindowCreate(ConsoleDeviceGetDefault, CONSOLE_POSITION_TOP, TRUE);
+    CPUWindow := ConsoleWindowCreate(ConsoleDeviceGetDefault, CONSOLE_POSITION_BOTTOM, FALSE);
+
+    SERIAL_REGISTER_LOGGING := True;
+    SERIAL_LOGGING_DEFAULT := True;
+    SerialLoggingDeviceAdd(SerialDeviceGetDefault);
+    LoggingDeviceSetDefault(LoggingDeviceFindByType(LOGGING_TYPE_SERIAL));
+
+    // intercept stdio for logging purposes.
+    // supplicant writes to stdio for info and debug etc.
+    LoggingDeviceRedirectOutput(LoggingDeviceFindByType(LOGGING_TYPE_SERIAL));
   end
   else
   begin
-    CONSOLE_LOGGING_POSITION := CONSOLE_POSITION_RIGHT;
-    LoggingConsoleDeviceAdd(ConsoleDeviceGetDefault);
-    LoggingDeviceSetDefault(LoggingDeviceFindByType(LOGGING_TYPE_CONSOLE));
+    TopWindow := ConsoleWindowCreate(ConsoleDeviceGetDefault, CONSOLE_POSITION_TOPLEFT, TRUE);
+    CPUWindow := ConsoleWindowCreate(ConsoleDeviceGetDefault, CONSOLE_POSITION_BOTTOMLEFT, FALSE);
+
+    if (SysUtils.GetEnvironmentVariable('FILESYS_LOGGING_FILE') <> '') then
+    begin
+      FILESYS_REGISTER_LOGGING := True;
+      FILESYS_LOGGING_DEFAULT := True;
+      LoggingDeviceSetDefault(LoggingDeviceFindByType(LOGGING_TYPE_FILE));
+
+      // intercept stdio for logging purposes.
+      // supplicant writes to stdio for info and debug etc.
+      LoggingDeviceRedirectOutput(LoggingDeviceFindByType(LOGGING_TYPE_FILE));
+    end
+    else
+    begin
+      CONSOLE_REGISTER_LOGGING :=True;
+      CONSOLE_LOGGING_DEFAULT := True;
+      CONSOLE_LOGGING_POSITION := CONSOLE_POSITION_RIGHT;
+      LoggingConsoleDeviceAdd(ConsoleDeviceGetDefault);
+      LoggingDeviceSetDefault(LoggingDeviceFindByType(LOGGING_TYPE_CONSOLE));
+
+      // intercept stdio for logging purposes.
+      // supplicant writes to stdio for info and debug etc.
+      LoggingDeviceRedirectOutput(LoggingDeviceFindByType(LOGGING_TYPE_CONSOLE));
+    end;
   end;
-  {$ENDIF}
 
-  // intercept stdio for logging purposes.
-  // supplicant writes to stdio for info and debug etc.
-  ConsoleWindowRedirectOutput(TopWindow);
-
-  // supplicant can be turned off by setting SUPPLICANT=FALSE in cmdline.txt
-  UseSupplicant := not (uppercase(SysUtils.GetEnvironmentVariable('SUPPLICANT')) = 'FALSE');
+  // supplicant can be turned off by setting SUPPLICANT=FALSE or SUPPLICANT=0 in cmdline.txt
+  UseSupplicant := StrToBoolDef(SysUtils.GetEnvironmentVariable('SUPPLICANT'), True);
 
   if (UseSupplicant) then
-    Writeln('Using software supplicant for connection method.')
+    ConsoleWindowWriteln(TopWindow, 'Using software supplicant for connection method.')
   else
-    Writeln('Using Broadcom Firmware supplicant for connection method.');
-
+    ConsoleWindowWriteln(TopWindow, 'Using Broadcom Firmware supplicant for connection method.');
 
   // Filter the logs so we only see the WiFi and MMC device events
   // (Primarily development use, otherwise you don't see network events etc)
-  //LoggingOutputExHandler:= @myloggingoutputhandler; 
+  //LoggingOutputExHandler:= @myloggingoutputhandler;
 
   HTTPListener:=THTTPListener.Create;
   HTTPListener.Active:=True;
   WebStatusRegister(HTTPListener,'','',True);
 
-
   WIFI_LOG_ENABLED := true;
 
   // Because we disabled auto start of the MMC subsystem we need to start the SD card driver
   // now to provide access to the firmware files on the SD card.
-  
+
   WIFIPreInit;
 
   // We've gotta wait for the file system to be alive because that's where the firmware is.
@@ -320,7 +314,7 @@ begin
     // the kernel, but that would need to be an option I think really (easily done
     // by choosing to add a specific unit to the uses clause)
     // We'll need to work out what the best solution is later.
-    
+
     WIFIInit;
 
     // warning, after wifiinit is called, the deviceopen() stuff will happen on
@@ -329,14 +323,14 @@ begin
     // wifi device has been fully initialized.
 
     ConsoleWindowWriteln(TopWindow, 'Waiting for Wifi Device to be opened.');
-    
+
     // spin until the wifi device is actually ready to do stuff.
     repeat
       CYW43455Network := PCYW43455Network(NetworkDeviceFindByDescription(CYW43455_NETWORK_DESCRIPTION));
       if CYW43455Network = nil then
         Sleep(100);
     until CYW43455Network <> nil;
-    
+
     while CYW43455Network^.Network.NetworkState <> NETWORK_STATE_OPEN do
     begin
       Sleep(0);
@@ -398,10 +392,9 @@ begin
         else
           ConsoleWindowWriteln(TopWindow, 'Letting the Cypress firmware determine the best network interface from the SSID');
 
-        IPAddress := '0.0.0.0';
         status := FirmwareWirelessJoinNetwork(SSID, Key, Country, WIFIJoinBlocking, WIFIReconnectAlways, BSSID, (BSSIDStr <> ''));
 
-        if (status = WIFI_STATUS_SUCCESS) then
+        if (status = MMC_STATUS_SUCCESS) then
         begin
           ConsoleWindowWriteln(topwindow, 'Network joined, waiting for an IP address...');
           WaitForIP;
