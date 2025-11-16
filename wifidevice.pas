@@ -50,8 +50,6 @@ const
   MSG_WARNING = 4;
   MSG_ERROR = 5;
 
-
-  //EAP_OVER_LAN_PROTOCOL_ID = $888E; //To Do //TestingSDIO
   WPA2_SECURITY = $00400000;        // Flag to enable WPA2 Security
   AES_ENABLED   = $0004;            // Flag to enable AES Encryption
   WHD_SECURITY_WPA2_AES_PSK = (WPA2_SECURITY or AES_ENABLED);
@@ -96,7 +94,6 @@ const
 
   WHD_MSG_IFNAME_MAX = 16;
 
-  //ETHER_ADDR_LEN = 6; //To Do //TestingSDIO
   BSS_TYPE_ANY = 2;
   SCAN_TYPE_PASSIVE = 1;
   SSID_MAX_LEN = 32;
@@ -225,12 +222,6 @@ type
 
   TWIFIJoinType = (WIFIJoinBlocking, WIFIJoinBackground);
   TWIFIReconnectionType = (WIFIReconnectNever, WIFIReconnectAlways);
-
-  //To Do //TestingSDIO
-  //pether_addr = ^ether_addr;
-  //ether_addr = record
-  //  octet : array[0..ETHER_ADDR_LEN-1] of byte;
-  //end;
 
   countryparams = record
     country_ie : array[1..4] of char;
@@ -1511,7 +1502,7 @@ begin
   begin
    {Initialize Entry}
    Entry^.Size:=PCYW43455Network(Network)^.ReceiveRequestSize;
-   Entry^.Offset:=0; // The actual offset if variable and is accounted for when receiving a packet
+   Entry^.Offset:=0; // The actual offset is variable and is accounted for when receiving a packet
    Entry^.Count:=0;
 
    {Allocate Request Buffer}
@@ -1567,7 +1558,7 @@ begin
   begin
    {Initialize Entry}
    Entry^.Size:=PCYW43455Network(Network)^.TransmitRequestSize;
-   Entry^.Offset:=IOCTL_LEN_BYTES + SDPCM_HEADER_SIZE + BCDC_HEADER_SIZE; //sizeof(SDPCM_HEADER)+8; //To Do //TestingSDIO
+   Entry^.Offset:=IOCTL_LEN_BYTES + SDPCM_HEADER_SIZE + BCDC_HEADER_SIZE;
    Entry^.Count:=PCYW43455Network(Network)^.TransmitPacketCount;
 
    {Allocate Request Buffer}
@@ -1804,7 +1795,7 @@ begin
   begin
    {Update Entry}
    Entry^.Size:=PCYW43455Network(Network)^.TransmitRequestSize;
-   Entry^.Offset:=IOCTL_LEN_BYTES + SDPCM_HEADER_SIZE + BCDC_HEADER_SIZE; //sizeof(SDPCM_HEADER)+8; //To Do //TestingSDIO
+   Entry^.Offset:=IOCTL_LEN_BYTES + SDPCM_HEADER_SIZE + BCDC_HEADER_SIZE;
    Entry^.Count:=PCYW43455Network(Network)^.TransmitPacketCount;
 
    {Update First Packet}
@@ -4427,7 +4418,7 @@ begin
         EtherHeaderP := pether_header(PByte(ResponseP) + Offset);
 
         // detect supplicant status. Needs to be more resilient.
-        if WIFI_USE_SUPPLICANT and (WordSwap(EtherHeaderP^.ethertype) = PACKET_TYPE_EAPOL) then //EAP_OVER_LAN_PROTOCOL_ID //To Do //TestingSDIO
+        if WIFI_USE_SUPPLICANT and (WordBEtoN(EtherHeaderP^.ethertype) = PACKET_TYPE_EAPOL) then
         begin
           wifiloginfo(nil,'EAPOL network packet received (after join); length='+inttostr(FrameLength) + ' operatingstate='+inttostr(SupplicantOperatingState));
           RequestEntryP := FindRequestByEvent(longword(WLC_E_EAPOL_MSG));
@@ -4754,11 +4745,6 @@ begin
                 SDPCMHeaderP^.seq:=txseq;
                 SDPCMHeaderP^.reserved := 0;
 
-                //To Do //TestingSDIO
-                //// we still don't know what this part of the header is.
-                //// just having to replicate what is in circle at the moment.
-                //(PLongword(PacketP^.Buffer)+3)^ := NetSwapLong($20000000);
-
                 // Get BCDC Header
                 BCDCHeaderP := PBCDC_HEADER(PacketP^.Buffer + SDPCMHeaderP^.hdrlen);
 
@@ -4792,7 +4778,7 @@ begin
                   end;
                 end;
 
-                PIOCTL_MSG(PacketP^.Buffer)^.len := PacketP^.length + IOCTL_LEN_BYTES + SDPCM_HEADER_SIZE + BCDC_HEADER_SIZE; //+sizeof(SDPCM_HEADER)+4+4  // 4 for end of sdpcm header, 4 for length itself? //To Do //TestingSDIO
+                PIOCTL_MSG(PacketP^.Buffer)^.len := PacketP^.length + IOCTL_LEN_BYTES + SDPCM_HEADER_SIZE + BCDC_HEADER_SIZE;
                 PIOCTL_MSG(PacketP^.Buffer)^.notlen := not PIOCTL_MSG(PacketP^.Buffer)^.len;
 
                 // calculate transmission sizes
@@ -4825,8 +4811,7 @@ begin
                   // we want keys to be set after these messages are sent, so we detect the sitution here
                   // and the keys are set in DoNetworkNotify just before the network is brought up.
 
-                  //if (pether_header(pbyte(packetp^.buffer) + 8 + sizeof(SDPCM_HEADER))^.ethertype = WordSwap(EAP_OVER_LAN_PROTOCOL_ID)) then //To Do //TestingSDIO
-                  if (pether_header(pbyte(packetp^.buffer) + IOCTL_LEN_BYTES + SDPCM_HEADER_SIZE + BCDC_HEADER_SIZE)^.ethertype = WordSwap(PACKET_TYPE_EAPOL)) then //EAP_OVER_LAN_PROTOCOL_ID //To Do //TestingSDIO
+                  if (pether_header(pbyte(packetp^.buffer) + IOCTL_LEN_BYTES + SDPCM_HEADER_SIZE + BCDC_HEADER_SIZE)^.ethertype = WordNtoBE(PACKET_TYPE_EAPOL)) then
                   begin
                     WIFILogDebug(nil, 'Detected transmission of an eapol packet');
 
@@ -5342,7 +5327,7 @@ begin
       NetworkEntryP^.Packets[NetworkEntryP^.Count-1].Length:=Len;
 
       {need to byte swap the protocol id apparently?}
-      pether_header(PacketBufferP)^.ethertype := WordSwap(pether_header(PacketBufferP)^.ethertype);
+      pether_header(PacketBufferP)^.ethertype := WordNtoBE(pether_header(PacketBufferP)^.ethertype);
 
       {not sure if this is right either!}
       {move data into packet}
