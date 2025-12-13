@@ -273,12 +273,13 @@ int ultibo_driver_initiate_scan(void *priv, struct wpa_driver_scan_params *param
 	dl_list_for_each_safe(scanresitem, tmp, &(scanreslist.list), struct scanres_list_item, list)
 	{
 		dl_list_del(&scanresitem->list);
+		os_free(scanresitem);
 	}
 
 	wpa_printf(MSG_DEBUG, "Ultibodriver: initiate_scan setting up timeout callback for scan completion");
 
 	// set up timeout for scan completion (calls back the timeout handler function)
-	eloop_cancel_timeout (wpa_driver_ultibo_scan_timeout, priv, NULL);
+	eloop_cancel_timeout (wpa_driver_ultibo_scan_timeout, drv, drv->ctx);
 	eloop_register_timeout (SCAN_DURATION_SECS, 0, wpa_driver_ultibo_scan_timeout,
 				drv, drv->ctx);
 
