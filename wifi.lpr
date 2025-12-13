@@ -90,36 +90,38 @@ begin
     IfTable := GetMem(Size);
     if IfTable <> nil then
     begin
-      // Get the network interface table
-      if GetIfTable(IfTable, Size, False) = ERROR_SUCCESS then
-      begin
-        // Get first row
-        IfRow := @IfTable^.table[0];
-
-        Count := 0;
-        while Count < IfTable^.dwNumEntries do
+      try
+        // Get the network interface table
+        if GetIfTable(IfTable, Size, False) = ERROR_SUCCESS then
         begin
-          Name := IfRow^.wszName;
+          // Get first row
+          IfRow := @IfTable^.table[0];
 
-          // Check name
-          if Uppercase(Name) = Uppercase(AdapterName) then
+          Count := 0;
+          while Count < IfTable^.dwNumEntries do
           begin
-            // Check address size
-            if IfRow^.dwPhysAddrLen = SizeOf(THardwareAddress) then
+            Name := IfRow^.wszName;
+
+            // Check name
+            if Uppercase(Name) = Uppercase(AdapterName) then
             begin
-              System.Move(IfRow^.bPhysAddr[0], HardwareAddress[0], HARDWARE_ADDRESS_SIZE);
-              Result := HardwareAddressToString(HardwareAddress);
-              Exit;
+              // Check address size
+              if IfRow^.dwPhysAddrLen = SizeOf(THardwareAddress) then
+              begin
+                System.Move(IfRow^.bPhysAddr[0], HardwareAddress[0], HARDWARE_ADDRESS_SIZE);
+                Result := HardwareAddressToString(HardwareAddress);
+                Exit;
+              end;
             end;
+
+            // Get next row
+            Inc(Count);
+            Inc(IfRow);
           end;
-
-          // Get next row
-          Inc(Count);
-          Inc(IfRow);
         end;
+      finally
+        FreeMem(IfTable);
       end;
-
-      FreeMem(IfTable);
     end;
   end;
 end;
@@ -153,37 +155,40 @@ begin
   end;
   if IpNetTable <> nil then
   begin
-    // Now get the table
-    if GetIpNetTable(IpNetTable, Size, False) = ERROR_SUCCESS then
-    begin
-      // Get first row
-      IpNetRow := @IpNetTable^.table[0];
-
-      Count := 0;
-      while Count < IpNetTable^.dwNumEntries do
+    try
+      // Now get the table
+      if GetIpNetTable(IpNetTable, Size, False) = ERROR_SUCCESS then
       begin
-        // Check address size
-        if IpNetRow^.dwPhysAddrLen = SizeOf(THardwareAddress) then
+        // Get first row
+        IpNetRow := @IpNetTable^.table[0];
+  
+        Count := 0;
+        while Count < IpNetTable^.dwNumEntries do
         begin
-          // Get the address
-          System.Move(IpNetRow^.bPhysAddr[0], HardwareAddress[0], HARDWARE_ADDRESS_SIZE);
-          Address := HardwareAddressToString(HardwareAddress);
-
-          // Check the address
-          if Uppercase(Address) = Uppercase(MACAddress) then
+          // Check address size
+          if IpNetRow^.dwPhysAddrLen = SizeOf(THardwareAddress) then
           begin
-            IPAddress.S_addr := IpNetRow^.dwAddr;
-            Result := InAddrToString(IPAddress);
+            // Get the address
+            System.Move(IpNetRow^.bPhysAddr[0], HardwareAddress[0], HARDWARE_ADDRESS_SIZE);
+            Address := HardwareAddressToString(HardwareAddress);
+  
+            // Check the address
+            if Uppercase(Address) = Uppercase(MACAddress) then
+            begin
+              IPAddress.S_addr := IpNetRow^.dwAddr;
+              Result := InAddrToString(IPAddress);
+              Exit;
+            end;
           end;
+  
+          // Get next row
+          Inc(Count);
+          Inc(IpNetRow);
         end;
-
-        // Get next row
-        Inc(Count);
-        Inc(IpNetRow);
       end;
+    finally
+      FreeMem(IpNetTable);
     end;
-
-    FreeMem(IpNetTable);
   end;
 end;
 
