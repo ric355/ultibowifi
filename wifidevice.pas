@@ -68,6 +68,8 @@ const
   WLC_SET_SSID = 26;
   WLC_SET_BSSID = 24;
 
+  CYW43455_SDIO_DRIVER_NAME = 'Cypress CYW43455 Wireless LAN SDIO Driver';
+
   CYW43455_SDIO_DESCRIPTION = 'Cypress CYW43455 WIFI Device';
   CYW43455_NETWORK_DESCRIPTION = 'Cypress 43455 SDIO Wireless Network Adapter';
 
@@ -755,18 +757,22 @@ type
   PCYW43455Network = ^TCYW43455Network;
   TCYW43455Network = record
    {Network Properties}
-   Network:TNetworkDevice;
+   Network: TNetworkDevice;
    {Driver Properties}
-   ChipID:LongWord;
-   ChipRevision:LongWord;
-   PHYLock:TMutexHandle;
-   ReceiveRequestSize:LongWord;                  {Size of each receive request buffer}
-   TransmitRequestSize:LongWord;                 {Size of each transmit request buffer}
-   ReceiveEntryCount:LongWord;                   {Number of entries in the receive queue}
-   TransmitEntryCount:LongWord;                  {Number of entries in the transmit queue}
-   ReceivePacketCount:LongWord;                  {Maximum number of packets per receive entry}
-   TransmitPacketCount:LongWord;                 {Maximum number of packets per transmit entry}
+   ChipID: LongWord;
+   ChipRevision: LongWord;
+   PHYLock: TMutexHandle;
+   ReceiveRequestSize: LongWord;                 {Size of each receive request buffer}
+   TransmitRequestSize: LongWord;                {Size of each transmit request buffer}
+   ReceiveEntryCount: LongWord;                  {Number of entries in the receive queue}
+   TransmitEntryCount: LongWord;                 {Number of entries in the transmit queue}
+   ReceivePacketCount: LongWord;                 {Maximum number of packets per receive entry}
+   TransmitPacketCount: LongWord;                {Maximum number of packets per transmit entry}
+   {SDIO Properties}
+   Func1: PSDIOFunction;                         {Backplane function}
+   Func2: PSDIOFunction;                         {Wireless LAN function (Function 3 on some chips is a standard Bluetooth interface)}
 
+   {CYW43455 Properties}
    JoinCompleted: Boolean;
 
    SDHCI: PSDHCIHost;
@@ -841,7 +847,7 @@ var
   // driver source instead of having to change the supplicant source.
   WPASupplicantLogLevel : integer = MSG_INFO; cvar;
 
-  WIFI_DEFAULT_LOG_LEVEL:LongWord = WIFI_LOG_LEVEL_ERROR; {Minimum level for WIFI messages.  Only messages with level greater than or equal to this will be printed}
+  WIFI_DEFAULT_LOG_LEVEL:LongWord = WIFI_LOG_LEVEL_DEBUG; //WIFI_LOG_LEVEL_ERROR; //To Do //TestingSDIO {Minimum level for WIFI messages.  Only messages with level greater than or equal to this will be printed}
 
 implementation
 
@@ -863,6 +869,9 @@ const
   WPA_ALG_BIP_CMAC_256 = 13;
 
 var
+  CYW43455Initialized: Boolean;
+  CYW43455SDIODriver: PSDIODriver;  {CYW43455 SDIO Driver interface (Set by WIFIDeviceInit)}
+
   WIFIInitialized:Boolean;
 
   WIFI_USE_SUPPLICANT : boolean = true;
@@ -899,6 +908,49 @@ procedure UltiboEloopTerminate; cdecl; external;
 procedure sbenable(WIFI : PWIFIDevice); forward;
 function WirelessInit(WIFI : PWIFIDevice) : longword; forward;
 procedure WIFILogInfo(WIFI: PWIFIDevice;const AText:String); forward;
+
+function WIFIDeviceSDIODriverBind(MMC: PMMCDevice; Func: PSDIOFunction): LongWord; forward;
+function WIFIDeviceSDIODriverUnbind(MMC: PMMCDevice; Func: PSDIOFunction): LongWord; forward;
+
+function WIFIDeviceCheckFunction(Func: PSDIOFunction): LongWord; forward;
+
+procedure WIFIDeviceInit;
+var
+ Status: LongWord;
+begin
+ {}
+ {Check Initialized}
+ if CYW43455Initialized then
+   Exit;
+
+ {Create SDIO Driver}
+ CYW43455SDIODriver := SDIODriverCreate;
+ if CYW43455SDIODriver <> nil then
+  begin
+   {Update SDIO Driver}
+   {Driver}
+   CYW43455SDIODriver^.Driver.DriverName := CYW43455_SDIO_DRIVER_NAME;
+   {SDIO}
+   CYW43455SDIODriver^.DriverBind := @WIFIDeviceSDIODriverBind;
+   CYW43455SDIODriver^.DriverUnbind := @WIFIDeviceSDIODriverUnbind;
+
+   {Register SDIO Driver}
+   Status := SDIODriverRegister(CYW43455SDIODriver);
+   if Status <> MMC_STATUS_SUCCESS then
+    begin
+     if MMC_LOG_ENABLED then MMCLogError(nil, 'CYW43455: Failed to register driver: ' + MMCStatusToString(Status));
+
+     {Destroy Driver}
+     SDIODriverDestroy(CYW43455SDIODriver);
+    end;
+  end
+ else
+  begin
+   if MMC_LOG_ENABLED then MMCLogError(nil, 'CYW43455: Failed to create driver');
+  end;
+
+ CYW43455Initialized := True;
+end;
 
 procedure hexdump(p : pbyte; len : word; title : string = '');
 var
@@ -5515,6 +5567,250 @@ begin
 
 end;
 
+function WIFIDeviceSDIODriverBind(MMC: PMMCDevice; Func: PSDIOFunction): LongWord;
+var
+ Func1: PSDIOFunction;
+ Func2: PSDIOFunction;
+ Network: PCYW43455Network;
+begin
+ {}
+ Result := MMC_STATUS_INVALID_PARAMETER;
+
+ {Check MMC}
+ if MMC = nil then
+   Exit;
+
+ {Check Function}
+ if Func = nil then
+   Exit;
+
+ {$IFDEF CYW43455_DEBUG}
+ if MMC_LOG_ENABLED then MMCLogDebug(MMC, 'CYW43455: Attempting to bind SDIO function (Number=' + IntToStr(Func.Number) + ' VendorId=' + IntToHex(Func.VendorId, 4) + ' DeviceId=' + IntToHex(Func.DeviceId, 4) + ')');
+ {$ENDIF}
+
+ {Check Function}
+ if WIFIDeviceCheckFunction(Func) <> MMC_STATUS_SUCCESS then
+  begin
+   {$IFDEF CYW43455_DEBUG}
+   if MMC_LOG_ENABLED then MMCLogDebug(MMC, 'CYW43455: Function not found in supported device list');
+   {$ENDIF}
+
+   {Return Result}
+   Result := MMC_STATUS_DEVICE_UNSUPPORTED;
+   Exit;
+  end;
+
+ {Check Function Number}
+ case Func^.Number of
+  1: begin
+    {Function 1 (Backplane)}
+    Func1 := Func;
+
+    {Find Function 2}
+    Func2 := SDIOFunctionFind(MMC, 2);
+   end;
+  2: begin
+    {Function 2 (Wireless LAN)}
+    Func2:=Func;
+
+    {Find Function 1}
+    Func1 := SDIOFunctionFind(MMC, 1);
+   end;
+  else
+   begin
+    {$IFDEF CYW43455_DEBUG}
+    if MMC_LOG_ENABLED then MMCLogDebug(MMC, 'CYW43455: Function number not in supported list');
+    {$ENDIF}
+
+    {Return Result}
+    Result := MMC_STATUS_DEVICE_UNSUPPORTED;
+    Exit;
+   end;
+ end;
+
+ {Check Functions}
+ if (Func1 = nil) or (Func2 = nil) then
+  begin
+   {$IFDEF CYW43455_DEBUG}
+   if MMC_LOG_ENABLED then MMCLogDebug(MMC, 'CYW43455: Unable to locate all required functions');
+   {$ENDIF}
+
+   {Return Result}
+   Result := MMC_STATUS_DEVICE_UNSUPPORTED;
+   Exit;
+  end;
+
+ {Bind Function 1}
+ if SDIOFunctionBind(Func1, CYW43455SDIODriver) <> MMC_STATUS_SUCCESS then
+  begin
+   {$IFDEF CYW43455_DEBUG}
+   if MMC_LOG_ENABLED then MMCLogDebug(MMC, 'CYW43455: Failed to bind driver to function 1');
+   {$ENDIF}
+
+   {Return Result}
+   Result := MMC_STATUS_DEVICE_UNSUPPORTED;
+   Exit;
+  end;
+
+ {Bind Function 2}
+ if SDIOFunctionBind(Func2, CYW43455SDIODriver) <> MMC_STATUS_SUCCESS then
+  begin
+   {$IFDEF CYW43455_DEBUG}
+   if MMC_LOG_ENABLED then MMCLogDebug(MMC, 'CYW43455: Failed to bind driver to function 2');
+   {$ENDIF}
+
+   {Unbind Function 1}
+   SDIOFunctionUnbind(Func1, CYW43455SDIODriver);
+
+   {Return Result}
+   Result := MMC_STATUS_DEVICE_UNSUPPORTED;
+   Exit;
+  end;
+
+ {Create Network}
+ Network := PCYW43455Network(NetworkDeviceCreateEx(SizeOf(TCYW43455Network)));
+ if Network = nil then
+  begin
+   if MMC_LOG_ENABLED then MMCLogError(MMC, 'CYW43455: Failed to create new network device');
+
+   {Unbind Function 2}
+   SDIOFunctionUnbind(Func2, CYW43455SDIODriver);
+
+   {Unbind Function 1}
+   SDIOFunctionUnbind(Func1, CYW43455SDIODriver);
+
+   {Return Result}
+   Result := MMC_STATUS_DEVICE_UNSUPPORTED;
+   Exit;
+  end;
+
+ {Update Network}
+ {Device}
+ Network^.Network.Device.DeviceBus := DEVICE_BUS_SD;
+ Network^.Network.Device.DeviceType := NETWORK_TYPE_ETHERNET;
+ Network^.Network.Device.DeviceFlags := NETWORK_FLAG_RX_BUFFER or NETWORK_FLAG_TX_BUFFER or NETWORK_FLAG_RX_MULTIPACKET;
+ Network^.Network.Device.DeviceData := MMC;
+ Network^.Network.Device.DeviceDescription := CYW43455_NETWORK_DESCRIPTION;
+ {Network}
+ Network^.Network.NetworkState := NETWORK_STATE_CLOSED;
+ Network^.Network.NetworkStatus := NETWORK_STATUS_DOWN;
+ Network^.Network.DeviceOpen := @CYW43455DeviceOpen;
+ Network^.Network.DeviceClose := @CYW43455DeviceClose;
+ Network^.Network.DeviceControl := @CYW43455DeviceControl;
+ Network^.Network.BufferAllocate := @CYW43455BufferAllocate;
+ Network^.Network.BufferRelease := @CYW43455BufferRelease;
+ Network^.Network.BufferReceive := @CYW43455BufferReceive;
+ Network^.Network.BufferTransmit := @CYW43455BufferTransmit;
+ {Driver}
+ //To Do //TestingSDIO
+ {SDIO}
+ Network^.Func1 := Func1;
+ Network^.Func2 := Func2;
+
+ {Register Network}
+ if NetworkDeviceRegister(@Network^.Network) <> ERROR_SUCCESS then
+  begin
+   if MMC_LOG_ENABLED then MMCLogError(MMC, 'CYW43455: Failed to register new network device');
+
+   {Unbind Function 2}
+   SDIOFunctionUnbind(Func2, CYW43455SDIODriver);
+
+   {Unbind Function 1}
+   SDIOFunctionUnbind(Func1, CYW43455SDIODriver);
+
+   {Destroy Network}
+   NetworkDeviceDestroy(@Network^.Network);
+
+   {Return Result}
+   Result := MMC_STATUS_DEVICE_UNSUPPORTED;
+   Exit;
+  end;
+
+ {Update Functions}
+ Network^.Func1^.DriverData := Network;
+ Network^.Func2^.DriverData := Network;
+
+ {Return Result}
+ Result := MMC_STATUS_SUCCESS;
+end;
+
+function WIFIDeviceSDIODriverUnbind(MMC: PMMCDevice; Func: PSDIOFunction): LongWord;
+var
+ Network: PCYW43455Network;
+begin
+ Result := MMC_STATUS_INVALID_PARAMETER;
+
+ {Check MMC}
+ if MMC = nil then
+   Exit;
+
+ {Check Function}
+ if Func = nil then
+   Exit;
+
+ {Check Driver}
+ if Func^.Driver <> CYW43455SDIODriver then
+   Exit;
+
+ {$IFDEF CYW43455_DEBUG}
+ if MMC_LOG_ENABLED then MMCLogDebug(MMC, 'CYW43455: Unbinding SDIO function (Number=' + IntToStr(Func.Number) + ' VendorId=' + IntToHex(Func.VendorId, 4) + ' DeviceId=' + IntToHex(Func.DeviceId, 4) + ')');
+ {$ENDIF}
+
+ {Get Network}
+ Network := PCYW43455Network(Func^.DriverData);
+ if Network = nil then
+   Exit;
+
+ {Close Network}
+ CYW43455DeviceClose(@Network^.Network);
+
+ {Update Functions}
+ Network^.Func1^.DriverData := nil;
+ Network^.Func2^.DriverData := nil;
+
+ {Unbind Function 1}
+ SDIOFunctionUnbind(Network^.Func1, CYW43455SDIODriver);
+
+ {Unbind Function 2}
+ SDIOFunctionUnbind(Network^.Func2, CYW43455SDIODriver);
+
+ {Deregister Network}
+ if NetworkDeviceDeregister(@Network^.Network) <> ERROR_SUCCESS then
+   Exit;
+
+ {Destroy Network}
+ NetworkDeviceDestroy(@Network^.Network);
+
+ Result := MMC_STATUS_SUCCESS;
+end;
+
+function WIFIDeviceCheckFunction(Func: PSDIOFunction): LongWord;
+begin
+ {}
+ Result := MMC_STATUS_INVALID_PARAMETER;
+
+ {Check Function}
+ if Func = nil then
+   Exit;
+
+ {Check Vendor}
+ if Func^.VendorId = SDIO_VENDOR_ID_BROADCOM then
+  begin
+   case Func^.DeviceId of
+    SDIO_DEVICE_ID_BROADCOM_4330,
+    SDIO_DEVICE_ID_BROADCOM_43362,
+    SDIO_DEVICE_ID_BROADCOM_43430,
+    SDIO_DEVICE_ID_BROADCOM_4345: begin
+      Result := MMC_STATUS_SUCCESS;
+      Exit;
+     end;
+   end;
+  end;
+
+ Result := MMC_STATUS_DEVICE_UNSUPPORTED;
+end;
+
 initialization
+  WIFIDeviceInit;
 
 end.
