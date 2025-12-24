@@ -132,6 +132,8 @@ const
   FIRWMARE_OPTIONS_COUNT = 8;
   FIRMWARE_FILENAME_ROOT = 'c:\firmware\';
 
+  CYW43455_FIRMWARE_TIMEOUT = 2000;
+
   {$IFDEF RPI}
   WLAN_ON_PIN = GPIO_PIN_41;
   {$ENDIF}
@@ -2100,6 +2102,7 @@ begin
    {$ifdef CYW43455_DEBUG}
    if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI^.DeviceInitialize');
    {$endif}
+
    Result:=WIFI^.MMC.DeviceInitialize(@WIFI^.MMC);
   end
  else
@@ -2982,19 +2985,21 @@ end;
 function WIFIDeviceDownloadFirmware(WIFI : PWIFIDevice) : Longword;
 
 var
- FirmwareFile : file of byte;
  firmwarep : pbyte;
  off : longword;
- fsize : longword;
+ fsize : LongInt;
  i : integer;
  lastramvalue : longword;
- chunksize : longword;
+ chunksize : LongInt;
  bytesleft : longword;
- bytestransferred : longword;
+ bytestransferred : LongInt;
  Found : boolean;
  ConfigFilename : string;
  FirmwareFilename : string;
  bytebuf : array[1..4] of byte;
+
+ Handle: THandle;
+ Status: LongWord;
 begin
  try
   Result := MMC_STATUS_INVALID_PARAMETER;
@@ -3014,8 +3019,8 @@ begin
   begin
     if (firmware[i].chipid = WIFI^.chipid) and (firmware[i].chipidrev = WIFI^.chipidrev) then
     begin
-      FirmwareFilename := FIRMWARE_FILENAME_ROOT + firmware[i].firmwarefilename;
-      ConfigFilename := FIRMWARE_FILENAME_ROOT + firmware[i].configfilename;
+      FirmwareFilename := firmware[i].firmwarefilename;
+      ConfigFilename := firmware[i].configfilename;
       Found := true;
       break;
     end;
@@ -3029,89 +3034,99 @@ begin
 
   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Using ' + FirmwareFilename + ' for firmware.');
 
-  // open file and read entire block into memory. Perhaps ought to do this in
-  // chunks really? If we do, then the verify stuff needs to be done a chunk
-  // at a time as well.
-
-  if (not FileExists(FirmwareFilename)) then
+  // Open firmware file
+  Status := DeviceFirmwareOpen(DEVICE_CLASS_ANY, FirmwareFilename, CYW43455_FIRMWARE_TIMEOUT, Handle);
+  if Status <> ERROR_SUCCESS then
   begin
-    Result := MMC_STATUS_INVALID_DATA;
-    exit;
+    if Status <> ERROR_NOT_READY then
+    begin
+      Result := MMC_STATUS_DEVICE_UNSUPPORTED;
+      Exit;
+    end
+    else
+    begin
+      Result := MMC_STATUS_NOT_READY;
+      Exit;
+    end;
   end;
 
-  assignfile(FirmwareFile, FirmwareFilename);
-  reset(FirmwareFile);
-  fsize := filesize(FirmwareFile);
-  firmwarep := DMABufferAllocate(DMAHostGetDefault, fsize);
+  fsize := DeviceFirmwareSize(Handle);
+
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Size of firmware file is ' + inttostr(fsize) + ' bytes');
+
+  firmwarep := DMABufferAllocate(DMAHostGetDefault, FIRMWARE_CHUNK_SIZE);
 
   if not(DMA_CACHE_COHERENT) then
    begin
     // Clean Cache (Dest)
-    CleanDataCacheRange(PtrUInt(firmwarep), fsize);
+    CleanDataCacheRange(PtrUInt(firmwarep), FIRMWARE_CHUNK_SIZE);
    end;
 
-  blockread(FirmwareFile, firmwarep^, fsize);
-  closefile(FirmwareFile);
-
-  // transfer firmware over the bus to the chip.
-  // first, grab the reset vector from the first 4 bytes of the firmware.
-  // Not needed on a Pi Zero as the firmware loads at addres 0 by default - needs updating to suit.
-
-  move(firmwarep^, WIFI^.resetvec, 4);
-  {$ifdef CYW43455_DEBUG}
-  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Reset vector of 0x' + inttohex(WIFI^.resetvec, 8) + ' copied out of firmware');
-  {$endif}
-
+  // Upload File
   off := 0;
-  if (fsize > FIRMWARE_CHUNK_SIZE) then
-    chunksize := FIRMWARE_CHUNK_SIZE
-  else
-    chunksize := fsize;
-
-  // dword align the buffer size.
-  if (fsize mod 4 <> 0) then
-    fsize := ((fsize div 4) + 1) * 4;
-
-  {$ifdef CYW43455_DEBUG}
-  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Bytes to transfer: ' + inttostr(fsize));
-  {$endif}
-
   bytestransferred := 0;
 
   while bytestransferred < fsize do
   begin
-    sbmem(WIFI, true, firmwarep+off, chunksize, WIFI^.rambase + off);
-    bytestransferred := bytestransferred + chunksize;
+    // Read Next Block
+    chunksize := DeviceFirmwareRead(Handle, firmwarep, FIRMWARE_CHUNK_SIZE);
+    if chunksize <= 0 then
+      Break;
 
-    off += chunksize;
-    bytesleft := fsize - bytestransferred;
-    if (bytesleft < chunksize) then
-      chunksize := bytesleft;
+    if off = 0 then
+    begin
+      // Copy the reset vector from the first 4 bytes of the firmware.
+      // Not needed on a Pi Zero as the firmware loads at addres 0 by default - needs updating to suit.
+      move(firmwarep^, WIFI^.resetvec, 4);
+
+      {$ifdef CYW43455_DEBUG}
+      if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Reset vector of 0x' + inttohex(WIFI^.resetvec, 8) + ' copied out of firmware');
+      {$endif}
+    end;
+
+    // Zero Pad Unaligned Bytes
+    while (chunksize and 3) <> 0 do
+     begin
+      firmwarep[chunksize] := 0;
+      Inc(chunksize);
+     end;
+
+    // Upload Block
+    sbmem(WIFI, true, firmwarep, chunksize, WIFI^.rambase + off);
+    Inc(bytestransferred, chunksize);
+
+    Inc(off, chunksize);
   end;
-
-  off := 0;
-  if (fsize > FIRMWARE_CHUNK_SIZE) then
-    chunksize := FIRMWARE_CHUNK_SIZE
-  else
-    chunksize := fsize;
 
   DMABufferRelease(firmwarep);
 
-  // now we need to upload the configuration to ram
+  // Close firmware file
+  DeviceFirmwareClose(Handle);
 
-  if (not FileExists(ConfigFilename)) then
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Finished transferring firmware file to socram');
+
+  // now we need to upload the configuration to ram
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Using ' + ConfigFilename + ' for config.');
+
+  // Open configuration file
+  Status := DeviceFirmwareOpen(DEVICE_CLASS_ANY, ConfigFilename, CYW43455_FIRMWARE_TIMEOUT, Handle);
+  if Status <> ERROR_SUCCESS then
   begin
-    Result := MMC_STATUS_INVALID_DATA;
-    exit;
+    if Status <> ERROR_NOT_READY then
+    begin
+      Result := MMC_STATUS_DEVICE_UNSUPPORTED;
+      Exit;
+    end
+    else
+    begin
+      Result := MMC_STATUS_NOT_READY;
+      Exit;
+    end;
   end;
 
-  AssignFile(FirmwareFile, ConfigFilename);
-  Reset(FirmwareFile);
-  FSize := FileSize(FirmwareFile);
+  FSize := DeviceFirmwareSize(Handle);
 
-  {$ifdef CYW43455_DEBUG}
-  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Size of firmware config file is ' + inttostr(fsize) + ' bytes');
-  {$endif}
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Size of config file is ' + inttostr(fsize) + ' bytes');
 
   // dword align to be sure
   if (fsize mod 4 <> 0) then
@@ -3125,20 +3140,23 @@ begin
     CleanDataCacheRange(PtrUInt(firmwarep), fsize);
    end;
 
-  BlockRead(FirmwareFile, FirmwareP^, FileSize(FirmwareFile));
+  // Read configuration file
+  DeviceFirmwareRead(Handle, firmwarep, DeviceFirmwareSize(Handle));
 
-  fsize := Condense(PChar(FirmwareP), Filesize(FirmwareFile)); // note we deliberately *don't* use fsize here!
+  fsize := Condense(PChar(FirmwareP), DeviceFirmwareSize(Handle)); // note we deliberately *don't* use fsize here!
 
-  CloseFile(FirmwareFile);
+  // Close configuration file
+  DeviceFirmwareClose(Handle);
 
   // Although what we've done here is correct, I noticed that ether4330.c only
   // reads the first 2048 bytes of the config which it then condenses, resulting
   // in a config string of 1720 bytes which misses off the last few items and
-  // truncates on of the assigned values.
+  // truncates one of the assigned values.
   // This just looks like a simple bug - on a Pi3B the file is about 2074 bytes
   // and perhaps in the past it was smaller so would fit in the 2048 byte read.
 
   off := WIFI^.rambase + WIFI^.socramsize - fsize - 4;
+
   {$ifdef CYW43455_DEBUG}
   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Tansferring config file to socram at offset 0x' + inttohex(off, 8));
   {$endif}
@@ -3469,22 +3487,25 @@ end;
 function WIFIDeviceUploadRegulatoryFile(WIFI : PWIFIDevice) : longword;
 const
   Reguhdr = 2+2+4+4;
-  Regusz = 400;
+  Regusz = 400; //To Do //TestingSDIO //Linux driver uses 1400, need to modify WirelessIOCTLCommand to check for blocks/bytes ? // And modify WirelessIOCTLCommand to use a DMA buffer
   Regutyp = 2;
   Flagclm = 1 shl 12;
   Firstpkt = 1 shl 1;
   Lastpkt = 1 shl 2;
 
 var
- FirmwareFile : file of byte;
+ //FirmwareFile : file of byte;
  firmwarep : pbyte;
  off : longword;
- fsize : longword;
+ fsize : LongInt;
  i : integer;
- chunksize : longword;
+ chunksize : LongInt;
  Found : boolean;
  RegulatoryFilename : string;
  flag : word;
+
+ Handle: THandle;
+ Status: LongWord;
 
 begin
   Result := MMC_STATUS_SUCCESS;
@@ -3505,7 +3526,7 @@ begin
        Exit;
       end;
 
-      RegulatoryFilename := FIRMWARE_FILENAME_ROOT + firmware[i].regufilename;
+      RegulatoryFilename := firmware[i].regufilename;
       Found := true;
       break;
     end;
@@ -3520,24 +3541,37 @@ begin
 
   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Using ' + RegulatoryFilename + ' for regulatory file.');
 
-  // now regulatory file if there is one.
-
-  if (not FileExists(RegulatoryFilename)) then
+  // Open regulatory file
+  Status := DeviceFirmwareOpen(DEVICE_CLASS_ANY, RegulatoryFilename, CYW43455_FIRMWARE_TIMEOUT, Handle);
+  if Status <> ERROR_SUCCESS then
   begin
-    Result := MMC_STATUS_INVALID_DATA;
-    exit;
+    if Status <> ERROR_NOT_READY then
+    begin
+      Result := MMC_STATUS_DEVICE_UNSUPPORTED;
+      Exit;
+    end
+    else
+    begin
+      Result := MMC_STATUS_NOT_READY;
+      Exit;
+    end;
   end;
 
-  AssignFile(FirmwareFile, RegulatoryFilename);
-  Reset(FirmwareFile);
-  FSize := FileSize(FirmwareFile);
+  FSize := DeviceFirmwareSize(Handle);
 
   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Size of regulatory file is ' + inttostr(fsize) + ' bytes');
 
-  GetMem(firmwarep, Reguhdr+Regusz+1);
+  firmwarep := DMABufferAllocate(DMAHostGetDefault, Reguhdr + Regusz + 1);
 
-  put2(firmwarep+2, Regutyp);
-  put2(firmwarep+8, 0);
+  if not(DMA_CACHE_COHERENT) then
+   begin
+    // Clean Cache (Dest)
+    CleanDataCacheRange(PtrUInt(firmwarep), Reguhdr + Regusz + 1);
+   end;
+
+  // Setup header
+  put2(firmwarep + 2, Regutyp);
+  put2(firmwarep + 8, 0);
   off := 0;
   flag := Flagclm or Firstpkt;
   chunksize := 0;
@@ -3545,24 +3579,25 @@ begin
   try
     while ((flag and Lastpkt) = 0) do
     begin
-      // read a block of data from the file
-      BlockRead(FirmwareFile, (firmwarep+Reguhdr)^, Regusz, chunksize);
-      if (chunksize <= 0) then
-        break;
+      // Read Next Block
+      chunksize := DeviceFirmwareRead(Handle, firmwarep + Reguhdr, Regusz);
+      if chunksize <= 0 then
+        Break;
 
       if (chunksize <> Regusz) then
       begin
         // fill out end of the block with zeroes.
         while ((chunksize and 7) > 0) do
         begin
-          (firmwarep+Reguhdr+chunksize)^ := 0;
+          (firmwarep + Reguhdr + chunksize)^ := 0;
           chunksize += 1;
         end;
         flag := flag or Lastpkt;
       end;
 
-      put2(firmwarep+0, flag);
-      put4_2(firmwarep+4, chunksize);
+      // Update header
+      put2(firmwarep + 0, flag);
+      put4_2(firmwarep + 4, chunksize);
 
       Result := WirelessSetVar(WIFI, 'clmload', firmwarep, Reguhdr + chunksize);
       if (Result <> MMC_STATUS_SUCCESS) then
@@ -3573,8 +3608,10 @@ begin
     end;
 
   finally
-   freemem(firmwarep);
-   closefile(FirmwareFile);
+    DMABufferRelease(firmwarep);
+
+    // Close regulatory file
+    DeviceFirmwareClose(Handle);
   end;
 
   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Finished transferring regulatory file');
@@ -4813,15 +4850,17 @@ begin
 
                   if (pether_header(pbyte(packetp^.buffer) + IOCTL_LEN_BYTES + SDPCM_HEADER_SIZE + BCDC_HEADER_SIZE)^.ethertype = WordNtoBE(PACKET_TYPE_EAPOL)) then
                   begin
-                    WIFILogDebug(nil, 'Detected transmission of an eapol packet');
+                    {$ifdef CYW43455_DEBUG}
+                    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Detected transmission of an eapol packet');
+                    {$endif}
 
                     // if we are transmitting an EAPOL packet, then we must be sending message 2 or greater.
                     if (PCYW43455Network(FWIFI^.NetworkP)^.EAPOLCompleted) then
                     begin
-                      WIFILogInfo(nil, 'EAPOL Completed - bringing network up');
+                      if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'EAPOL Completed - bringing network up');
 
                       if (WorkerSchedule(0, @DoNetworkNotify, FWIFI, nil) <> ERROR_SUCCESS) then
-                        WIFILogError(nil, 'Failed to schedule task to signify the network is up');
+                        if WIFI_LOG_ENABLED then WIFILogError(nil, 'Failed to schedule task to signify the network is up');
                     end;
                   end;
                 end;
