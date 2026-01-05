@@ -161,7 +161,7 @@ begin
       begin
         // Get first row
         IpNetRow := @IpNetTable^.table[0];
-  
+
         Count := 0;
         while Count < IpNetTable^.dwNumEntries do
         begin
@@ -171,7 +171,7 @@ begin
             // Get the address
             System.Move(IpNetRow^.bPhysAddr[0], HardwareAddress[0], HARDWARE_ADDRESS_SIZE);
             Address := HardwareAddressToString(HardwareAddress);
-  
+
             // Check the address
             if Uppercase(Address) = Uppercase(MACAddress) then
             begin
@@ -180,7 +180,7 @@ begin
               Exit;
             end;
           end;
-  
+
           // Get next row
           Inc(Count);
           Inc(IpNetRow);
@@ -221,7 +221,6 @@ var
   BSSID : THardwareAddress;
   LedStatus : boolean;
   CPUWindow : TWindowHandle;
-  WIFIDeviceP : PWIFIDevice;
   HeapStatus : TFPCHeapStatus;
   UseSupplicant : boolean;
 
@@ -288,11 +287,6 @@ begin
 
   WIFI_LOG_ENABLED := true;
 
-  // Because we disabled auto start of the MMC subsystem we need to start the SD card driver
-  // now to provide access to the firmware files on the SD card.
-
-  WIFIPreInit;
-
   // We've gotta wait for the file system to be alive because that's where the firmware is.
   // Because the WIFI uses the Arasan host, the only way you'll get a drive C
   // is if you use USB boot. So that's a pre-requisite at the moment until we make the
@@ -312,19 +306,9 @@ begin
     ConsoleWindowWriteln(TopWindow, 'You must copy the WIFI firmware to a folder called c:\firmware.');
 
   try
-    // WIFIInit has to be done from the main application because the initialisation
-    // process needs access to the c: drive in order to load the firmware, regulatory file
-    // and configuration file.
-    // There is the option of adding the files as binary blobs to be compiled into
-    // the kernel, but that would need to be an option I think really (easily done
-    // by choosing to add a specific unit to the uses clause)
-    // We'll need to work out what the best solution is later.
-
-    WIFIInit;
-
-    // warning, after wifiinit is called, the deviceopen() stuff will happen on
-    // a different thread, so the code below will execute regardless of whether
-    // the device is open or not. Consequently we are going to spin until the
+    // Warning, opening of the network device will happen ona different
+    // thread, so the code below will execute regardless of whether the
+    // device is open or not. Consequently we are going to spin until the
     // wifi device has been fully initialized.
 
     ConsoleWindowWriteln(TopWindow, 'Waiting for Wifi Device to be opened.');
@@ -340,8 +324,6 @@ begin
     begin
       Sleep(0);
     end;
-
-    WIFIDeviceP := PWIFIDevice(MMCDeviceFindByDescription(CYW43455_SDIO_DESCRIPTION));
 
     if (UseSupplicant) then
     begin
@@ -440,17 +422,17 @@ begin
       {$endif}
 
       {$ifndef notxglom}
-      if (WIFIDeviceP <> nil) then
+      if (CYW43455Network <> nil) then
       begin
-        ConsoleWindowWriteEx(CPUWindow, 'Received Glom Descriptors ' + inttostr(WIFIDeviceP^.ReceiveGlomPacketCount) + '    ', 1, 8, COLOR_BLACK, COLOR_WHITE);
-        ConsoleWindowWriteEx(CPUWindow, 'Received Glom Bytes ' + inttostr(WIFIDeviceP^.ReceiveGlomPacketSize) + '    ', 1, 9, COLOR_BLACK, COLOR_WHITE);
+        ConsoleWindowWriteEx(CPUWindow, 'Received Glom Descriptors ' + inttostr(CYW43455Network^.ReceiveGlomPacketCount) + '    ', 1, 8, COLOR_BLACK, COLOR_WHITE);
+        ConsoleWindowWriteEx(CPUWindow, 'Received Glom Bytes ' + inttostr(CYW43455Network^.ReceiveGlomPacketSize) + '    ', 1, 9, COLOR_BLACK, COLOR_WHITE);
       end;
       {$endif}
 
       Sleep(1000);
       HeapStatus := GetFPCHeapStatus;
       ConsoleWindowWriteEx(CPUWindow, 'Memory Used ' + inttostr(HeapStatus.CurrHeapUsed) + '    ', 1, 10, COLOR_BLACK, COLOR_WHITE);
-      ConsoleWindowWriteEx(CPUWindow, 'Received Glom Bytes ' + inttostr(WIFIDeviceP^.ReceiveGlomPacketSize) + '    ', 1, 9, COLOR_BLACK, COLOR_WHITE);
+      ConsoleWindowWriteEx(CPUWindow, 'Received Glom Bytes ' + inttostr(CYW43455Network^.ReceiveGlomPacketSize) + '    ', 1, 9, COLOR_BLACK, COLOR_WHITE);
 
     end;
 
