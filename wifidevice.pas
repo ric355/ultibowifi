@@ -169,15 +169,6 @@ const
   INTR_CTL_FUNC1_EN = 2;      // function 1 interrupt enable bit
   INTR_CTL_FUNC2_EN = 4;      // function 2 interrupt enable bit
 
-  // CCCR IO Enable bits
-  SDIO_FUNC_ENABLE_1 = 2;
-  SDIO_FUNC_ENABLE_2 = 4;
-
-  WIFI_BAK_BLK_BYTES = 64;   // backplane block size
-  WIFI_RAD_BLK_BYTES = 512;  // radio block size
-
-  BUS_BAK_BLKSIZE_REG = $110;   // register for backplane block size (2 bytes)
-  BUS_RAD_BLKSIZE_REG = $210;   // register for radio block size (2 bytes)
   BAK_WIN_ADDR_REG = $1000a;    // register for backplane window address
 
   Sbwsize = $8000;
@@ -657,7 +648,7 @@ type
 
   PCYW43455Network = ^TCYW43455Network;
 
-  TWIFIWorkerThread = class(TThread)
+  TCYW43455WorkerThread = class(TThread)
   private
     FNetwork: PCYW43455Network;
 
@@ -681,7 +672,7 @@ type
     procedure Execute; override;
   end;
 
-  TWirelessReconnectionThread = class(TThread)
+  TCYW43455ReconnectionThread = class(TThread)
   private
     FNetwork: PCYW43455Network;
 
@@ -755,8 +746,8 @@ type
    NetworkUpSignal: TSemaphoreHandle;
    CountryCode: array[0..1] of char;
 
-   WorkerThread: TWIFIWorkerThread;
-   BackgroundJoinThread: TWirelessReconnectionThread;
+   WorkerThread: TCYW43455WorkerThread;
+   BackgroundJoinThread: TCYW43455ReconnectionThread;
    WPASupplicantThread: TWPASupplicantThread;
 
    ReceiveGlomPacketCount: LongWord;              {number of Glom packets received}
@@ -1045,7 +1036,7 @@ begin
  {Add Prefix}
  WorkBuffer:=WorkBuffer + 'WIFI: ';
 
- {Check WIFI}
+ {Check Network}
  if Network <> nil then
   begin
    WorkBuffer:=WorkBuffer + NETWORK_NAME_PREFIX + IntToStr(Network^.Network.NetworkId) + ': ';
@@ -1289,11 +1280,11 @@ begin
       // create the receive thread
       if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Creating Worker Thread');
 
-      PCYW43455Network(Network)^.WorkerThread := TWIFIWorkerThread.Create(true, PCYW43455Network(Network));
+      PCYW43455Network(Network)^.WorkerThread := TCYW43455WorkerThread.Create(true, PCYW43455Network(Network));
       PCYW43455Network(Network)^.WorkerThread.Start;
 
       // create the reconnect thread
-      PCYW43455Network(Network)^.BackgroundJoinThread := TWirelessReconnectionThread.Create(PCYW43455Network(Network));
+      PCYW43455Network(Network)^.BackgroundJoinThread := TCYW43455ReconnectionThread.Create(PCYW43455Network(Network));
 
       {Release the Lock}
       MutexUnlock(Network^.Lock); //To Do //TestingSDIO // What is the correct strategy for this
@@ -1726,8 +1717,6 @@ end;
 
 function WIFIDeviceInitialize(Network: PCYW43455Network): LongWord;
 var
- updatevalue: word;
- ioreadyvalue: word;
  chipid: word;
  chipidrev: byte;
  bytevalue: byte;
@@ -1747,19 +1736,11 @@ begin
 
    // set block sizes for fn1 and fn2 in their respective function registers.
    // note these are still writes to the common IO area (function 0).
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: setting backplane fn1 block size to 64');
-   //Result := SDIOFunctionSetBlockSize(Network^.Func1, Network^.Func1^.MaxBlockSize); //To Do //TestingSDIO // Use this instead
-   updatevalue := WIFI_BAK_BLK_BYTES;
-   Result:=SDIODeviceReadWriteDirect(Network^.Func1^.MMC,True, BUS_FUNCTION, BUS_BAK_BLKSIZE_REG, updatevalue and $ff,nil);
-   Result:=SDIODeviceReadWriteDirect(Network^.Func1^.MMC,True, BUS_FUNCTION, BUS_BAK_BLKSIZE_REG+1,(updatevalue shr 8) and $ff,nil);
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: setting backplane fn1 block size to ' + IntToStr(Network^.Func1^.MaxBlockSize));
+   Result := SDIOFunctionSetBlockSize(Network^.Func1, Network^.Func1^.MaxBlockSize);
 
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: setting backplane fn2 (radio) block size to 512');
-   //Result := SDIOFunctionSetBlockSize(Network^.Func2, Network^.Func2^.MaxBlockSize); //To Do //TestingSDIO // Use this instead
-   updatevalue := 512;
-   Result:=SDIODeviceReadWriteDirect(Network^.Func1^.MMC,True, BUS_FUNCTION, BUS_RAD_BLKSIZE_REG, updatevalue and $ff,nil);
-   Result:=SDIODeviceReadWriteDirect(Network^.Func1^.MMC,True, BUS_FUNCTION, BUS_RAD_BLKSIZE_REG+1,(updatevalue shr 8) and $ff,nil);
-
-   // we only check the last result here. Needs changing really.
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: setting backplane fn2 (radio) block size to ' + IntToStr(Network^.Func2^.MaxBlockSize));
+   Result := SDIOFunctionSetBlockSize(Network^.Func2, Network^.Func2^.MaxBlockSize);
    if (Result = MMC_STATUS_SUCCESS) then
    begin
      {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
@@ -1770,9 +1751,7 @@ begin
      WIFILogError(nil, 'CYW43455: Failed to update backplane block sizes');
 
    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: IO Enable backplane function 1');
-   //Result:=SDIOFunctionEnable(Network^.Func1); //To Do //TestingSDIO // Use this instead
-   ioreadyvalue := 0;
-   Result:=SDIODeviceReadWriteDirect(Network^.Func1^.MMC,True,BUS_FUNCTION,SDIO_CCCR_IOEx, 1 shl 1,nil);
+   Result:=SDIOFunctionEnable(Network^.Func1);
    if (Result = MMC_STATUS_SUCCESS) then
    begin
      {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
@@ -1781,21 +1760,6 @@ begin
    end
    else
      WIFILogError(nil, 'CYW43455: io enable could not be set for function 1');
-
-   // at this point ether4330.c turns off all interrupts and then does to ioready check below.
-
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Waiting for IOReady function 1');
-   ioreadyvalue := 0;
-   while (ioreadyvalue and (1 shl 1)) = 0 do
-   begin
-     Result:=SDIODeviceReadWriteDirect(Network^.Func1^.MMC,False,BUS_FUNCTION, SDIO_CCCR_IORx,  0, @ioreadyvalue);
-     if (Result <> MMC_STATUS_SUCCESS) then
-     begin
-       WIFILogError(nil, 'CYW43455: Could not read IOReady value');
-       exit;
-     end;
-     sleep(10);
-   end;
 
    {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: Reading the Chip ID');
@@ -2259,12 +2223,12 @@ begin
     if (len >= 4) then
       addr := addr or $8000;
 
-    if (n < WIFI_BAK_BLK_BYTES) then
+    if (n < Network^.Func1^.MaxBlockSize) then
       Res := SDIODeviceReadWriteExtended(Network^.Func1^.MMC, True, BACKPLANE_FUNCTION, addr, true, buf, 0, n)
     else
     begin
-      Res := SDIODeviceReadWriteExtended(Network^.Func1^.MMC, True, BACKPLANE_FUNCTION, addr, true, buf, n div WIFI_BAK_BLK_BYTES, WIFI_BAK_BLK_BYTES);
-      n := (n div WIFI_BAK_BLK_BYTES) * WIFI_BAK_BLK_BYTES;
+      Res := SDIODeviceReadWriteExtended(Network^.Func1^.MMC, True, BACKPLANE_FUNCTION, addr, true, buf, n div Network^.Func1^.MaxBlockSize, Network^.Func1^.MaxBlockSize);
+      n := (n div Network^.Func1^.MaxBlockSize) * Network^.Func1^.MaxBlockSize;
     end;
 
     if (Res <> MMC_STATUS_SUCCESS) then
@@ -2726,9 +2690,9 @@ end;
 procedure sbenable(Network: PCYW43455Network);
 var
   i: integer;
-  iobits: byte;
   mbox: longword;
   ints: longword;
+  Status: LongWord;
 begin
   WIFIDeviceSetBackplaneWindow(Network, BAK_BASE_ADDR);
   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Enabling high throughput clock...');
@@ -2763,24 +2727,12 @@ begin
   cfgwritel(Network, Network^.sdregs + Intmask, FrameInt or MailboxInt or Fcchange);
 
   // enable function 2
-  SDIODeviceReadWriteDirect(Network^.Func1^.MMC, False, BUS_FUNCTION, SDIO_CCCR_IOEx, 0, @iobits);
-  SDIODeviceReadWriteDirect(Network^.Func1^.MMC, True, BUS_FUNCTION, SDIO_CCCR_IOEx, iobits or SDIO_FUNC_ENABLE_2, nil);
-
-  // now wait for function 2 to be ready
-  i := 0;
-  iobits := 0;
-  while ((iobits and SDIO_FUNC_ENABLE_2) = 0) do
+  Status := SDIOFunctionEnable(Network^.Func2);
+  if (Status <> MMC_STATUS_SUCCESS) then
   begin
-    i += 1;
-    if (i = 10) then
-    begin
-      WIFILogError(nil, 'CYW43455: Could not enable SDIO function 2; iobits=0x'+inttohex(iobits, 8));
-      exit;
-    end;
+    WIFILogError(nil, 'CYW43455: io enable could not be set for function 2');
 
-    SDIODeviceReadWriteDirect(Network^.Func1^.MMC, False, BUS_FUNCTION, SDIO_CCCR_IORx, 0, @iobits);
-
-    Sleep(100);
+    Exit;
   end;
 
   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Radio function (f2) successfully enabled');
@@ -3662,7 +3614,7 @@ begin
  Result := WirelessCommandInt(Network, 10, 0);  // promiscuous
 end;
 
-constructor TWIFIWorkerThread.Create(CreateSuspended: boolean; ANetwork: PCYW43455Network);
+constructor TCYW43455WorkerThread.Create(CreateSuspended: boolean; ANetwork: PCYW43455Network);
 begin
   inherited Create(CreateSuspended,THREAD_STACK_DEFAULT_SIZE);
   FNetwork := ANetwork;
@@ -3672,7 +3624,7 @@ begin
   FQueueProtect := CriticalSectionCreate;
 end;
 
-destructor TWIFIWorkerThread.Destroy;
+destructor TCYW43455WorkerThread.Destroy;
 begin
   // free memory allocated to the queue and release any semaphores.
   // do this later - most apps just get turned off on shutdown anyway!
@@ -3682,7 +3634,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TWIFIWorkerThread.dumpqueue;
+procedure TCYW43455WorkerThread.dumpqueue;
 var
   entryp: PWIFIRequestItem;
   count: integer;
@@ -3706,7 +3658,7 @@ begin
  end;
 end;
 
-function TWIFIWorkerThread.AddRequest(ARequestID: word; InterestedEvents: TWIFIEventSet; Callback: TWirelessEventCallback; UserDataP: Pointer): PWIFIRequestItem;
+function TCYW43455WorkerThread.AddRequest(ARequestID: word; InterestedEvents: TWIFIEventSet; Callback: TWirelessEventCallback; UserDataP: Pointer): PWIFIRequestItem;
 var
   ItemP: PWIFIRequestItem;
 begin
@@ -3738,7 +3690,7 @@ begin
   end;
 end;
 
-procedure TWIFIWorkerThread.DoneWithRequest(ARequestItemP: PWIFIRequestItem);
+procedure TCYW43455WorkerThread.DoneWithRequest(ARequestItemP: PWIFIRequestItem);
 var
   CurP, PrevP: PWIFIRequestItem;
 begin
@@ -3782,7 +3734,7 @@ begin
   end;
 end;
 
-function TWIFIWorkerThread.FindRequest(ARequestId: word): PWIFIRequestItem;
+function TCYW43455WorkerThread.FindRequest(ARequestId: word): PWIFIRequestItem;
 var
   CurP: PWIFIRequestItem;
 
@@ -3802,7 +3754,7 @@ begin
   Result := CurP;
 end;
 
-function TWIFIWorkerThread.FindRequestByEvent(AEvent: longword): PWIFIRequestItem;
+function TCYW43455WorkerThread.FindRequestByEvent(AEvent: longword): PWIFIRequestItem;
 var
   CurP: PWIFIRequestItem;
 begin
@@ -3825,7 +3777,7 @@ begin
   Result := CurP;
 end;
 
-procedure TWIFIWorkerThread.ProcessDevicePacket(var responseP: PIOCTL_MSG;
+procedure TCYW43455WorkerThread.ProcessDevicePacket(var responseP: PIOCTL_MSG;
                              NetworkEntryP: PNetworkEntry;
                              var bytesleft: longword;
                              var isfinished: boolean);
@@ -4010,7 +3962,7 @@ begin
 
 end;
 
-procedure TWIFIWorkerThread.Execute;
+procedure TCYW43455WorkerThread.Execute;
 var
   istatus: longword;
   responseP: PIOCTL_MSG;
@@ -4036,7 +3988,7 @@ begin
   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: WIFI Worker thread started.');
   {$ENDIF}
 
-  ThreadSetName(ThreadGetCurrent, 'WIFI Worker Thread');
+  ThreadSetName(ThreadGetCurrent, 'CYW43455 Worker Thread');
 
   txseq := 0;
 
@@ -4400,7 +4352,7 @@ begin
   end;
 end;
 
-constructor TWirelessReconnectionThread.Create(ANetwork: PCYW43455Network);
+constructor TCYW43455ReconnectionThread.Create(ANetwork: PCYW43455Network);
 begin
   inherited Create(true,THREAD_STACK_DEFAULT_SIZE);
   FNetwork := ANetwork;
@@ -4411,14 +4363,14 @@ begin
   Start;
 end;
 
-destructor TWirelessReconnectionThread.Destroy;
+destructor TCYW43455ReconnectionThread.Destroy;
 begin
   SemaphoreDestroy(FConnectionLost);
 
   inherited Destroy;
 end;
 
-procedure TWirelessReconnectionThread.SetConnectionDetails(aSSID, aKey, aCountry: string;
+procedure TCYW43455ReconnectionThread.SetConnectionDetails(aSSID, aKey, aCountry: string;
           BSSID: THardwareAddress; useBSSID: boolean; aReconnectionType: TWIFIReconnectionType);
 begin
   FSSID := aSSID;
@@ -4429,11 +4381,11 @@ begin
   FReconnectionType := aReconnectionType;
 end;
 
-procedure TWirelessReconnectionThread.Execute;
+procedure TCYW43455ReconnectionThread.Execute;
 var
   Res: longword;
 begin
-  ThreadSetName(ThreadGetCurrent, 'WIFI Reconnection Thread');
+  ThreadSetName(ThreadGetCurrent, 'CYW43455 Reconnection Thread');
 
   while not Terminated do
   begin
