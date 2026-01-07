@@ -306,7 +306,7 @@ begin
     ConsoleWindowWriteln(TopWindow, 'You must copy the WIFI firmware to a folder called c:\firmware.');
 
   try
-    // Warning, opening of the network device will happen ona different
+    // Warning, opening of the network device will happen on a different
     // thread, so the code below will execute regardless of whether the
     // device is open or not. Consequently we are going to spin until the
     // wifi device has been fully initialized.

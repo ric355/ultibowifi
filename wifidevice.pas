@@ -851,7 +851,6 @@ var
     	    ( chipid: $4345; chipidrev: 9; firmwarefilename: 'brcmfmac43456-sdio.bin'; configfilename: 'brcmfmac43456-sdio.txt'; regufilename: 'brcmfmac43456-sdio.clm_blob')
     );
 
-  ioctl_txmsg, ioctl_rxmsg: IOCTL_MSG;
   txglom: boolean = false;
   ioctl_reqid: longword = 1; // ioct request id used to match request to response.
                               // starts at 1 because 0 is reserved for an event entry.
@@ -888,6 +887,9 @@ begin
 
  {Initialize Logging}
  WIFI_LOG_ENABLED := (WIFI_DEFAULT_LOG_LEVEL <> WIFI_LOG_LEVEL_NONE);
+
+ {Initialize EAPOL queue lock for use with supplicant}
+ InitializeCriticalSection(EAPOLQueueLock);
 
  {Create SDIO Driver}
  CYW43455SDIODriver := SDIODriverCreate;
@@ -1118,9 +1120,6 @@ begin
       VirtualGPIOFunctionSelect(WLAN_ON_PIN, GPIO_FUNCTION_OUT);
       VirtualGPIOOutputSet(WLAN_ON_PIN, GPIO_LEVEL_HIGH);
       {$ENDIF}
-
-      // EAPOL queue locks for use with supplicant
-      InitializeCriticalSection(EAPOLQueueLock); //To Do //TestingSDIO // This needs to be a field of TCYW43455Network
 
       // Create Up Semaphore
       PCYW43455Network(Network)^.EAPOLCompleted := false;
@@ -1366,9 +1365,6 @@ begin
 
       {Destroy Up Semaphore}
       SemaphoreDestroy(PCYW43455Network(Network)^.NetworkUpSignal);
-
-      {Delete EAPOL queue lock}
-      DeleteCriticalSection(EAPOLQueueLock);
 
       Result := ERROR_SUCCESS;
     finally
@@ -2763,7 +2759,7 @@ begin
 
   // It seems like we need to execute a read first to kick things off. If we don't do this the first
   // IOCTL command response will be an empty one rather than the one for the IOCTL we sent.
-  if (SDIODeviceReadWriteExtended(Network^.Func1^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, @ioctl_rxmsg, 0, 64) <> MMC_STATUS_SUCCESS) then
+  if (SDIODeviceReadWriteExtended(Network^.Func1^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, Network^.RXBuffer, 0, 64) <> MMC_STATUS_SUCCESS) then
      WIFILogError(nil, 'CYW43455: Unsuccessful initial read from WIFI function 2 (packets)')
   else
   begin
@@ -2784,7 +2780,7 @@ function WirelessIOCTLCommand(Network: PCYW43455Network; cmd: integer;
                                    trace: string = ''): longword;
 
 var
-  msgp: PIOCTL_MSG = @ioctl_txmsg;
+  msgp: PIOCTL_MSG;
   responseP: PIOCTL_MSG;
   cmdp: IOCTL_CMDP;
   TransmitDataLen: longword;
@@ -2796,6 +2792,8 @@ var
 
 begin
   Result := MMC_STATUS_INVALID_PARAMETER;
+
+  msgp := Network^.TXBuffer;
 
   if txglom then
     cmdp := @(msgp^.glom_cmd.cmd)
@@ -2816,8 +2814,8 @@ begin
 
   // works out header length by subtracting addresses
   // this might look wrong but cmdp is a pointer to msgp's cmd and msgp is
-  // a pointer to ioctl_txmsg. therefore the address are from the same instance.
-  HeaderLen := longword(@cmdp^.data) - longword(@ioctl_txmsg);
+  // a pointer to TXBuffer. therefore the address are from the same instance.
+  HeaderLen := longword(@cmdp^.data) - longword(msgp);
   TransmitLen := ((HeaderLen + TransmitDataLen + 3) div 4) * 4;
 
     // Prepare IOCTL command
