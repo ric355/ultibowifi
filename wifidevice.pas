@@ -731,6 +731,10 @@ type
    dllctl: LongWord;
    resetvec: LongWord;
 
+   txglom: Boolean;
+   txseq: byte;            // ioctl tx sequence number.
+   ioctl_reqid: LongWord;  // ioctl request id used to match request to response. starts at 1 because 0 is reserved for an event entry.
+
    macaddress: THardwareAddress;
 
    TXBuffer: PIOCTL_MSG;
@@ -851,12 +855,6 @@ var
     	    ( chipid: $4345; chipidrev: 9; firmwarefilename: 'brcmfmac43456-sdio.bin'; configfilename: 'brcmfmac43456-sdio.txt'; regufilename: 'brcmfmac43456-sdio.clm_blob')
     );
 
-  txglom: boolean = false;
-  ioctl_reqid: longword = 1; // ioct request id used to match request to response.
-                              // starts at 1 because 0 is reserved for an event entry.
-
-  txseq: byte = 1; // ioctl tx sequence number.
-
   EAPOLQueueLock: TRTLCriticalSection;
   SupplicantOperatingState: integer; cvar; external;
 
@@ -961,9 +959,9 @@ begin
   remainder := len mod 16;
 
   if (title <> '') then
-    WIFILogInfo(nil, title + ' @ address 0x'+inttohex(longword(p),8) + ' for ' + inttostr(len) + ' bytes')
+    WIFILogInfo(nil, title + ' @ address 0x'+ PtrToHex(p) + ' for ' + inttostr(len) + ' bytes')
   else
-    WIFILogInfo(nil, 'hexdump @ address 0x'+inttohex(longword(p),8) + ' for ' + inttostr(len) + ' bytes');
+    WIFILogInfo(nil, 'hexdump @ address 0x'+ PtrToHex(p) + ' for ' + inttostr(len) + ' bytes');
   for i := 0 to rows-1 do
   begin
      WIFILogInfo(nil, line(16));
@@ -1120,6 +1118,9 @@ begin
       VirtualGPIOFunctionSelect(WLAN_ON_PIN, GPIO_FUNCTION_OUT);
       VirtualGPIOOutputSet(WLAN_ON_PIN, GPIO_LEVEL_HIGH);
       {$ENDIF}
+
+      // Setup request id and tx sequence
+      PCYW43455Network(Network)^.ioctl_reqid := 1;
 
       // Create Up Semaphore
       PCYW43455Network(Network)^.EAPOLCompleted := false;
@@ -1285,17 +1286,10 @@ begin
       // create the reconnect thread
       PCYW43455Network(Network)^.BackgroundJoinThread := TCYW43455ReconnectionThread.Create(PCYW43455Network(Network));
 
-      {Release the Lock}
-      MutexUnlock(Network^.Lock); //To Do //TestingSDIO // What is the correct strategy for this
-
       // call initialisation (loads country code etc)
       // note this code requires the worker thread to be running otherwise
       // responses won't be received.
       WirelessInit(PCYW43455Network(Network));
-
-      {Acquire the Lock}
-      Result := MutexLock(Network^.Lock); //To Do //TestingSDIO // What is the correct strategy for this
-      if Result <> ERROR_SUCCESS then Exit;
 
       {Set State to Open}
       Network^.NetworkState := NETWORK_STATE_OPEN;
@@ -1895,7 +1889,7 @@ begin
 
  except
    on e: exception do
-   WIFILogError(nil, 'CYW43455: Exception ' + e.message + ' at ' + inttohex(longword(exceptaddr), 8) + ' in WIFIDeviceInitialize');
+   WIFILogError(nil, 'CYW43455: Exception ' + e.message + ' at ' + PtrToHex(exceptaddr) + ' in WIFIDeviceInitialize');
  end;
 end;
 
@@ -2190,7 +2184,7 @@ begin
   cfgreadl(Network, regs + Ioctrl);
  except
    on e: exception do
-     WIFILogError(nil, 'CYW43455: exception in sbdisable 0x' + inttohex(longword(exceptaddr), 8));
+     WIFILogError(nil, 'CYW43455: exception in sbdisable 0x' + PtrToHex(exceptaddr));
  end;
 end;
 
@@ -2679,7 +2673,7 @@ begin
      sbreset(Network, Network^.armctl, 0, 0);
  except
    on e: exception do
-     WIFILogError(nil, 'CYW43455: exception: ' + e.message + ' at address ' + inttohex(longword(exceptaddr),8));
+     WIFILogError(nil, 'CYW43455: exception: ' + e.message + ' at address ' + PtrToHex(exceptaddr));
  end;
 end;
 
@@ -2790,127 +2784,161 @@ var
   WorkerRequestP: PWIFIRequestItem;
   status: longword;
 
+  Lock: Boolean;
 begin
   Result := MMC_STATUS_INVALID_PARAMETER;
 
-  msgp := Network^.TXBuffer;
+  // Check lock already owned
+  Lock := MutexOwner(Network^.Network.Lock) <> ThreadGetCurrent;
 
-  if txglom then
-    cmdp := @(msgp^.glom_cmd.cmd)
+  // Acquire lock (Conditional)
+  if Lock then
+    status := MutexLock(Network^.Network.Lock)
   else
-    cmdp := @(msgp^.cmd);
-
-  {$ifdef CYW43455_SDIO_DEBUG}
-  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: wirelessioctlcmd write='+booltostr(write, true)
-                   + ' cmd='+inttostr(cmd)
-                   + ' InputLen='+inttostr(InputLen)
-                   + ' datalen='+inttostr(responsedatalen));
-  {$endif}
-
-  if (write) then
-    TransmitDataLen := InputLen + ResponseDataLen
-  else
-    TransmitDataLen := max(InputLen, ResponseDataLen);
-
-  // works out header length by subtracting addresses
-  // this might look wrong but cmdp is a pointer to msgp's cmd and msgp is
-  // a pointer to TXBuffer. therefore the address are from the same instance.
-  HeaderLen := longword(@cmdp^.data) - longword(msgp);
-  TransmitLen := ((HeaderLen + TransmitDataLen + 3) div 4) * 4;
-
-    // Prepare IOCTL command
-  fillchar(msgp^, sizeof(IOCTL_MSG), 0);
-
-  msgp^.len := HeaderLen + TransmitDataLen;
-  msgp^.notlen := not msgp^.len;
-
-  if (txglom) then
+    status := ERROR_SUCCESS;
+  if status = ERROR_SUCCESS then
   begin
-    msgp^.glom_cmd.glom_hdr.len := HeaderLen + TransmitDataLen - 4;
-    msgp^.glom_cmd.glom_hdr.flags := 1;
-  end;
+    try
 
-  cmdp^.sdpcmheader.seq := txseq;
-  if (txseq < 255) then
-    txseq += 1
-  else
-    txseq := 0;
+      msgp := Network^.TXBuffer;
 
-  if (txglom) then
-    cmdp^.sdpcmheader.hdrlen := 20
-  else
-    cmdp^.sdpcmheader.hdrlen := 12;
+      if Network^.txglom then
+        cmdp := @(msgp^.glom_cmd.cmd)
+      else
+        cmdp := @(msgp^.cmd);
 
-  cmdp^.cmd := cmd;
-  cmdp^.outlen := TransmitDataLen;
+      {$ifdef CYW43455_SDIO_DEBUG}
+      if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: wirelessioctlcmd write='+booltostr(write, true)
+                       + ' cmd='+inttostr(cmd)
+                       + ' InputLen='+inttostr(InputLen)
+                       + ' datalen='+inttostr(responsedatalen));
+      {$endif}
 
-  // request id is a word, so need to stay within limits.
-  if (ioctl_reqid > $fffe) then
-    ioctl_reqid := 1
-  else
-    ioctl_reqid := ioctl_reqid + 1;
+      if (write) then
+        TransmitDataLen := InputLen + ResponseDataLen
+      else
+        TransmitDataLen := max(InputLen, ResponseDataLen);
 
-  if (write) then
-    cmdp^.flags := (ioctl_reqid << 16) or 2
-  else
-    cmdp^.flags := (ioctl_reqid << 16);
+      // works out header length by subtracting addresses
+      // this might look wrong but cmdp is a pointer to msgp's cmd and msgp is
+      // a pointer to TXBuffer. therefore the address are from the same instance.
+      HeaderLen := PtrUInt(@cmdp^.data) - PtrUInt(msgp);
+      TransmitLen := ((HeaderLen + TransmitDataLen + 3) div 4) * 4;
 
-  if (InputLen > 0) then
-  begin
-    move(InputP^, cmdp^.data[0], InputLen);
-  end;
+        // Prepare IOCTL command
+      fillchar(msgp^, sizeof(IOCTL_MSG), 0);
 
-  if (write) then
-    move(ResponseDataP^, PByte(@(cmdp^.data[0])+InputLen)^, ResponseDataLen);
+      msgp^.len := HeaderLen + TransmitDataLen;
+      msgp^.notlen := not msgp^.len;
 
-  // Signal to the worker thread that we need a response for this request.
-  WorkerRequestP := Network^.WorkerThread.AddRequest(ioctl_reqid, [], nil, nil);
+      if (Network^.txglom) then
+      begin
+        msgp^.glom_cmd.glom_hdr.len := HeaderLen + TransmitDataLen - 4;
+        msgp^.glom_cmd.glom_hdr.flags := 1;
+      end;
 
-  // Send IOCTL command.
-  // Is it safe to submit multiple ioctl commands and then see the events come through
-  // out of order? I think so but needs testing and investigating.
-  // requests are safe because the sdio read write functions have a spinlock.
+      cmdp^.sdpcmheader.seq := Network^.txseq;
+      if (Network^.txseq < 255) then
+        Network^.txseq += 1
+      else
+        Network^.txseq := 0;
 
-  {$ifdef CYW43455_SDIO_DEBUG}
-  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: sending ' + inttostr(TransmitLen) + ' bytes to the wifi device');
-  {$endif}
+      if (Network^.txglom) then
+        cmdp^.sdpcmheader.hdrlen := 20
+      else
+        cmdp^.sdpcmheader.hdrlen := 12;
 
-  Res := SDIODeviceReadWriteExtended(Network^.Func1^.MMC, True, WLAN_FUNCTION, BAK_BASE_ADDR and $1FFFF{ SB_32BIT_WIN}, false, msgp, 0, TransmitLen);
-  Result := Res;
-  if (Res <> MMC_STATUS_SUCCESS) then
-    WIFILogError(nil, 'CYW43455: failed to send cmd53 for ioctl command ' + inttostr(res));
+      cmdp^.cmd := cmd;
+      cmdp^.outlen := TransmitDataLen;
 
-  // wait for the worker thread to process the response.
-  status := SemaphoreWaitEx(WorkerRequestP^.Signal, 10000);
-  if (status = ERROR_WAIT_TIMEOUT) then
-  begin
-    Network^.WorkerThread.DoneWithRequest(WorkerRequestP);
-    exit;
-  end;
+      // request id is a word, so need to stay within limits.
+      if (Network^.ioctl_reqid > $fffe) then
+        Network^.ioctl_reqid := 1
+      else
+        Network^.ioctl_reqid := Network^.ioctl_reqid + 1;
 
-  // use old variable for now so copy paste from old code works still
-  ResponseP := WorkerRequestP^.MsgP;
-  if (ResponseP = nil) then
-  begin
-    WIFILogError(nil, 'CYW43455: Nil response item in WirelessIOCTLCommand');
-    exit;
-  end;
+      if (write) then
+        cmdp^.flags := (Network^.ioctl_reqid << 16) or 2
+      else
+        cmdp^.flags := (Network^.ioctl_reqid << 16);
 
-  // Now we have the response we can validate it.
-  if ((responseP^.cmd.sdpcmheader.chan and $f) <> 0) then
-    WIFILogError(nil, 'CYW43455: IOCTL response received for a non-zero channel');
+      if (InputLen > 0) then
+      begin
+        move(InputP^, cmdp^.data[0], InputLen);
+      end;
 
-  if (((ResponseP^.cmd.flags >> 16) and $ffff) <> WorkerRequestP^.RequestID) then
-    WIFILogError(nil, 'CYW43455: IOCTL response received for a different request id. We got one for '
-                      + inttostr(responsep^.cmd.flags >> 16)
-                      + ' whereas our request was for '
-                      + inttostr(workerrequestp^.RequestID));
+      if (write) then
+        move(ResponseDataP^, PByte(@(cmdp^.data[0])+InputLen)^, ResponseDataLen);
 
-  // in cases where the response is smaller than the command parameters we have to move less data.
-  // need to verify this as I had some weird if statement in there before.
-  move(ResponseP^.cmd.Data[0], ResponseDataP^, ResponseDataLen);
+      // Signal to the worker thread that we need a response for this request.
+      WorkerRequestP := Network^.WorkerThread.AddRequest(Network^.ioctl_reqid, [], nil, nil);
 
-  Network^.WorkerThread.DoneWithRequest(WorkerRequestP);
+      // Send IOCTL command.
+      // Is it safe to submit multiple ioctl commands and then see the events come through
+      // out of order? I think so but needs testing and investigating.
+      // requests are safe because the sdio read write functions have a spinlock.
+
+      {$ifdef CYW43455_SDIO_DEBUG}
+      if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: sending ' + inttostr(TransmitLen) + ' bytes to the wifi device');
+      {$endif}
+
+      Res := SDIODeviceReadWriteExtended(Network^.Func1^.MMC, True, WLAN_FUNCTION, BAK_BASE_ADDR and $1FFFF{ SB_32BIT_WIN}, false, msgp, 0, TransmitLen);
+      if (Res <> MMC_STATUS_SUCCESS) then
+        WIFILogError(nil, 'CYW43455: failed to send cmd53 for ioctl command ' + inttostr(res));
+
+      // Release lock (Always)
+      MutexUnlock(Network^.Network.Lock);
+
+      // wait for the worker thread to process the response.
+      status := SemaphoreWaitEx(WorkerRequestP^.Signal, 10000);
+      if (status = ERROR_WAIT_TIMEOUT) then
+      begin
+        Network^.WorkerThread.DoneWithRequest(WorkerRequestP);
+
+        Lock := False;
+        exit;
+      end;
+
+      // Reacquire lock (Always)
+      status := MutexLock(Network^.Network.Lock);
+      if status <> ERROR_SUCCESS then
+      begin
+        Network^.WorkerThread.DoneWithRequest(WorkerRequestP);
+
+        Lock := False;
+        exit;
+      end;
+
+      // use old variable for now so copy paste from old code works still
+      ResponseP := WorkerRequestP^.MsgP;
+      if (ResponseP = nil) then
+      begin
+        WIFILogError(nil, 'CYW43455: Nil response item in WirelessIOCTLCommand');
+        exit;
+      end;
+
+      // Now we have the response we can validate it.
+      if ((responseP^.cmd.sdpcmheader.chan and $f) <> 0) then
+        WIFILogError(nil, 'CYW43455: IOCTL response received for a non-zero channel');
+
+      if (((ResponseP^.cmd.flags >> 16) and $ffff) <> WorkerRequestP^.RequestID) then
+        WIFILogError(nil, 'CYW43455: IOCTL response received for a different request id. We got one for '
+                          + inttostr(responsep^.cmd.flags >> 16)
+                          + ' whereas our request was for '
+                          + inttostr(workerrequestp^.RequestID));
+
+      // in cases where the response is smaller than the command parameters we have to move less data.
+      // need to verify this as I had some weird if statement in there before.
+      move(ResponseP^.cmd.Data[0], ResponseDataP^, ResponseDataLen);
+
+      Network^.WorkerThread.DoneWithRequest(WorkerRequestP);
+
+      Result := Res;
+    finally
+      // Release lock (Conditional)
+      if Lock then MutexUnlock(Network^.Network.Lock);
+    end
+  end
 end;
 
 function WirelessGetVar(Network: PCYW43455Network; varname: string; ValueP: PByte; len: integer): longword;
@@ -3114,7 +3142,7 @@ var
 begin
   if (Event = WLC_E_ESCAN_RESULT) then
   begin
-    scanresultp := pwl_escan_result(pbyte(longword(@eventrecordp^.whd_event) + sizeof(whd_event_msg)));
+    scanresultp := pwl_escan_result(pbyte(PtrUInt(@eventrecordp^.whd_event) + sizeof(whd_event_msg)));
     ssidstr := buftostr(@scanresultp^.bss_info[1].SSID[0], scanresultp^.bss_info[1].SSID_len, true);
     if (ssidstr = '') then
       ssidstr := '<hidden>';
@@ -3643,7 +3671,7 @@ begin
    count := 0;
    while (entryp <> nil) do
    begin
-     WIFILogInfo(nil, inttostr(count) + ' 0x' + inttohex(longword(entryp), 8)
+     WIFILogInfo(nil, inttostr(count) + ' 0x' + PtrToHex(entryp)
           + ' 0x' + inttohex(psemaphoreentry(entryp^.signal)^.Signature, 8)
           + ' handle ' + inttostr(entryp^.signal)
           + ' request id ' + inttostr(entryp^.RequestID)
@@ -3953,7 +3981,7 @@ begin
         end;
       except
         on e: exception do
-          WIFILogError(nil, 'CYW43455: network packet exception ' + e.message + ' at ' + inttohex(longword(exceptaddr), 8));
+          WIFILogError(nil, 'CYW43455: network packet exception ' + e.message + ' at ' + PtrToHex(exceptaddr));
       end;
       end;
    end;
@@ -3988,7 +4016,7 @@ begin
 
   ThreadSetName(ThreadGetCurrent, 'CYW43455 Worker Thread');
 
-  txseq := 0;
+  FNetwork^.txseq := 0;
 
   try
 
@@ -4234,7 +4262,7 @@ begin
                 SDPCMHeaderP^.hdrlen:=IOCTL_LEN_BYTES + SDPCM_HEADER_SIZE;
                 SDPCMHeaderP^.credit := 0;
                 SDPCMHeaderP^.flow := 0;
-                SDPCMHeaderP^.seq:=txseq;
+                SDPCMHeaderP^.seq:=FNetwork^.txseq;
                 SDPCMHeaderP^.reserved := 0;
 
                 // Get BCDC Header
@@ -4247,10 +4275,10 @@ begin
                 BCDCHeaderP^.data_offset := 0;
 
                 // needs thread protection?
-                if (txseq < 255) then
-                  txseq := txseq + 1
+                if (FNetwork^.txseq < 255) then
+                  FNetwork^.txseq := FNetwork^.txseq + 1
                 else
-                  txseq := 0;
+                  FNetwork^.txseq := 0;
 
                 // If we are beyond the sending limit then we need to wait a bit.
                 // it may be more advantageous to drop out of the loop and send the rest
@@ -4258,7 +4286,7 @@ begin
                 // code, but that is a larger change.
                 if (CYW43455_USE_FIRMWARE_CREDIT_VALUE) then
                 begin
-                  seqdiff := LastCredit - txseq;
+                  seqdiff := LastCredit - FNetwork^.txseq;
                   if (seqdiff < 0) then
                     seqdiff := seqdiff + 256;
 
@@ -4287,14 +4315,14 @@ begin
                 begin
                   if SDIODeviceReadWriteExtended(FNetwork^.Func1^.MMC, True, WLAN_FUNCTION,
                         BAK_BASE_ADDR and $1ffff, false, PacketP^.Buffer, blockcount, 512) <> MMC_STATUS_SUCCESS then
-                          WIFILogError(nil, 'CYW43455: Failed to transmit packet data blocks txseq='+inttostr(txseq)+' lastcredit='+inttostr(LastCredit));
+                          WIFILogError(nil, 'CYW43455: Failed to transmit packet data blocks txseq='+inttostr(FNetwork^.txseq)+' lastcredit='+inttostr(LastCredit));
                 end;
 
                 if (remainder > 0) then
                 begin
                   if SDIODeviceReadWriteExtended(FNetwork^.Func1^.MMC, True, WLAN_FUNCTION,
                         BAK_BASE_ADDR and $1ffff, false, PacketP^.Buffer + blockcount*512, 0, remainder) <> MMC_STATUS_SUCCESS then
-                          WIFILogError(nil, 'CYW43455: Failed to transmit packet data remainder txseq='+inttostr(txseq)+' lastcredit='+inttostr(LastCredit));
+                          WIFILogError(nil, 'CYW43455: Failed to transmit packet data remainder txseq='+inttostr(FNetwork^.txseq)+' lastcredit='+inttostr(LastCredit));
                 end;
 
                 if (WIFI_USE_SUPPLICANT) then
@@ -4346,7 +4374,7 @@ begin
 
   except
     on e: exception do
-     WIFILogError(nil, 'CYW43455: workerthread execute exception ' + e.message + ' at ' + inttohex(longword(exceptaddr), 8));
+     WIFILogError(nil, 'CYW43455: workerthread execute exception ' + e.message + ' at ' + PtrToHex(exceptaddr));
   end;
 end;
 
@@ -4457,14 +4485,14 @@ begin
     ultibo_driver_new_packet_data(@PacketXFerP^.source_address[0], PacketXFerP^.packetbufferp, PacketXFerP^.DataLength);
 
    except
-     WIFILogError(nil, 'CYW43455: An exception occurred in the ultibo_driver_new_packet_data' + inttohex(longword(exceptaddr), 8));
+     WIFILogError(nil, 'CYW43455: An exception occurred in the ultibo_driver_new_packet_data' + PtrToHex(exceptaddr));
    end;
 
    FreeMem(PacketXFerP^.packetbufferp);
    FreeMem(PacketXFerP);
 
  except
-   WIFILogError(nil, 'CYW43455: An exception occurred in dosenddrivernewpacketdata at ' + inttohex(longword(exceptaddr), 8));
+   WIFILogError(nil, 'CYW43455: An exception occurred in dosenddrivernewpacketdata at ' + PtrToHex(exceptaddr));
  end;
 end;
 
@@ -4790,7 +4818,7 @@ begin
     move(addr^, KeyP^.ethaddr[0], 6);
 
  except
-   WIFILogError(nil, 'CYW43455: Exception in SetKey at ' + inttohex(longword(exceptaddr), 8));
+   WIFILogError(nil, 'CYW43455: Exception in SetKey at ' + PtrToHex(exceptaddr));
  end;
 end;
 
@@ -4852,7 +4880,7 @@ begin
       WIFILogError(nil, 'CYW43455: Failed to get a transmit buffer!');
   except
     on e: exception do
-      WIFILogInfo(nil, 'CYW43455: Exception in sendsupplicantl2packet: ' + e.message + ' at address ' + inttohex(longword(exceptaddr), 8));
+      WIFILogInfo(nil, 'CYW43455: Exception in sendsupplicantl2packet: ' + e.message + ' at address ' + PtrToHex(exceptaddr));
   end;
 end;
 
@@ -4965,7 +4993,7 @@ begin
     WIFILogInfo(nil, 'CYW43455: The supplicant thread has terminated - return code ' + inttostr(retcode));
   except
     on e: exception do
-      WIFILogError(nil, 'CYW43455: Exception generated in TWPASupplicantThread.Execute ' + e.Message + ' ' + inttohex(longword(exceptaddr), 8));
+      WIFILogError(nil, 'CYW43455: Exception generated in TWPASupplicantThread.Execute ' + e.Message + ' ' + PtrToHex(exceptaddr));
   end;
 
 end;
@@ -4988,7 +5016,7 @@ begin
    Exit;
 
  {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
- if MMC_LOG_ENABLED then MMCLogDebug(MMC, 'CYW43455: Attempting to bind SDIO function (Number=' + IntToStr(Func.Number) + ' VendorId=' + IntToHex(Func.VendorId, 4) + ' DeviceId=' + IntToHex(Func.DeviceId, 4) + ')');
+ if MMC_LOG_ENABLED then MMCLogDebug(MMC, 'CYW43455: Attempting to bind SDIO function (Number=' + IntToStr(Func^.Number) + ' VendorId=' + IntToHex(Func^.VendorId, 4) + ' DeviceId=' + IntToHex(Func^.DeviceId, 4) + ')');
  {$ENDIF}
 
  {Check Function}
@@ -5161,7 +5189,7 @@ begin
    Exit;
 
  {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
- if MMC_LOG_ENABLED then MMCLogDebug(MMC, 'CYW43455: Unbinding SDIO function (Number=' + IntToStr(Func.Number) + ' VendorId=' + IntToHex(Func.VendorId, 4) + ' DeviceId=' + IntToHex(Func.DeviceId, 4) + ')');
+ if MMC_LOG_ENABLED then MMCLogDebug(MMC, 'CYW43455: Unbinding SDIO function (Number=' + IntToStr(Func^.Number) + ' VendorId=' + IntToHex(Func^.VendorId, 4) + ' DeviceId=' + IntToHex(Func^.DeviceId, 4) + ')');
  {$ENDIF}
 
  {Get Network}
