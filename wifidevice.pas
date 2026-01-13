@@ -2753,7 +2753,7 @@ begin
 
   // It seems like we need to execute a read first to kick things off. If we don't do this the first
   // IOCTL command response will be an empty one rather than the one for the IOCTL we sent.
-  if (SDIODeviceReadWriteExtended(Network^.Func1^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, Network^.RXBuffer, 0, 64) <> MMC_STATUS_SUCCESS) then
+  if (SDIODeviceReadWriteExtended(Network^.Func2^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, Network^.RXBuffer, 0, 64) <> MMC_STATUS_SUCCESS) then
      WIFILogError(nil, 'CYW43455: Unsuccessful initial read from WIFI function 2 (packets)')
   else
   begin
@@ -2882,7 +2882,7 @@ begin
       if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: sending ' + inttostr(TransmitLen) + ' bytes to the wifi device');
       {$endif}
 
-      Res := SDIODeviceReadWriteExtended(Network^.Func1^.MMC, True, WLAN_FUNCTION, BAK_BASE_ADDR and $1FFFF{ SB_32BIT_WIN}, false, msgp, 0, TransmitLen);
+      Res := SDIOFunctionWrite(Network^.Func2, BAK_BASE_ADDR and $1FFFF{ SB_32BIT_WIN}, msgp, TransmitLen);
       if (Res <> MMC_STATUS_SUCCESS) then
         WIFILogError(nil, 'CYW43455: failed to send cmd53 for ioctl command ' + inttostr(res));
 
@@ -2905,7 +2905,6 @@ begin
       begin
         Network^.WorkerThread.DoneWithRequest(WorkerRequestP);
 
-        Lock := False;
         exit;
       end;
 
@@ -2970,7 +2969,7 @@ end;
 function WIFIDeviceUploadRegulatoryFile(Network: PCYW43455Network): longword;
 const
   Reguhdr = 2+2+4+4;
-  Regusz = 400; //To Do //TestingSDIO // Linux driver uses 1400, need to modify WirelessIOCTLCommand to check for blocks/bytes ? // And modify WirelessIOCTLCommand to use a DMA buffer
+  Regusz = 1400;
   Regutyp = 2;
   Flagclm = 1 shl 12;
   Firstpkt = 1 shl 1;
@@ -4059,7 +4058,7 @@ begin
 
          if (ResponseP <> nil) and (NetworkEntryP <> nil) and (istatus and $40 = $40) then
          begin
-           if SDIODeviceReadWriteExtended(FNetwork^.Func1^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, ResponseP, 0, IOCTL_LEN_BYTES) <> MMC_STATUS_SUCCESS then
+           if SDIODeviceReadWriteExtended(FNetwork^.Func2^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, ResponseP, 0, IOCTL_LEN_BYTES) <> MMC_STATUS_SUCCESS then
            begin
              WIFILogError(nil, 'CYW43455: Error trying to read SDPCM header');
              exit;
@@ -4100,13 +4099,13 @@ begin
                  if (blockcount > 0) then
                  begin
                    // Read the rest of first block to maintain alignment for DMA (PIO)
-                   if SDIODeviceReadWriteExtended(FNetwork^.Func1^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep) + IOCTL_LEN_BYTES, 0, 512 - IOCTL_LEN_BYTES) <> MMC_STATUS_SUCCESS then
+                   if SDIODeviceReadWriteExtended(FNetwork^.Func2^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep) + IOCTL_LEN_BYTES, 0, 512 - IOCTL_LEN_BYTES) <> MMC_STATUS_SUCCESS then
                      WIFILogError(nil, 'CYW43455: Error trying to read first block for ioctl response');
 
                    if (blockcount > 1) then
                    begin
                      // Read the full blocks as a single request (DMA)
-                     if SDIODeviceReadWriteExtended(FNetwork^.Func1^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep) + 512, blockcount - 1, 512) <> MMC_STATUS_SUCCESS then
+                     if SDIODeviceReadWriteExtended(FNetwork^.Func2^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep) + 512, blockcount - 1, 512) <> MMC_STATUS_SUCCESS then
                        WIFILogError(nil, 'CYW43455: Error trying to read blocks for ioctl response');
                    end;
                  end;
@@ -4119,7 +4118,7 @@ begin
                      offset := 0;
 
                    // Read the partial last block (PIO)
-                   if SDIODeviceReadWriteExtended(FNetwork^.Func1^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep) + offset + blockcount * 512, 0, remainder) <> MMC_STATUS_SUCCESS then
+                   if SDIODeviceReadWriteExtended(FNetwork^.Func2^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep) + offset + blockcount * 512, 0, remainder) <> MMC_STATUS_SUCCESS then
                      WIFILogError(nil, 'CYW43455: Error trying to read remainder for ioctl response (len='+inttostr(responsep^.len)+')');
                  end;
 
@@ -4204,7 +4203,7 @@ begin
                    WIFILogError(nil, 'CYW43455: Could not read a large message into an undersized buffer (len='+inttostr(responsep^.len)+')');
 
                // read next sdpcm header (may not be one present in which case everything will be zero including length)
-               if (not isFinished) and (SDIODeviceReadWriteExtended(FNetwork^.Func1^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, ResponseP, 0, IOCTL_LEN_BYTES) <> MMC_STATUS_SUCCESS) then
+               if (not isFinished) and (SDIODeviceReadWriteExtended(FNetwork^.Func2^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, ResponseP, 0, IOCTL_LEN_BYTES) <> MMC_STATUS_SUCCESS) then
                begin
                  WIFILogError(nil, 'CYW43455: Error trying to read SDPCM header (repeat)');
                  exit;
@@ -4313,14 +4312,14 @@ begin
                 //send data
                 if (blockcount > 0) then
                 begin
-                  if SDIODeviceReadWriteExtended(FNetwork^.Func1^.MMC, True, WLAN_FUNCTION,
+                  if SDIODeviceReadWriteExtended(FNetwork^.Func2^.MMC, True, WLAN_FUNCTION,
                         BAK_BASE_ADDR and $1ffff, false, PacketP^.Buffer, blockcount, 512) <> MMC_STATUS_SUCCESS then
                           WIFILogError(nil, 'CYW43455: Failed to transmit packet data blocks txseq='+inttostr(FNetwork^.txseq)+' lastcredit='+inttostr(LastCredit));
                 end;
 
                 if (remainder > 0) then
                 begin
-                  if SDIODeviceReadWriteExtended(FNetwork^.Func1^.MMC, True, WLAN_FUNCTION,
+                  if SDIODeviceReadWriteExtended(FNetwork^.Func2^.MMC, True, WLAN_FUNCTION,
                         BAK_BASE_ADDR and $1ffff, false, PacketP^.Buffer + blockcount*512, 0, remainder) <> MMC_STATUS_SUCCESS then
                           WIFILogError(nil, 'CYW43455: Failed to transmit packet data remainder txseq='+inttostr(FNetwork^.txseq)+' lastcredit='+inttostr(LastCredit));
                 end;

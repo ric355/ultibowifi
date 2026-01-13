@@ -288,9 +288,6 @@ begin
   WIFI_LOG_ENABLED := true;
 
   // We've gotta wait for the file system to be alive because that's where the firmware is.
-  // Because the WIFI uses the Arasan host, the only way you'll get a drive C
-  // is if you use USB boot. So that's a pre-requisite at the moment until we make the
-  // SD card work off the other SDHost controller.
 
   ConsoleWindowWriteln(TopWindow, 'Waiting for file system...');
 
