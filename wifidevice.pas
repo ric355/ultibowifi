@@ -68,7 +68,8 @@ const
   WLC_SET_SSID = 26;
   WLC_SET_BSSID = 24;
 
-  CYW43455_SDIO_DESCRIPTION = 'Cypress CYW43455 WIFI Device';
+  CYW43455_SDIO_DRIVER_NAME = 'Cypress CYW43455 Wireless LAN SDIO Driver';
+
   CYW43455_NETWORK_DESCRIPTION = 'Cypress 43455 SDIO Wireless Network Adapter';
 
   //cyw43455 event flags bits (see whd_event_msg record)
@@ -130,7 +131,8 @@ const
 
   FIRMWARE_CHUNK_SIZE = 2048;
   FIRWMARE_OPTIONS_COUNT = 8;
-  FIRMWARE_FILENAME_ROOT = 'c:\firmware\';
+
+  CYW43455_FIRMWARE_TIMEOUT = 2000;
 
   {$IFDEF RPI}
   WLAN_ON_PIN = GPIO_PIN_41;
@@ -167,15 +169,6 @@ const
   INTR_CTL_FUNC1_EN = 2;      // function 1 interrupt enable bit
   INTR_CTL_FUNC2_EN = 4;      // function 2 interrupt enable bit
 
-  // CCCR IO Enable bits
-  SDIO_FUNC_ENABLE_1 = 2;
-  SDIO_FUNC_ENABLE_2 = 4;
-
-  WIFI_BAK_BLK_BYTES = 64;   // backplane block size
-  WIFI_RAD_BLK_BYTES = 512;  // radio block size
-
-  BUS_BAK_BLKSIZE_REG = $110;   // register for backplane block size (2 bytes)
-  BUS_RAD_BLKSIZE_REG = $210;   // register for radio block size (2 bytes)
   BAK_WIN_ADDR_REG = $1000a;    // register for backplane window address
 
   Sbwsize = $8000;
@@ -198,131 +191,129 @@ const
   // Backplane window
   SB_32BIT_WIN = $8000;
 
-  WIFI_NAME_PREFIX = 'WIFI';    {Name prefix for WIFI Devices}
-
   MAX_GLOM_PACKETS = 20; // maximum number of packets allowed in glomming (superpackets).
 
 type
   PWPAKey = ^TWPAKey;
   TWPAKey = packed record
-    groupkeyid : longword;
-    keylen : longword;
-    key : array[0..103] of byte;
-    algo : longword;
-    flags : longword;
-    pad1 : array[1..12] of byte;
-    ivinitialised : longword;
-    unused : longword;
-    ivhigh : longword;
-    ivlow : word;
-    pad2 : array[1..10] of byte;
-    ethaddr : THardwareAddress;
-    pad3 : array[1..2] of byte;
+    groupkeyid: longword;
+    keylen: longword;
+    key: array[0..103] of byte;
+    algo: longword;
+    flags: longword;
+    pad1: array[1..12] of byte;
+    ivinitialised: longword;
+    unused: longword;
+    ivhigh: longword;
+    ivlow: word;
+    pad2: array[1..10] of byte;
+    ethaddr: THardwareAddress;
+    pad3: array[1..2] of byte;
   end;
 
   TWIFIJoinType = (WIFIJoinBlocking, WIFIJoinBackground);
   TWIFIReconnectionType = (WIFIReconnectNever, WIFIReconnectAlways);
 
   countryparams = record
-    country_ie : array[1..4] of char;
-    revision : longint;
-    country_code : array[1..4] of char;
+    country_ie: array[1..4] of char;
+    revision: longint;
+    country_code: array[1..4] of char;
   end;
 
   wlc_ssid = record
-    SSID_len : longword;
-    SSID : array[0..31] of byte;
+    SSID_len: longword;
+    SSID: array[0..31] of byte;
   end;
 
   chanrec = record
-    chan : byte;
-    other : byte;
+    chan: byte;
+    other: byte;
   end;
 
   wl_scan_params = record
-    ssid : wlc_ssid;
-    bssid : THardwareAddress;
-    bss_type : byte;
-    scan_type : byte;
-    nprobes : longword;
-    active_time : longword;
-    passive_time : longword;
-    home_time : longword;
-    channel_num : longword;
-    channel_list : array[1..14] of chanrec;
-    ssids : array[0..SSID_MAX_LEN-1] of word;
+    ssid: wlc_ssid;
+    bssid: THardwareAddress;
+    bss_type: byte;
+    scan_type: byte;
+    nprobes: longword;
+    active_time: longword;
+    passive_time: longword;
+    home_time: longword;
+    channel_num: longword;
+    channel_list: array[1..14] of chanrec;
+    ssids: array[0..SSID_MAX_LEN-1] of word;
   end;
 
   wl_escan_params = record
-    version : longword;
-    action : word;
-    sync_id : word;
-    params : wl_scan_params;
+    version: longword;
+    action: word;
+    sync_id: word;
+    params: wl_scan_params;
   end;
 
   pwhd_tlv8_header = ^whd_tlv8_header;
   whd_tlv8_header = record
-    atype : byte;
-    length : byte;
+    atype: byte;
+    length: byte;
   end;
 
   pwhd_tlv8_data = ^whd_tlv8_data;
   whd_tlv8_data = record
-    atype : byte;
-    length : byte;
-    data : array[1..1] of byte;    // used as a pointer to a list.
+    atype: byte;
+    length: byte;
+    data: array[1..1] of byte;    // used as a pointer to a list.
   end;
 
   prsn_ie_fixed_portion = ^rsn_ie_fixed_portion;
   rsn_ie_fixed_portion = record
-    tlv_header : whd_tlv8_header; //id, length
-    version : word;
-    group_key_suite : longword; // See whd_80211_cipher_t for values
-    pairwise_suite_count : word;
-    pairwise_suite_list : array[1..1] of longword;
+    tlv_header: whd_tlv8_header; //id, length
+    version: word;
+    group_key_suite: longword; // See whd_80211_cipher_t for values
+    pairwise_suite_count: word;
+    pairwise_suite_list: array[1..1] of longword;
   end;
 
   wsec_pmk = record
-    key_len : word;
-    flags : word;
-    key : array[0..WSEC_MAX_PSK_LEN-1] of byte;
+    key_len: word;
+    flags: word;
+    key: array[0..WSEC_MAX_PSK_LEN-1] of byte;
   end;
 
   wl_join_assoc_params = record
-    bssid : THardwareAddress;
-    bssid_cnt : word;
-    chanspec_num : longword;
-    chanspec_list : array[0..1] of word;
+    bssid: THardwareAddress;
+    bssid_cnt: word;
+    chanspec_num: longword;
+    chanspec_list: array[0..1] of word;
   end;
 
   wl_join_scan_params = record
-    scan_type : byte;          // 0 use default, active or passive scan */
-    nprobes : longint;         // -1 use default, number of probes per channel */
-    active_time : longint;     // -1 use default, dwell time per channel for active scanning
-    passive_time : longint;    // -1 use default, dwell time per channel for passive scanning
-    home_time : longint;       // -1 use default, dwell time for the home channel between channel scans
+    scan_type: byte;          // 0 use default, active or passive scan */
+    nprobes: longint;         // -1 use default, number of probes per channel */
+    active_time: longint;     // -1 use default, dwell time per channel for active scanning
+    passive_time: longint;    // -1 use default, dwell time per channel for passive scanning
+    home_time: longint;       // -1 use default, dwell time for the home channel between channel scans
   end;
 
   wl_extjoin_params = record
-     ssid : wlc_ssid;                          // {0, ""}: wildcard scan */
-     scan_params : wl_join_scan_params;
-     assoc_params : wl_join_assoc_params;     // optional field, but it must include the fixed portion
+     ssid: wlc_ssid;                          // {0, ""}: wildcard scan */
+     scan_params: wl_join_scan_params;
+     assoc_params: wl_join_assoc_params;     // optional field, but it must include the fixed portion
                                               // of the wl_join_assoc_params_t struct when it does
                                               // present.
   end;
 
   PGlomDescriptor = ^TGlomDescriptor;
   TGlomDescriptor = record
-    len : word;
-    notlen : word;
-    seq : byte;
-    chan : byte;
-    nextlen : byte; // unsure
-    hdrlen : byte;
-    flow : byte;
-    credit : byte;
-    reserved : word;
-    packetlengths : array[0..MAX_GLOM_PACKETS-1] of word;     // puts an upper limit on number of coalesced packets but should be ok.
+    len: word;
+    notlen: word;
+    seq: byte;
+    chan: byte;
+    nextlen: byte; // unsure
+    hdrlen: byte;
+    flow: byte;
+    credit: byte;
+    reserved: word;
+    packetlengths: array[0..MAX_GLOM_PACKETS-1] of word;     // puts an upper limit on number of coalesced packets but should be ok.
   end;
 
   PSDPCM_HEADER = ^SDPCM_HEADER;
@@ -333,8 +324,8 @@ type
      nextlen,              // length of next data frame, reserved for Tx
      hdrlen,               // data offset
      flow,                 // flow control bits, reserved for tx
-     credit : byte;        // maximum sequence number allowed by firmware for Tx
-     reserved : word;      // reserved
+     credit: byte;        // maximum sequence number allowed by firmware for Tx
+     reserved: word;      // reserved
   end;
 
   PBCDC_HEADER = ^BCDC_HEADER;
@@ -342,131 +333,87 @@ type
     flags,                // flags contain protocol and checksum info
     priority,             // 802.1d priority and USB flow control info (bit 4:7)
     flags2,               // additional flags containing dongle interface index
-    data_offset : byte;   // start of packet data. header is following by firmware signals
+    data_offset: byte;   // start of packet data. header is following by firmware signals
   end;
 
   IOCTL_CMDP = ^IOCTL_CMD;
   IOCTL_CMD = record
-    sdpcmheader : SDPCM_HEADER;
-    cmd : longword;
+    sdpcmheader: SDPCM_HEADER;
+    cmd: longword;
     outlen,
-    inlen : word;
+    inlen: word;
     flags,
-    status : longword;
-    data : array[0..IOCTL_MAX_BLKLEN-1] of byte;
+    status: longword;
+    data: array[0..IOCTL_MAX_BLKLEN-1] of byte;
   end;
 
   IOCTL_GLOM_HDR = record
-    len : word;
+    len: word;
     reserved1,
-    flags : byte;
-    reserved2 : word;
-    pad : word;
+    flags: byte;
+    reserved2: word;
+    pad: word;
   end;
 
   IOCTL_GLOM_CMD = record
-    glom_hdr : IOCTL_GLOM_HDR;
-    cmd : IOCTL_CMD
+    glom_hdr: IOCTL_GLOM_HDR;
+    cmd: IOCTL_CMD
   end;
 
   PIOCTL_MSG = ^IOCTL_MSG;
   IOCTL_MSG = record
-    len : word;           // length in bytes to follow
-    notlen : word;        // bitwise inverse of length (len + notlen = $ffff)
+    len: word;           // length in bytes to follow
+    notlen: word;        // bitwise inverse of length (len + notlen = $ffff)
     case byte of
-      1 : (cmd : IOCTL_CMD);
-      2 : (glom_cmd : IOCTL_GLOM_CMD);
+      1: (cmd: IOCTL_CMD);
+      2: (glom_cmd: IOCTL_GLOM_CMD);
   end;
 
   byte4 = array[1..4] of byte;
 
   TFirmwareEntry = record
-    chipid : word;
-    chipidrev : word;
-    firmwarefilename : string;
-    configfilename : string;
-    regufilename : string;
-  end;
-
-  {WIFI Device}
-  TWIFIWorkerThread = class;
-  TWirelessReconnectionThread = class;
-  TWPASupplicantThread = class;
-
-  PWIFIDevice = ^TWIFIDevice;
-  TWIFIDevice = record
-   {MMC Properties}
-   MMC:TMMCDevice;                                  {The MMC Device entry for this WIFI device}
-   {WiFi properties}
-   NetworkP : PNetworkDevice;                       // the network this device is being associated with
-
-   WorkerThread : TWIFIWorkerThread;
-   BackgroundJoinThread : TWirelessReconnectionThread;
-   WPASupplicantThread : TWPASupplicantThread;
-
-   // wifi chip data - some may not be needed.
-
-   chipid : word;
-   chipidrev : word;
-   armcore : longword;
-   chipcommon : longword;
-   armctl : longword;
-   armregs : longword;
-   d11ctl : longword;
-   socramregs : longword;
-   socramctl : longword;
-   socramrev : longword;
-   sdregs : longword;
-   sdiorev : longword;
-   socramsize : longword;
-   rambase : longword;
-   dllctl : longword;
-   resetvec : longword;
-
-   macaddress : THardwareAddress;
-   DMABuffer:Pointer;
-   DMAAlignment:LongWord;
-
-   {additional statistics}
-   ReceiveGlomPacketCount:LongWord;              {number of Glom packets received}
-   ReceiveGlomPacketSize:LongWord;               {total bytes received via Glom packets}
+    chipid: word;
+    chipidrev: word;
+    firmwarefilename: string;
+    configfilename: string;
+    regufilename: string;
   end;
 
   pether_header = ^ether_header;
   ether_header = record
-      destination_address : THardwareAddress;
-      source_address : THardwareAddress;
-      ethertype : word;
+      destination_address: THardwareAddress;
+      source_address: THardwareAddress;
+      ethertype: word;
   end;
 
   whd_event_eth_hdr = record
-      subtype : word;                 // Vendor specific..32769
-      length : word;
-      version : byte;                 // Version is 0
-      oui : array[0..2] of byte;      //  OUI
-      usr_subtype : word;             // user specific Data
+      subtype: word;                 // Vendor specific..32769
+      length: word;
+      version: byte;                 // Version is 0
+      oui: array[0..2] of byte;      //  OUI
+      usr_subtype: word;             // user specific Data
   end;
 
   whd_event_msg = record
-      version : word;
-      flags : word;                                    // see flags below
-      event_type : longword;                           // Message (see below)
-      status : longword;                               // Status code (see below)
-      reason : longword;                               // Reason code (if applicable)
-      auth_type : longword;                            // WLC_E_AUTH
-      datalen : longword;                              // data buf
-      addr : THardwareAddress;                         // Station address (if applicable)
-      ifname : array[0..WHD_MSG_IFNAME_MAX-1] of char; // name of the packet incoming interface
-      ifidx : byte;                                    // destination OS i/f index
-      bsscfgidx : byte;                                // source bsscfg index
+      version: word;
+      flags: word;                                    // see flags below
+      event_type: longword;                           // Message (see below)
+      status: longword;                               // Status code (see below)
+      reason: longword;                               // Reason code (if applicable)
+      auth_type: longword;                            // WLC_E_AUTH
+      datalen: longword;                              // data buf
+      addr: THardwareAddress;                         // Station address (if applicable)
+      ifname: array[0..WHD_MSG_IFNAME_MAX-1] of char; // name of the packet incoming interface
+      ifidx: byte;                                    // destination OS i/f index
+      bsscfgidx: byte;                                // source bsscfg index
   end;
 
   // used by driver msgs
   pwhd_event = ^whd_event;
   whd_event = record
-      eth : ether_header;                  // 12 bytes
-      eth_evt_hdr : whd_event_eth_hdr ;    // 10 bytes
-      whd_event : whd_event_msg;           // 48 bytes
+      eth: ether_header;                  // 12 bytes
+      eth_evt_hdr: whd_event_eth_hdr ;    // 10 bytes
+      whd_event: whd_event_msg;           // 48 bytes
       // data portion follows */
   end;
 
@@ -639,205 +586,235 @@ type
 
   pwl_bss_info = ^wl_bss_info;
   wl_bss_info = record
-      version : longword;                       // version field
-      length : longword;                        // byte length of data in this record, starting at version and including IEs
-      BSSID : THardwareAddress;                 // Unique 6-byte MAC address
-      beacon_period : word;                     // Interval between two consecutive beacon frames. Units are Kusec
-      capability : word;                        // Capability information
-      SSID_len : byte;                          // SSID length
-      SSID : array[0..31] of char;                // Array to store SSID
+      version: longword;                       // version field
+      length: longword;                        // byte length of data in this record, starting at version and including IEs
+      BSSID: THardwareAddress;                 // Unique 6-byte MAC address
+      beacon_period: word;                     // Interval between two consecutive beacon frames. Units are Kusec
+      capability: word;                        // Capability information
+      SSID_len: byte;                          // SSID length
+      SSID: array[0..31] of char;                // Array to store SSID
 
       // this is a sub struct in cypress driver.
-          ratecount : longword;                 // Count of rates in this set
-          rates : array[1..15] of byte;         // rates in 500kbps units, higher bit set if basic
+          ratecount: longword;                 // Count of rates in this set
+          rates: array[1..15] of byte;         // rates in 500kbps units, higher bit set if basic
 
-      chanspec : wl_chanspec ;                   // Channel specification for basic service set
-      atim_window : word;                       // Announcement traffic indication message window size. Units are Kusec
-      dtim_period : byte;                       // Delivery traffic indication message period
-      RSSI : integer;                           // receive signal strength (in dBm)
-      phy_noise : shortint;                     // noise (in dBm)
+      chanspec: wl_chanspec ;                   // Channel specification for basic service set
+      atim_window: word;                       // Announcement traffic indication message window size. Units are Kusec
+      dtim_period: byte;                       // Delivery traffic indication message period
+      RSSI: integer;                           // receive signal strength (in dBm)
+      phy_noise: shortint;                     // noise (in dBm)
 
-      n_cap : byte;                             // BSS is 802.11N Capable
-      nbss_cap : longword;                      // 802.11N BSS Capabilities (based on HT_CAP_*)
-      ctl_ch : byte;                            // 802.11N BSS control channel number
-      reserved32 : array[1..1] of longword;       // Reserved for expansion of BSS properties
-      flags : byte;                             // flags
-      reserved : array[1..3] of byte;           // Reserved for expansion of BSS properties
-      basic_mcs : array[0..MCSSET_LEN-1] of byte; // 802.11N BSS required MCS set
+      n_cap: byte;                             // BSS is 802.11N Capable
+      nbss_cap: longword;                      // 802.11N BSS Capabilities (based on HT_CAP_*)
+      ctl_ch: byte;                            // 802.11N BSS control channel number
+      reserved32: array[1..1] of longword;       // Reserved for expansion of BSS properties
+      flags: byte;                             // flags
+      reserved: array[1..3] of byte;           // Reserved for expansion of BSS properties
+      basic_mcs: array[0..MCSSET_LEN-1] of byte; // 802.11N BSS required MCS set
 
-      ie_offset : word;                         // offset at which IEs start, from beginning
-      ie_length : longword;                     // byte length of Information Elements
-      SNR : integer;                            // Average SNR(signal to noise ratio) during frame reception
+      ie_offset: word;                         // offset at which IEs start, from beginning
+      ie_length: longword;                     // byte length of Information Elements
+      SNR: integer;                            // Average SNR(signal to noise ratio) during frame reception
   end;
 
   pwl_escan_result = ^wl_escan_result;
   wl_escan_result = record
-    buflen : longword;
-    version : longword;
-    sync_id : word;
-    bss_count : word;
-    bss_info : array [1..1] of wl_bss_info; // used as pointer to a list.
+    buflen: longword;
+    version: longword;
+    sync_id: word;
+    bss_count: word;
+    bss_info: array [1..1] of wl_bss_info; // used as pointer to a list.
   end;
 
-  TWIFIScanUserCallback = procedure(ssid : string; ScanResultP : pwl_escan_result); cdecl;
-  TWirelessEventCallback = procedure(Event : TWIFIEvent; EventRecordP : pwhd_event; RequestItemP : PWIFIRequestItem; datalength : longint);
+  TWIFIScanUserCallback = procedure(ssid: string; ScanResultP: pwl_escan_result); cdecl;
+  TWirelessEventCallback = procedure(Event: TWIFIEvent; EventRecordP: pwhd_event; RequestItemP: PWIFIRequestItem; datalength: longint);
 
   TWIFIRequestItem = record
-    RequestID : Word;
-    RegisteredEvents : TWIFIEventSet;
-    MsgP : PIOCTL_MSG;
-    Signal : TSemaphoreHandle;
-    Callback : TWirelessEventCallback;
-    UserDataP : Pointer;
-    NextP : PWIFIRequestItem;
+    RequestID: Word;
+    RegisteredEvents: TWIFIEventSet;
+    MsgP: PIOCTL_MSG;
+    Signal: TSemaphoreHandle;
+    Callback: TWirelessEventCallback;
+    UserDataP: Pointer;
+    NextP: PWIFIRequestItem;
   end;
 
   PUltiboPacketXFer = ^ TUltiboPacketXFer;
   TUltiboPacketXFer = record
-    source_address : THardwareAddress;
-    packetbufferp : PByte;
-    DataLength : longint;
+    source_address: THardwareAddress;
+    packetbufferp: PByte;
+    DataLength: longint;
   end;
 
-  TWIFIWorkerThread = class(TThread)
-  private
-    FWIFI : PWIFIDevice;
+  PCYW43455Network = ^TCYW43455Network;
 
-    FRequestQueueP : PWIFIRequestItem;
-    FLastRequestQueueP : PWIFIRequestItem;
-    FQueueProtect : TCriticalSectionHandle;
-    procedure ProcessDevicePacket(var responseP : PIOCTL_MSG;
-                             NetworkEntryP : PNetworkEntry;
-                             var bytesleft : longword;
-                             var isfinished : boolean);
+  TCYW43455WorkerThread = class(TThread)
+  private
+    FNetwork: PCYW43455Network;
+
+    FRequestQueueP: PWIFIRequestItem;
+    FLastRequestQueueP: PWIFIRequestItem;
+    FQueueProtect: TCriticalSectionHandle;
+    procedure ProcessDevicePacket(var responseP: PIOCTL_MSG;
+                             NetworkEntryP: PNetworkEntry;
+                             var bytesleft: longword;
+                             var isfinished: boolean);
   public
-    constructor Create(CreateSuspended : Boolean; AWIFI : PWIFIDevice);
+    constructor Create(CreateSuspended: Boolean; ANetwork: PCYW43455Network);
     destructor Destroy; override;
-    function AddRequest(ARequestID : word; InterestedEvents : TWIFIEventSet;
-                                   Callback : TWirelessEventCallback;
-                                   UserDataP : Pointer) : PWIFIRequestItem;
-    procedure DoneWithRequest(ARequestItemP : PWIFIRequestItem);
-    function FindRequest(ARequestId : word) : PWIFIRequestItem;
-    function FindRequestByEvent(AEvent : longword) : PWIFIRequestItem;
+    function AddRequest(ARequestID: word; InterestedEvents: TWIFIEventSet;
+                                   Callback: TWirelessEventCallback;
+                                   UserDataP: Pointer): PWIFIRequestItem;
+    procedure DoneWithRequest(ARequestItemP: PWIFIRequestItem);
+    function FindRequest(ARequestId: word): PWIFIRequestItem;
+    function FindRequestByEvent(AEvent: longword): PWIFIRequestItem;
     procedure dumpqueue;
     procedure Execute; override;
   end;
 
-  TWirelessReconnectionThread = class(TThread)
+  TCYW43455ReconnectionThread = class(TThread)
   private
-    FWIFI : PWIFIDevice;
+    FNetwork: PCYW43455Network;
 
-    FConnectionLost : TSemaphoreHandle;
-    FSSID : string;
-    FBSSID : THardwareAddress;
-    FUseBSSID : boolean;
-    FKey : string;
-    FCountry : string;
-    FReconnectionType : TWIFIReconnectionType;
+    FConnectionLost: TSemaphoreHandle;
+    FSSID: string;
+    FBSSID: THardwareAddress;
+    FUseBSSID: boolean;
+    FKey: string;
+    FCountry: string;
+    FReconnectionType: TWIFIReconnectionType;
   public
-    constructor Create(AWIFI : PWIFIDevice);
-    procedure SetConnectionDetails(aSSID, aKey, aCountry : string; BSSID : THardwareAddress; useBSSID : boolean; aReconnectionType : TWIFIReconnectionType);
+    constructor Create(ANetwork: PCYW43455Network);
+    procedure SetConnectionDetails(aSSID, aKey, aCountry: string; BSSID: THardwareAddress; useBSSID: boolean; aReconnectionType: TWIFIReconnectionType);
     destructor Destroy; override;
     procedure Execute; override;
   end;
 
   TWPASupplicantThread = class(TThread)
   private
-    FWIFI : PWIFIDevice;
+    FNetwork: PCYW43455Network;
   public
-    constructor Create(AWIFI : PWIFIDevice);
+    constructor Create(ANetwork: PCYW43455Network);
     procedure Execute; override;
     destructor Destroy; override;
   end;
 
-  PCYW43455Network = ^TCYW43455Network;
   TCYW43455Network = record
    {Network Properties}
-   Network:TNetworkDevice;
+   Network: TNetworkDevice;
    {Driver Properties}
-   ChipID:LongWord;
-   ChipRevision:LongWord;
-   PHYLock:TMutexHandle;
-   ReceiveRequestSize:LongWord;                  {Size of each receive request buffer}
-   TransmitRequestSize:LongWord;                 {Size of each transmit request buffer}
-   ReceiveEntryCount:LongWord;                   {Number of entries in the receive queue}
-   TransmitEntryCount:LongWord;                  {Number of entries in the transmit queue}
-   ReceivePacketCount:LongWord;                  {Maximum number of packets per receive entry}
-   TransmitPacketCount:LongWord;                 {Maximum number of packets per transmit entry}
+   ReceiveRequestSize: LongWord;                 {Size of each receive request buffer}
+   TransmitRequestSize: LongWord;                {Size of each transmit request buffer}
+   ReceiveEntryCount: LongWord;                  {Number of entries in the receive queue}
+   TransmitEntryCount: LongWord;                 {Number of entries in the transmit queue}
+   ReceivePacketCount: LongWord;                 {Maximum number of packets per receive entry}
+   TransmitPacketCount: LongWord;                {Maximum number of packets per transmit entry}
+   {SDIO Properties}
+   Func1: PSDIOFunction;                         {Backplane function}
+   Func2: PSDIOFunction;                         {Wireless LAN function (Function 3 on some chips is a standard Bluetooth interface)}
+
+   {CYW43455 Properties}
+   chipid: Word;
+   chipidrev: Word;
+   armcore: LongWord;
+   chipcommon: LongWord;
+   armctl: LongWord;
+   armregs: LongWord;
+   d11ctl: LongWord;
+   socramregs: LongWord;
+   socramctl: LongWord;
+   socramrev: LongWord;
+   sdregs: LongWord;
+   sdiorev: LongWord;
+   socramsize: LongWord;
+   rambase: LongWord;
+   dllctl: LongWord;
+   resetvec: LongWord;
+
+   txglom: Boolean;
+   txseq: byte;            // ioctl tx sequence number.
+   ioctl_reqid: LongWord;  // ioctl request id used to match request to response. starts at 1 because 0 is reserved for an event entry.
+
+   macaddress: THardwareAddress;
+
+   TXBuffer: PIOCTL_MSG;
+   RXBuffer: PIOCTL_MSG;
+   DMABuffer: Pointer;
+   DMAAlignment: LongWord;
 
    JoinCompleted: Boolean;
 
-   SDHCI: PSDHCIHost;
-   OriginalHostStart: TSDHCIHostStart;
+   EAPOLCompleted: boolean;
+   WPAKeys: array[0..WPA_KEY_MAX] of TWPAKey;
+   ValidKeys: array[0..WPA_KEY_MAX] of Boolean;
+   NetworkUpSignal: TSemaphoreHandle;
+   CountryCode: array[0..1] of char;
 
-   EAPOLCompleted : boolean;
-   WPAKeys : array[0..WPA_KEY_MAX] of TWPAKey;
-   ValidKeys : array[0..WPA_KEY_MAX] of boolean;
-   NetworkUpSignal : TSemaphoreHandle;
-   CountryCode : array[0..1] of char;
-  end;
+   WorkerThread: TCYW43455WorkerThread;
+   BackgroundJoinThread: TCYW43455ReconnectionThread;
+   WPASupplicantThread: TWPASupplicantThread;
 
-function WIFIHostStart(SDHCI: PSDHCIHost): LongWord;
+   ReceiveGlomPacketCount: LongWord;              {number of Glom packets received}
+   ReceiveGlomPacketSize: LongWord;               {total bytes received via Glom packets}
+end;
 
-function WIFIDeviceInitialize(WIFI:PWIFIDevice):LongWord;
+function WIFIDeviceInitialize(Network: PCYW43455Network): LongWord;
 
-function WIFIDeviceSetBackplaneWindow(WIFI : PWIFIDevice; addr : longword) : longword;
-function WIFIDeviceCoreScan(WIFI : PWIFIDevice) : longint;
-procedure WIFIDeviceRamScan(WIFI : PWIFIDevice);
-function WIFIDeviceDownloadFirmware(WIFI : PWIFIDevice) : Longword;
+function WIFIDeviceSetBackplaneWindow(Network: PCYW43455Network; addr: longword): longword;
+function WIFIDeviceCoreScan(Network: PCYW43455Network): longint;
+procedure WIFIDeviceRamScan(Network: PCYW43455Network);
+function WIFIDeviceDownloadFirmware(Network: PCYW43455Network): Longword;
 
-procedure sbreset(WIFI : PWIFIDevice; regs : longword; pre : word; ioctl : word);
-procedure sbdisable(WIFI : PWIFIDevice; regs : longword; pre : word; ioctl : word);
+procedure sbreset(Network: PCYW43455Network; regs: longword; pre: word; ioctl: word);
+procedure sbdisable(Network: PCYW43455Network; regs: longword; pre: word; ioctl: word);
 
-procedure WIFILogError(WIFI:PWIFIDevice;const AText:String); inline;
+procedure WIFILogError(Network: PCYW43455Network; const AText: String); inline;
 
 {primary function for the user to call to join a wireless network}
-function WirelessJoinNetwork(JoinType : TWIFIJoinType;
-                             timeout : integer = 10000) : longword; cdecl;
+function WirelessJoinNetwork(JoinType: TWIFIJoinType;
+                             timeout: integer = 10000): longword; cdecl;
 
 {functions the supplicant needs to be able to call that are defined in this device driver}
-procedure SendSupplicantL2Packet(PacketBufferP : PByte; Len : longword); cdecl; public name 'SendSupplicantL2Packet';
-procedure UltiboTimeProc(var epoch : longint; var millisecond : integer); cdecl; public name 'UltiboTimeProc';
-procedure UltiboMonotonicTimeProc(var epoch : longint; var millisecond : integer); cdecl; public name 'UltiboMonotonicTimeProc';
-procedure WirelessScan(UserCallback : TWIFIScanUserCallback; WaitTime : Longint = 10000); cdecl; public name 'WirelessScan';
-function SupplicantWirelessJoinNetwork(ssid : PChar; authkey : PByte;
-                             authkeylen : longword;
-                             bssid : PHardwareAddress;
-                             usebssid : boolean = false) : longword; cdecl; public name 'SupplicantWirelessJoinNetwork';
-procedure LockEAPOLPacketQueue(trace : pchar); cdecl; public name 'LockEAPOLPacketQueue';
+procedure SendSupplicantL2Packet(PacketBufferP: PByte; Len: longword); cdecl; public name 'SendSupplicantL2Packet';
+procedure UltiboTimeProc(var epoch: longint; var millisecond: integer); cdecl; public name 'UltiboTimeProc';
+procedure UltiboMonotonicTimeProc(var epoch: longint; var millisecond: integer); cdecl; public name 'UltiboMonotonicTimeProc';
+procedure WirelessScan(UserCallback: TWIFIScanUserCallback; WaitTime: Longint = 10000); cdecl; public name 'WirelessScan';
+function SupplicantWirelessJoinNetwork(ssid: PChar; authkey: PByte;
+                             authkeylen: longword;
+                             bssid: PHardwareAddress;
+                             usebssid: boolean = false): longword; cdecl; public name 'SupplicantWirelessJoinNetwork';
+procedure LockEAPOLPacketQueue(trace: pchar); cdecl; public name 'LockEAPOLPacketQueue';
 procedure UnlockEAPOLPacketQueue; cdecl; public name 'UnlockEAPOLPacketQueue';
 procedure LockSendPacketQueue; cdecl; public name 'LockSendPacketQueue';
 procedure UnlockSendPacketQueue; cdecl; public name 'UnlockSendPacketQueue';
-function UltiboSetKey(const ifname : PChar; priv : pointer; alg : byte;
-		      const addr : PByte; key_idx : integer; set_tx : integer;
-		      const seq : PByte; seq_len : integer;
-		      const key : PByte; key_len : integer) : integer; cdecl; public name 'UltiboSetKey';
+function UltiboSetKey(const ifname: PChar; priv: pointer; alg: byte;
+		      const addr: PByte; key_idx: integer; set_tx: integer;
+		      const seq: PByte; seq_len: integer;
+		      const key: PByte; key_len: integer): integer; cdecl; public name 'UltiboSetKey';
 procedure UltiboEAPOLComplete; cdecl; public name 'UltiboEAPOLComplete';
-function UltiboSetCountry(priv : pointer; ccode : PChar) : integer; cdecl; public name 'UltiboSetCountry';
+function UltiboSetCountry(priv: pointer; ccode: PChar): integer; cdecl; public name 'UltiboSetCountry';
 
-//procedure WirelessScan(UserCallback : TWIFIScanUserCallback; WaitTime : Longint = 10000); cdecl;
-function FirmwareWirelessJoinNetwork(ssid : string; security_key : string;
-                             countrycode : string;
-                             JoinType : TWIFIJoinType;
-                             ReconnectType : TWIFIReconnectionType;
-                             bssid : THardwareAddress;
-                             usebssid : boolean = false) : longword; cdecl;
+//procedure WirelessScan(UserCallback: TWIFIScanUserCallback; WaitTime: Longint = 10000); cdecl;
+function FirmwareWirelessJoinNetwork(ssid: string; security_key: string;
+                             countrycode: string;
+                             JoinType: TWIFIJoinType;
+                             ReconnectType: TWIFIReconnectionType;
+                             bssid: THardwareAddress;
+                             usebssid: boolean = false): longword; cdecl;
 
-function WirelessLeaveNetwork : longword;
-procedure WIFIPreInit;
-procedure WIFIInit;
+function WirelessLeaveNetwork: longword;
 
 var
-  WIFI_LOG_ENABLED : boolean = false;
+  WIFI_LOG_ENABLED: boolean = false;
 
 var
   // defines whether to inject waits into packet transmission when the firmware
   // credit value indicates internal buffers are filling up.
-  CYW43455_USE_FIRMWARE_CREDIT_VALUE : Boolean = FALSE;
+  CYW43455_USE_FIRMWARE_CREDIT_VALUE: Boolean = FALSE;
 
   // Log level as used by the supplicant. Enables us to control it from the device
   // driver source instead of having to change the supplicant source.
-  WPASupplicantLogLevel : integer = MSG_INFO; cvar;
+  WPASupplicantLogLevel: integer = MSG_INFO; cvar;
 
   WIFI_DEFAULT_LOG_LEVEL:LongWord = WIFI_LOG_LEVEL_ERROR; {Minimum level for WIFI messages.  Only messages with level greater than or equal to this will be printed}
 
@@ -861,55 +838,98 @@ const
   WPA_ALG_BIP_CMAC_256 = 13;
 
 var
-  WIFIInitialized:Boolean;
+  CYW43455Initialized: Boolean;
+  CYW43455SDIODriver: PSDIODriver;  {CYW43455 SDIO Driver interface (Set by WIFIDeviceInit)}
 
-  WIFI_USE_SUPPLICANT : boolean = true;
+  WIFI_USE_SUPPLICANT: boolean = true;
 
-  firmware : array[1..FIRWMARE_OPTIONS_COUNT] of TFirmwareEntry =
+  firmware: array[1..FIRWMARE_OPTIONS_COUNT] of TFirmwareEntry =
     (
-      	    ( chipid : $4330; chipidrev : 3; firmwarefilename: 'fw_bcm40183b1.bin'; configfilename: 'bcmdhd.cal.40183.26MHz'; regufilename : ''),
-    	    ( chipid : $4330; chipidrev : 4; firmwarefilename: 'fw_bcm40183b2.bin'; configfilename: 'bcmdhd.cal.40183.26MHz'; regufilename : ''),
-    	    ( chipid : 43362; chipidrev : 0; firmwarefilename: 'fw_bcm40181a0.bin'; configfilename: 'bcmdhd.cal.40181'; regufilename : ''),
-    	    ( chipid : 43362; chipidrev : 1; firmwarefilename: 'fw_bcm40181a2.bin'; configfilename: 'bcmdhd.cal.40181'; regufilename : ''),
-    	    ( chipid : 43430; chipidrev : 1; firmwarefilename: 'brcmfmac43430-sdio.bin'; configfilename: 'brcmfmac43430-sdio.txt'; regufilename : 'brcmfmac43430-sdio.clm_blob'),
-{Pi Zero2W} ( chipid : 43430; chipidrev : 2; firmwarefilename: 'brcmfmac43436-sdio.bin'; configfilename: 'brcmfmac43436-sdio.txt'; regufilename : 'brcmfmac43436-sdio.clm_blob'),
-    	    ( chipid : $4345; chipidrev : 6; firmwarefilename: 'brcmfmac43455-sdio.bin'; configfilename: 'brcmfmac43455-sdio.txt'; regufilename : 'brcmfmac43455-sdio.clm_blob'),
-    	    ( chipid : $4345; chipidrev : 9; firmwarefilename: 'brcmfmac43456-sdio.bin'; configfilename: 'brcmfmac43456-sdio.txt'; regufilename : 'brcmfmac43456-sdio.clm_blob')
+      	    ( chipid: $4330; chipidrev: 3; firmwarefilename: 'fw_bcm40183b1.bin'; configfilename: 'bcmdhd.cal.40183.26MHz'; regufilename: ''),
+    	    ( chipid: $4330; chipidrev: 4; firmwarefilename: 'fw_bcm40183b2.bin'; configfilename: 'bcmdhd.cal.40183.26MHz'; regufilename: ''),
+    	    ( chipid: 43362; chipidrev: 0; firmwarefilename: 'fw_bcm40181a0.bin'; configfilename: 'bcmdhd.cal.40181'; regufilename: ''),
+    	    ( chipid: 43362; chipidrev: 1; firmwarefilename: 'fw_bcm40181a2.bin'; configfilename: 'bcmdhd.cal.40181'; regufilename: ''),
+    	    ( chipid: 43430; chipidrev: 1; firmwarefilename: 'brcmfmac43430-sdio.bin'; configfilename: 'brcmfmac43430-sdio.txt'; regufilename: 'brcmfmac43430-sdio.clm_blob'),
+{Pi Zero2W} ( chipid: 43430; chipidrev: 2; firmwarefilename: 'brcmfmac43436-sdio.bin'; configfilename: 'brcmfmac43436-sdio.txt'; regufilename: 'brcmfmac43436-sdio.clm_blob'),
+    	    ( chipid: $4345; chipidrev: 6; firmwarefilename: 'brcmfmac43455-sdio.bin'; configfilename: 'brcmfmac43455-sdio.txt'; regufilename: 'brcmfmac43455-sdio.clm_blob'),
+    	    ( chipid: $4345; chipidrev: 9; firmwarefilename: 'brcmfmac43456-sdio.bin'; configfilename: 'brcmfmac43456-sdio.txt'; regufilename: 'brcmfmac43456-sdio.clm_blob')
     );
 
-  ioctl_txmsg, ioctl_rxmsg : IOCTL_MSG;
-  txglom : boolean = false;
-  ioctl_reqid : longword = 1; // ioct request id used to match request to response.
-                              // starts at 1 because 0 is reserved for an event entry.
-
-  txseq : byte = 1; // ioctl tx sequence number.
-
-  EAPOLQueueLock : TRTLCriticalSection;
-  SupplicantOperatingState : integer; cvar; external;
+  EAPOLQueueLock: TRTLCriticalSection;
+  SupplicantOperatingState: integer; cvar; external;
 
 {functions we need to call that are defined by wpa_supplicant}
-procedure SetUltiboMacAddress(AMacAddress : PChar); cdecl; external;
-function wpa_supplicant_main(confname : PChar) : integer; cdecl external;
-procedure ultibo_driver_new_packet_data(srcaddr : pbyte; packetbuf : pbyte; len : word); cdecl; external;
-procedure DoNetworkNotify(data : pointer); forward;
+procedure SetUltiboMacAddress(AMacAddress: PChar); cdecl; external;
+function wpa_supplicant_main(confname: PChar): integer; cdecl external;
+procedure ultibo_driver_new_packet_data(srcaddr: pbyte; packetbuf: pbyte; len: word); cdecl; external;
+procedure DoNetworkNotify(data: pointer); forward;
 procedure UltiboEloopTerminate; cdecl; external;
 
-procedure sbenable(WIFI : PWIFIDevice); forward;
-function WirelessInit(WIFI : PWIFIDevice) : longword; forward;
-procedure WIFILogInfo(WIFI: PWIFIDevice;const AText:String); forward;
+procedure sbenable(Network: PCYW43455Network); forward;
+function WirelessInit(Network: PCYW43455Network): longword; forward;
+procedure WIFILogInfo(Network: PCYW43455Network;const AText: String); forward;
 
-procedure hexdump(p : pbyte; len : word; title : string = '');
+function WIFIDeviceSDIODriverBind(MMC: PMMCDevice; Func: PSDIOFunction): LongWord; forward;
+function WIFIDeviceSDIODriverUnbind(MMC: PMMCDevice; Func: PSDIOFunction): LongWord; forward;
+
+function WIFIDeviceCheckFunction(Func: PSDIOFunction): LongWord; forward;
+
+procedure WIFIDeviceInit;
 var
-  rows : integer;
-  remainder : integer;
-  i : integer;
+ Status: LongWord;
+begin
+ {}
+ {Check Initialized}
+ if CYW43455Initialized then
+   Exit;
 
-  function line(bytecount : integer) : string;
+ {Initialize Logging}
+ WIFI_LOG_ENABLED := (WIFI_DEFAULT_LOG_LEVEL <> WIFI_LOG_LEVEL_NONE);
+
+ {Initialize EAPOL queue lock for use with supplicant}
+ InitializeCriticalSection(EAPOLQueueLock);
+
+ {Create SDIO Driver}
+ CYW43455SDIODriver := SDIODriverCreate;
+ if CYW43455SDIODriver <> nil then
+  begin
+   {Update SDIO Driver}
+   {Driver}
+   CYW43455SDIODriver^.Driver.DriverName := CYW43455_SDIO_DRIVER_NAME;
+   {SDIO}
+   CYW43455SDIODriver^.DriverBind := @WIFIDeviceSDIODriverBind;
+   CYW43455SDIODriver^.DriverUnbind := @WIFIDeviceSDIODriverUnbind;
+
+   {Register SDIO Driver}
+   Status := SDIODriverRegister(CYW43455SDIODriver);
+   if Status <> MMC_STATUS_SUCCESS then
+    begin
+     if MMC_LOG_ENABLED then MMCLogError(nil, 'CYW43455: Failed to register driver: ' + MMCStatusToString(Status));
+
+     {Destroy Driver}
+     SDIODriverDestroy(CYW43455SDIODriver);
+    end;
+  end
+ else
+  begin
+   if MMC_LOG_ENABLED then MMCLogError(nil, 'CYW43455: Failed to create driver');
+  end;
+
+ CYW43455Initialized := True;
+end;
+
+procedure hexdump(p: pbyte; len: word; title: string = '');
+var
+  rows: integer;
+  remainder: integer;
+  i: integer;
+
+  function line(bytecount: integer): string;
   var
-    s : string;
-    asc : string;
-    j : integer;
-    b : byte;
+    s: string;
+    asc: string;
+    j: integer;
+    b: byte;
   begin
      s := '';
      asc := '';
@@ -939,9 +959,9 @@ begin
   remainder := len mod 16;
 
   if (title <> '') then
-    WIFILogInfo(nil, title + ' @ address 0x'+inttohex(longword(p),8) + ' for ' + inttostr(len) + ' bytes')
+    WIFILogInfo(nil, title + ' @ address 0x'+ PtrToHex(p) + ' for ' + inttostr(len) + ' bytes')
   else
-    WIFILogInfo(nil, 'hexdump @ address 0x'+inttohex(longword(p),8) + ' for ' + inttostr(len) + ' bytes');
+    WIFILogInfo(nil, 'hexdump @ address 0x'+ PtrToHex(p) + ' for ' + inttostr(len) + ' bytes');
   for i := 0 to rows-1 do
   begin
      WIFILogInfo(nil, line(16));
@@ -954,20 +974,20 @@ begin
   end;
 end;
 
-function NetSwapLong(v : longword) : longword; inline;
+function NetSwapLong(v: longword): longword; inline;
 begin
   Result:= ((v and $ff) << 24) or ((v and $ff00) << 8) or ((v and $ff0000) >> 8) or ((v and $ff000000) >> 24);
 end;
 
-function NetSwapWord(v : word) : word; inline;
+function NetSwapWord(v: word): word; inline;
 begin
  Result := ((v and $ff) << 8) or ((v and $ff00) >> 8);
 end;
 
-function buftostr(bufferp : pbyte; messagelen : word; nullterminated : boolean = false) : string;
+function buftostr(bufferp: pbyte; messagelen: word; nullterminated: boolean = false): string;
 var
- i : integer;
- b : byte;
+ i: integer;
+ b: byte;
 begin
  try
   Result := '';
@@ -985,14 +1005,14 @@ begin
   end;
 
  except
-   on e : exception do
-     WIFILogError(nil, 'exception in buftostr ' + e.message + ' i='+inttostr(i));
+   on e: exception do
+     WIFILogError(nil, 'CYW43455: exception in buftostr ' + e.message + ' i='+inttostr(i));
  end;
 end;
 
-procedure WIFILog(Level:LongWord;WIFI:PWIFIDevice;const AText:String);
+procedure WIFILog(Level: LongWord; Network: PCYW43455Network; const AText: String);
 var
- WorkBuffer:String;
+ WorkBuffer: String;
 begin
  {}
  {Check Level}
@@ -1016,621 +1036,346 @@ begin
  {Add Prefix}
  WorkBuffer:=WorkBuffer + 'WIFI: ';
 
- {Check WIFI}
- if WIFI <> nil then
+ {Check Network}
+ if Network <> nil then
   begin
-   WorkBuffer:=WorkBuffer + WIFI_NAME_PREFIX + IntToStr(WIFI^.MMC.MMCId) + ': ';
+   WorkBuffer:=WorkBuffer + NETWORK_NAME_PREFIX + IntToStr(Network^.Network.NetworkId) + ': ';
   end;
 
  {Output Logging}
  LoggingOutputEx(LOGGING_FACILITY_DEVICES,LogLevelToLoggingSeverity(Level),'WIFIdevice',WorkBuffer + AText);
 end;
 
-procedure WIFILogError(WIFI:PWIFIDevice;const AText:String); inline;
+procedure WIFILogError(Network: PCYW43455Network; const AText: String); inline;
 begin
  {}
- WIFILog(WIFI_LOG_LEVEL_ERROR,WIFI,AText);
+ WIFILog(WIFI_LOG_LEVEL_ERROR,Network,AText);
 end;
 
 {==============================================================================}
 
-procedure WIFILogDebug(WIFI: PWIFIDevice;const AText:String); inline;
+procedure WIFILogDebug(Network: PCYW43455Network; const AText: String); inline;
 begin
  {}
- WIFILog(WIFI_LOG_LEVEL_DEBUG,WIFI,AText);
+ WIFILog(WIFI_LOG_LEVEL_DEBUG,Network,AText);
 end;
 
-procedure WIFILogInfo(WIFI: PWIFIDevice;const AText:String); inline;
+procedure WIFILogInfo(Network: PCYW43455Network; const AText: String); inline;
 begin
  {}
- WIFILog(WIFI_LOG_LEVEL_INFO,WIFI,AText);
-end;
-
-procedure dumpregisters(WIFI : PWIFIDevice);
-type
-  arrayptr = ^arraytype;
-  arraytype = array[0..99] of longword;
-  arrayptrbytes = ^arraybytes;
-  arraybytes = array[0..1000] of byte;
-var
-  SDHCI : PSDHCIHost;
-  r : arrayptr;
-  rb : arrayptrbytes;
-begin
-   SDHCI:=PSDHCIHost(WIFI^.MMC.Device.DeviceData);
-
-    r := arrayptr(SDHCI^.address);
-    rb := arrayptrbytes(SDHCI^.address);
-
-
-    WIFILogInfo(nil, '32 bit block count 0x'+ inttohex(r^[0], 8));
-    WIFILogInfo(nil, 'blocksize and count 0x'+ inttohex(r^[1], 8));
-    WIFILogInfo(nil, 'arg 0x%x'+ inttohex(r^[2], 8));
-    WIFILogInfo(nil, 'transfermode and command 0x'+ inttohex(r^[3], 8));
-    WIFILogInfo(nil, 'response0 0x'+ inttohex(r^[4], 8));
-    WIFILogInfo(nil, 'response1 0x'+ inttohex(r^[5], 8));
-    WIFILogInfo(nil, 'response2 0x'+ inttohex(r^[6], 8));
-    WIFILogInfo(nil, 'response3 0x'+ inttohex(r^[7], 8));
-
-    WIFILogInfo(nil, 'present state 0x'+ inttohex(r^[9], 8));
-    WIFILogInfo(nil, 'host ctrl1, pwr ctrl, block gap ctrl, wakeup ctrl0x'+ inttohex(r^[10], 8));
-
-
-    WIFILogInfo(nil, 'host ctrl1 0x' +inttohex(rb^[SDHCI_HOST_CONTROL], 2));
-    WIFILogInfo(nil, 'pwr ctrl 0x' +inttohex(rb^[SDHCI_POWER_CONTROL], 2));
-    WIFILogInfo(nil, 'block gap ctrl 0x' +inttohex(rb^[SDHCI_BLOCK_GAP_CONTROL], 2));
-    WIFILogInfo(nil, 'wakeup ctrl 0x' +inttohex(rb^[SDHCI_WAKE_UP_CONTROL], 2));
-
-    WIFILogInfo(nil, 'clock ctrl, timeout ctrl, sw reset 0x'+ inttohex(r^[11], 8));
-
-    WIFILogInfo(nil, 'clock ctrl byte 1 0x' +inttohex(rb^[SDHCI_CLOCK_CONTROL], 2));
-    WIFILogInfo(nil, 'clock ctrl byte 2 0x' +inttohex(rb^[SDHCI_CLOCK_CONTROL+1], 2));
-    WIFILogInfo(nil, 'timeout ctrl 0x' +inttohex(rb^[SDHCI_TIMEOUT_CONTROL], 2));
-    WIFILogInfo(nil, 'sw reset 0x' +inttohex(rb^[SDHCI_SOFTWARE_RESET], 2));
-
-
-    WIFILogInfo(nil, 'normal interrupt status, error interrupt status 0x'+ inttohex(r^[12], 8));
-    WIFILogInfo(nil, 'normal interr enable, error interr enable 0x'+ inttohex(r^[13], 8));
-    WIFILogInfo(nil, 'auto cmd status, host ctrl 2 0x'+ inttohex(r^[14], 8));
-    WIFILogInfo(nil, 'capabilities part 1 0x'+ inttohex(r^[15], 8));
-    WIFILogInfo(nil, 'capabilities part 2 0x'+ inttohex(r^[16], 8));
-end;
-
-{==============================================================================}
-
-function WIFIHostStart(SDHCI: PSDHCIHost): LongWord;
-// Under SDIO this is not required
-// Overwridden SDHCIHostStart method for the Arasan SDHCI controller
-var
-  {$IFNDEF RPI4}
-  i : integer;
-  {$ENDIF}
-  Network: PCYW43455Network;
-
-  Capabilities:LongWord;
-  k : integer;
-begin
-  Result := ERROR_INVALID_PARAMETER;
-
-  // Check SDHCI
-  if SDHCI = nil then
-    Exit;
-
-  // Check Device Data
-  if SDHCI^.Device.DeviceData = nil then
-    Exit;
-
-  // Get Network
-  Network := PCYW43455Network(SDHCI^.Device.DeviceData);
-
-  // Call original Host Start
-  if Assigned(Network^.OriginalHostStart) then
-  begin
-    Result := Network^.OriginalHostStart(SDHCI);
-    if Result <> ERROR_SUCCESS then
-      Exit;
-  end;
-
-  {$IFNDEF RPI4}
-  // disconnect emmc from SD card (connect sdhost instead)
-  // ZeroW/3B/3B+/3A+
-  for i := 48 to 53 do
-    GPIOFunctionSelect(i,GPIO_FUNCTION_ALT0);
-
-  // connect emmc to wifi
-  // ZeroW/3B/3B+/3A+
-  for i := 34 to 39 do
-  begin
-    GPIOFunctionSelect(i,GPIO_FUNCTION_ALT3);
-
-    if (i = 34) then
-      GPIOPullSelect(i, GPIO_PULL_NONE)
-    else
-      GPIOPullSelect(i, GPIO_PULL_UP);
-  end;
-  {$ENDIF}
-
-  {$IFNDEF RPI4}
-  // init 32khz oscillator (WIFI_CLK)
-  // ZeroW/3B/3B+/3A+
-  GPIOPullSelect(SD_32KHZ_PIN, GPIO_PULL_NONE);
-  GPIOFunctionSelect(SD_32KHZ_PIN, GPIO_FUNCTION_ALT0);
-  {$ENDIF}
-
-  {$IFDEF RPI}
-  // turn on wlan power (WL_ON)
-  // ZeroW
-  GPIOFunctionSelect(WLAN_ON_PIN, GPIO_FUNCTION_OUT);
-  GPIOOutputSet(WLAN_ON_PIN, GPIO_LEVEL_HIGH);
-  {$ENDIF}
-  {$IF DEFINED(RPI3) or DEFINED(RPI4)}
-  // 3B/3B+/3A+/4B
-  // turn on wlan power (WL_ON)
-  VirtualGPIOFunctionSelect(WLAN_ON_PIN, GPIO_FUNCTION_OUT);
-  VirtualGPIOOutputSet(WLAN_ON_PIN, GPIO_LEVEL_HIGH);
-  {$ENDIF}
-
-  // Perform operations normally done by SDHCIHostStart
-  {Get Capabilities}
-  Capabilities:=SDHCIHostReadLong(SDHCI,SDHCI_CAPABILITIES);
-  {$IFDEF MMC_DEBUG}
-  if MMC_LOG_ENABLED then MMCLogDebug(nil,'SDHCI Capabilities = ' + IntToHex(Capabilities,8));
-  {$ENDIF}
-
-  {Check DMA Support}
-  if ((Capabilities and SDHCI_CAN_DO_SDMA) = 0) and ((SDHCI^.Quirks and SDHCI_QUIRK_MISSING_CAPS) = 0) then
-   begin
-    if MMC_LOG_ENABLED then MMCLogError(nil,'SDHCI Host does not support SDMA');
-
-    SDHCI^.HostStop(SDHCI);
-    Exit;
-   end;
-
-  {Check Clock Maximum}
-  if SDHCI^.ClockMaximum <> 0 then
-   begin
-    SDHCI^.MaximumFrequency:=SDHCI^.ClockMaximum;
-   end
-  else
-   begin
-    if SDHCIGetVersion(SDHCI) >= SDHCI_SPEC_300 then
-     begin
-      SDHCI^.MaximumFrequency:=((Capabilities and SDHCI_CLOCK_V3_BASE_MASK) shr SDHCI_CLOCK_BASE_SHIFT);
-     end
-    else
-     begin
-      SDHCI^.MaximumFrequency:=((Capabilities and SDHCI_CLOCK_BASE_MASK) shr SDHCI_CLOCK_BASE_SHIFT);
-     end;
-    SDHCI^.MaximumFrequency:=(SDHCI^.MaximumFrequency * SDHCI_CLOCK_BASE_MULTIPLIER);
-   end;
-  if SDHCI^.MaximumFrequency = 0 then
-   begin
-    if MMC_LOG_ENABLED then MMCLogError(nil,'SDHCI Host does not specify a maximum clock frequency');
-
-    SDHCI^.HostStop(SDHCI);
-    Exit;
-   end;
-  {$IFDEF MMC_DEBUG}
-  if MMC_LOG_ENABLED then MMCLogDebug(nil,'SDHCI Host maximum frequency = ' + IntToStr(SDHCI^.MaximumFrequency));
-  {$ENDIF}
-
-  {Check Clock Minimum}
-  if SDHCI^.ClockMinimum <> 0 then
-   begin
-    SDHCI^.MinimumFrequency:=SDHCI^.ClockMinimum;
-   end
-  else
-   begin
-    if SDHCIGetVersion(SDHCI) >= SDHCI_SPEC_300 then
-     begin
-      SDHCI^.MinimumFrequency:=SDHCI^.MaximumFrequency div SDHCI_MAX_CLOCK_DIV_SPEC_300;
-     end
-    else
-     begin
-      SDHCI^.MinimumFrequency:=SDHCI^.MaximumFrequency div SDHCI_MAX_CLOCK_DIV_SPEC_300;
-     end;
-   end;
-  {$IFDEF MMC_DEBUG}
-  if MMC_LOG_ENABLED then MMCLogDebug(nil,'SDHCI Host minimum frequency = ' + IntToStr(SDHCI^.MinimumFrequency));
-  {$ENDIF}
-
-  {Determine Voltages}
-  SDHCI^.Voltages:=0;
-  if (Capabilities and SDHCI_CAN_VDD_330) <> 0 then
-   begin
-    SDHCI^.Voltages:=SDHCI^.Voltages or MMC_VDD_32_33 or MMC_VDD_33_34;
-   end;
-  if (Capabilities and SDHCI_CAN_VDD_300) <> 0 then
-   begin
-    SDHCI^.Voltages:=SDHCI^.Voltages or MMC_VDD_29_30 or MMC_VDD_30_31;
-   end;
-  if (Capabilities and SDHCI_CAN_VDD_180) <> 0 then
-   begin
-    SDHCI^.Voltages:=SDHCI^.Voltages or MMC_VDD_165_195;
-   end;
-  {Check Presets}
-  if SDHCI^.PresetVoltages <> 0 then
-   begin
-    SDHCI^.Voltages:=SDHCI^.Voltages or SDHCI^.PresetVoltages;
-   end;
-  {$IFDEF MMC_DEBUG}
-  if MMC_LOG_ENABLED then MMCLogDebug(nil,'SDHCI Host voltages = ' + IntToHex(SDHCI^.Voltages,8));
-  {$ENDIF}
-
-  {Determine Capabilities}
-  SDHCI^.Capabilities:=MMC_CAP_SD_HIGHSPEED or MMC_CAP_MMC_HIGHSPEED;
-  if SDHCIGetVersion(SDHCI) >= SDHCI_SPEC_300 then
-   begin
-    if (Capabilities and SDHCI_CAN_DO_8BIT) <> 0 then
-     begin
-      {Don't report 8 bit data unless the host explicitly adds it to the presets}
-      {Some hosts may be 8 bit capable but only have 4 data lines connected}
-      {SDHCI^.Capabilities:=SDHCI^.Capabilities or MMC_CAP_8_BIT_DATA;}
-     end;
-   end;
-  {Check Presets}
-  if SDHCI^.PresetCapabilities <> 0 then
-   begin
-    SDHCI^.Capabilities:=SDHCI^.Capabilities or SDHCI^.PresetCapabilities;
-   end;
-  if (SDHCI^.Quirks and SDHCI_QUIRK_FORCE_1_BIT_DATA) = 0 then
-   begin
-    SDHCI^.Capabilities:=SDHCI^.Capabilities or MMC_CAP_4_BIT_DATA;
-   end;
-  if (SDHCI^.Quirks2 and SDHCI_QUIRK2_HOST_NO_CMD23) <> 0 then
-   begin
-    SDHCI^.Capabilities:=SDHCI^.Capabilities and not(MMC_CAP_CMD23);
-   end;
-  if SDHCI^.PresetCapabilities2 <> 0 then
-   begin
-    SDHCI^.Capabilities2:=SDHCI^.Capabilities2 or SDHCI^.PresetCapabilities2;
-   end;
-  {$IFDEF MMC_DEBUG}
-  if MMC_LOG_ENABLED then MMCLogDebug(nil,'SDHCI Host capabilities = ' + IntToHex(SDHCI^.Capabilities,8));
-  if MMC_LOG_ENABLED then MMCLogDebug(nil,'SDHCI Host additional capabilities = ' + IntToHex(SDHCI^.Capabilities2,8));
-  {$ENDIF}
-
-  {Set Maximum Request Size (Limited by SDMA boundary of 512KB)}
-  SDHCI^.MaximumRequestSize:=SIZE_512K;
-
-  {Determine Maximum Block Size}
-  if (SDHCI^.Quirks and SDHCI_QUIRK_FORCE_BLK_SZ_2048) <> 0 then
-   begin
-    SDHCI^.MaximumBlockSize:=2; {512 shl 2 = 2048}
-   end
-  else
-   begin
-    SDHCI^.MaximumBlockSize:=((Capabilities and SDHCI_MAX_BLOCK_MASK) shr SDHCI_MAX_BLOCK_SHIFT);
-    if SDHCI^.MaximumBlockSize >= 3 then
-     begin
-      if MMC_LOG_ENABLED then MMCLogWarn(nil,'SDHCI Invalid maximum block size, assuming 512 bytes');
-
-      SDHCI^.MaximumBlockSize:=0; {512 shl 0 = 512}
-     end;
-   end;
-  SDHCI^.MaximumBlockSize:=512 shl SDHCI^.MaximumBlockSize;
-  {$IFDEF MMC_DEBUG}
-  if MMC_LOG_ENABLED then MMCLogDebug(nil,'SDHCI Host maximum block size = ' + IntToStr(SDHCI^.MaximumBlockSize));
-  {$ENDIF}
-
-  {Determine Maximum Block Count}
-  SDHCI^.MaximumBlockCount:=MMC_MAX_BLOCK_COUNT;
-  if (SDHCI^.Quirks and SDHCI_QUIRK_NO_MULTIBLOCK) <> 0 then SDHCI^.MaximumBlockCount:=1;
-  {$IFDEF MMC_DEBUG}
-  if MMC_LOG_ENABLED then MMCLogDebug(nil,'SDHCI Host maximum block count = ' + IntToStr(SDHCI^.MaximumBlockCount));
-  {$ENDIF}
-
-  {Set Minimum DMA Size}
-  SDHCI^.MinimumDMASize:=MMC_MAX_BLOCK_LEN;
-
-  {Set Maximum PIO Blocks}
-  SDHCI^.MaximumPIOBlocks:=0;
-
-  {Set SDMA Buffer Boundary}
-  SDHCI^.SDMABoundary:=SDHCI_DEFAULT_BOUNDARY_ARG;
-  {$IFDEF MMC_DEBUG}
-  if MMC_LOG_ENABLED then MMCLogDebug(nil,'SDHCI SDMA buffer boundary = ' + IntToStr(1 shl (SDHCI^.SDMABoundary + 12)));
-  {$ENDIF}
-
-  //More still from MMC (SDHCIHostStart) //To Do //TestingSDIO
-
-  Network^.EAPOLCompleted:=false;
-  Network^.NetworkUpSignal := SemaphoreCreate(0);
-  for k := 0 to WPA_KEY_MAX do
-    Network^.ValidKeys[k] := false;
-
-  {Host reset done by host start}
-
-  {Enable Host}
-  SDHCI^.SDHCIState:=SDHCI_STATE_ENABLED;
-
-  {Notify Enable}
-  NotifierNotify(@SDHCI^.Device,DEVICE_NOTIFICATION_ENABLE);
-
-  Result:=ERROR_SUCCESS;
-end;
-
-function SDHCIEnum(SDHCI:PSDHCIHost;Data:Pointer):LongWord;
-
-const
-  {$IFDEF RPI}
-  SDHCI_DESCRIPTION = BCM2708_EMMC_DESCRIPTION;
-  {$ENDIF}
-  {$IFDEF RPI3}
-  SDHCI_DESCRIPTION = BCM2710_EMMC_DESCRIPTION;
-  {$ENDIF}
-  {$IFDEF RPI4}
-  SDHCI_DESCRIPTION = BCM2711_EMMC0_DESCRIPTION;
-  {$ENDIF}
-
-begin
-  Result := ERROR_INVALID_PARAMETER;
-
-  if SDHCI = nil then
-    Exit;
-
-  if Data = nil then
-    Exit;
-
-  Result := ERROR_SUCCESS;
-
-  if SDHCI^.Device.DeviceDescription = SDHCI_DESCRIPTION then
-  begin
-    PCYW43455Network(Data)^.SDHCI := SDHCI;
-  end;
+ WIFILog(WIFI_LOG_LEVEL_INFO,Network,AText);
 end;
 
 function CYW43455DeviceOpen(Network:PNetworkDevice):LongWord;
 var
- WIFI:PWIFIDevice;
+ i: Integer;
+ MMC:PMMCDevice;
  Status:longword;
- SDHCI:PSDHCIHost;
  Entry:PNetworkEntry;
  DMAProperties:TDMAProperties;
 begin
- Result := ERROR_INVALID_PARAMETER;
+  Result := ERROR_INVALID_PARAMETER;
 
- // Under SDIO this section will be handled by SDHCIHostStart
- WIFI:=PWIFIDevice(MMCDeviceCreateEx(SizeOf(TWIFIDevice)));
- if WIFI = nil then
+  {Check Network}
+  if Network = nil then Exit;
+  if Network^.Device.Signature <> DEVICE_SIGNATURE then Exit;
+
+  {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+  if NETWORK_LOG_ENABLED then NetworkLogDebug(Network, 'CYW43455: Network Open');
+  {$ENDIF}
+
+  {Get MMC}
+  MMC := PMMCDevice(Network^.Device.DeviceData);
+  if MMC = nil then Exit;
+
+  {Acquire the Lock}
+  if MutexLock(Network^.Lock) = ERROR_SUCCESS then
   begin
-   WIFILogError(nil,'Failed to create new WIFI device');
-   Exit;
-  end;
+    try
+      {Check State}
+      Result := ERROR_ALREADY_OPEN;
+      if Network^.NetworkState <> NETWORK_STATE_CLOSED then Exit;
 
- if MMCDeviceRegister(@WIFI^.MMC) <> MMC_STATUS_SUCCESS then
-  begin
-   WIFILogError(nil,'Failed to register new WIFI device');
+      {Set Result}
+      Result := ERROR_OPERATION_FAILED;
 
-   MMCDeviceDestroy(@WIFI^.MMC);
-   Exit;
-  end;
+      {$IFNDEF RPI4}
+      // init 32khz oscillator (WIFI_CLK)
+      // ZeroW/3B/3B+/3A+
+      GPIOPullSelect(SD_32KHZ_PIN, GPIO_PULL_NONE);
+      GPIOFunctionSelect(SD_32KHZ_PIN, GPIO_FUNCTION_ALT0);
+      {$ENDIF}
 
- if WIFI_LOG_ENABLED then WIFILogInfo(nil,'Update WIFI Device');
+      {$IFDEF RPI}
+      // turn on wlan power (WL_ON)
+      // ZeroW
+      GPIOFunctionSelect(WLAN_ON_PIN, GPIO_FUNCTION_OUT);
+      GPIOOutputSet(WLAN_ON_PIN, GPIO_LEVEL_HIGH);
+      {$ENDIF}
+      {$IF DEFINED(RPI3) or DEFINED(RPI4)}
+      // 3B/3B+/3A+/4B
+      // turn on wlan power (WL_ON)
+      VirtualGPIOFunctionSelect(WLAN_ON_PIN, GPIO_FUNCTION_OUT);
+      VirtualGPIOOutputSet(WLAN_ON_PIN, GPIO_LEVEL_HIGH);
+      {$ENDIF}
 
- SDHCI:=PCYW43455Network(Network)^.SDHCI;
- if SDHCI = nil then
- begin
-   WIFILogError(nil,'There was no SDHCI Device to initialise the WIFI device with');
-   exit;
- end;
+      // Setup request id and tx sequence
+      PCYW43455Network(Network)^.ioctl_reqid := 1;
 
- {Device}
- WIFI^.MMC.Device.DeviceBus:=DEVICE_BUS_SD;
- WIFI^.MMC.Device.DeviceType:=MMC_TYPE_SDIO;
- WIFI^.MMC.Device.DeviceFlags:=MMC_FLAG_NONE;
- WIFI^.MMC.Device.DeviceData:=SDHCI;
- WIFI^.MMC.Device.DeviceDescription:=CYW43455_SDIO_DESCRIPTION;
- {MMC}
- WIFI^.MMC.MMCState:=MMC_STATE_EJECTED;
- WIFI^.MMC.DeviceInitialize:=SDHCI^.DeviceInitialize;
- WIFI^.MMC.DeviceDeinitialize:=SDHCI^.DeviceDeinitialize;
- WIFI^.MMC.DeviceGetCardDetect:=SDHCI^.DeviceGetCardDetect;
- WIFI^.MMC.DeviceGetWriteProtect:=SDHCI^.DeviceGetWriteProtect;
- WIFI^.MMC.DeviceSendCommand:=SDHCI^.DeviceSendCommand;
- WIFI^.MMC.DeviceSetIOS:=SDHCI^.DeviceSetIOS;
- {Driver}
- WIFI^.MMC.Voltages:=SDHCI^.Voltages;
- WIFI^.MMC.Capabilities:=SDHCI^.Capabilities;
- WIFI^.MMC.Capabilities2:=SDHCI^.Capabilities2;
- {WIFI}
- WIFI^.DMABuffer:=DMABufferAllocate(DMAHostGetDefault,IOCTL_MAX_BLKLEN);
- WIFI^.ReceiveGlomPacketCount:=0;
- WIFI^.ReceiveGlomPacketSize:=0;
+      // Create Up Semaphore
+      PCYW43455Network(Network)^.EAPOLCompleted := false;
+      PCYW43455Network(Network)^.NetworkUpSignal := SemaphoreCreate(0);
+      for i := 0 to WPA_KEY_MAX do
+        PCYW43455Network(Network)^.ValidKeys[i] := false;
 
- if not(DMA_CACHE_COHERENT) then
-  begin
-   {Clean Cache (Dest)}
-   CleanDataCacheRange(PtrUInt(WIFI^.DMABuffer), IOCTL_MAX_BLKLEN);
-  end;
+      // Allocate buffers
+      PCYW43455Network(Network)^.TXBuffer := DMABufferAllocate(DMAHostGetDefault, SizeOf(IOCTL_MSG));
+      PCYW43455Network(Network)^.RXBuffer := DMABufferAllocate(DMAHostGetDefault, SizeOf(IOCTL_MSG));
+      PCYW43455Network(Network)^.DMABuffer := DMABufferAllocate(DMAHostGetDefault,IOCTL_MAX_BLKLEN);
 
- // Get DMA properties
- if DMAHostProperties(DMAHostGetDefault,@DMAProperties) = ERROR_SUCCESS then
-  begin
-   // Save DMA alignment
-   WIFI^.DMAAlignment:=DMAProperties.Alignment;
-  end;
+      if not(DMA_CACHE_COHERENT) then
+      begin
+        {Clean Cache (Dest)}
+        CleanDataCacheRange(PtrUInt(PCYW43455Network(Network)^.TXBuffer), SizeOf(IOCTL_MSG));
+        CleanDataCacheRange(PtrUInt(PCYW43455Network(Network)^.RXBuffer), SizeOf(IOCTL_MSG));
+        CleanDataCacheRange(PtrUInt(PCYW43455Network(Network)^.DMABuffer), IOCTL_MAX_BLKLEN);
+      end;
 
- // Save Wireless Device
- Network^.Device.DeviceData := WIFI;
+      // Get DMA properties
+      if DMAHostProperties(DMAHostGetDefault, @DMAProperties) = ERROR_SUCCESS then
+      begin
+        // Save DMA alignment
+        PCYW43455Network(Network)^.DMAAlignment := DMAProperties.Alignment;
+      end;
 
- if WIFI_LOG_ENABLED then WIFILogInfo(nil,'WIFIDeviceInitialize');
+      {Initialize WIFI}
+      Status := WIFIDeviceInitialize(PCYW43455Network(Network));
+      if Status <> MMC_STATUS_SUCCESS then
+       begin
+        WIFILogError(nil, 'CYW43455: Failed to initialize new device ' + inttostr(status));
 
- {Initialize WIFI}
- Status:=WIFIDeviceInitialize(WIFI);
- if (Status <> MMC_STATUS_SUCCESS)then
-  begin
-   WIFILogError(nil,'WIFI Failed to initialize new WIFI device ' + inttostr(status));
+        Exit;
+       end;
 
-   MMCDeviceDestroy(@WIFI^.MMC);
-   Exit;
-  end;
+      // set buffering sizes
+      PCYW43455Network(Network)^.ReceiveRequestSize := RECEIVE_REQUEST_PACKET_COUNT * sizeof(IOCTL_MSG); // space for 16 reads; actually more than that as a packet can't be as large as the IOCTL msg allocates
+      PCYW43455Network(Network)^.TransmitRequestSize := SizeOf(IOCTL_MSG);
+      PCYW43455Network(Network)^.ReceiveEntryCount := 40;
+      PCYW43455Network(Network)^.TransmitEntryCount := 40;
+      PCYW43455Network(Network)^.ReceivePacketCount := RECEIVE_REQUEST_PACKET_COUNT * IOCTL_MAX_BLKLEN div (ETHERNET_MIN_PACKET_SIZE);
+      PCYW43455Network(Network)^.TransmitPacketCount := 1;
 
- // Under SDIO this section will remain in Open
+      {Allocate Receive Queue Buffer}
+      Network^.ReceiveQueue.Buffer := BufferCreate(SizeOf(TNetworkEntry), PCYW43455Network(Network)^.ReceiveEntryCount);
+      if Network^.ReceiveQueue.Buffer = INVALID_HANDLE_VALUE then
+       begin
+        if NETWORK_LOG_ENABLED then NetworkLogError(Network, 'CYW43455: Failed to create receive queue buffer');
 
- // set buffering sizes
- PCYW43455Network(Network)^.ReceiveRequestSize:=RECEIVE_REQUEST_PACKET_COUNT * sizeof(IOCTL_MSG); // space for 16 reads; actually more than that as a packet can't be as large as the IOCTL msg allocates
- PCYW43455Network(Network)^.TransmitRequestSize:=SizeOf(IOCTL_MSG);
- PCYW43455Network(Network)^.ReceiveEntryCount:=40;
- PCYW43455Network(Network)^.TransmitEntryCount:=40;
- PCYW43455Network(Network)^.ReceivePacketCount:=RECEIVE_REQUEST_PACKET_COUNT * IOCTL_MAX_BLKLEN div (ETHERNET_MIN_PACKET_SIZE);
- PCYW43455Network(Network)^.TransmitPacketCount:=1;
+        Exit;
+       end;
 
- WIFI^.NetworkP := Network;
+      {Allocate Receive Queue Semaphore}
+      Network^.ReceiveQueue.Wait := SemaphoreCreate(0);
+      if Network^.ReceiveQueue.Wait = INVALID_HANDLE_VALUE then
+       begin
+        if NETWORK_LOG_ENABLED then NetworkLogError(Network, 'CYW43455: Failed to create receive queue semaphore');
 
- {Allocate Receive Queue Buffer}
- Network^.ReceiveQueue.Buffer:=BufferCreate(SizeOf(TNetworkEntry),PCYW43455Network(Network)^.ReceiveEntryCount);
- if Network^.ReceiveQueue.Buffer = INVALID_HANDLE_VALUE then
-  begin
-   if NETWORK_LOG_ENABLED then NetworkLogError(Network,'LAN78XX: Failed to create receive queue buffer');
+        Exit;
+       end;
 
-   Exit;
-  end;
+      {Allocate Receive Queue Buffers}
+      Entry := BufferIterate(Network^.ReceiveQueue.Buffer, nil);
+      while Entry <> nil do
+       begin
+        {Initialize Entry}
+        Entry^.Size := PCYW43455Network(Network)^.ReceiveRequestSize;
+        Entry^.Offset := 0; // The actual offset is variable and is accounted for when receiving a packet
+        Entry^.Count := 0;
 
- {Allocate Receive Queue Semaphore}
- Network^.ReceiveQueue.Wait:=SemaphoreCreate(0);
- if Network^.ReceiveQueue.Wait = INVALID_HANDLE_VALUE then
-  begin
-   if NETWORK_LOG_ENABLED then NetworkLogError(Network,'LAN78XX: Failed to create receive queue semaphore');
+        {Allocate Request Buffer}
+        Entry^.Buffer := DMABufferAllocate(DMAHostGetDefault, Entry^.Size);
+        if Entry^.Buffer = nil then
+         begin
+          if WIFI_LOG_ENABLED then WIFILogError(nil, 'CYW43455: Failed to allocate receive buffer');
 
-   Exit;
-  end;
+          Exit;
+         end;
 
- {Allocate Receive Queue Buffers}
- Entry:=BufferIterate(Network^.ReceiveQueue.Buffer,nil);
- while Entry <> nil do
-  begin
-   {Initialize Entry}
-   Entry^.Size:=PCYW43455Network(Network)^.ReceiveRequestSize;
-   Entry^.Offset:=0; // The actual offset is variable and is accounted for when receiving a packet
-   Entry^.Count:=0;
+        if not(DMA_CACHE_COHERENT) then
+         begin
+          {Clean Cache (Dest)}
+          CleanDataCacheRange(PtrUInt(Entry^.Buffer), Entry^.Size);
+         end;
 
-   {Allocate Request Buffer}
-   Entry^.Buffer:= DMABufferAllocate(DMAHostGetDefault,Entry^.Size);
-   if Entry^.Buffer = nil then
-    begin
-     if WIFI_LOG_ENABLED then WIFILogError(nil,'CY43455: Failed to allocate receive buffer');
+        {Initialize Packets}
+        SetLength(Entry^.Packets, PCYW43455Network(Network)^.ReceivePacketCount);
 
-     Exit;
+        {Initialize First Packet}
+        Entry^.Packets[0].Buffer := Entry^.Buffer;
+        Entry^.Packets[0].Data := Entry^.Buffer + Entry^.Offset;
+        Entry^.Packets[0].Length := Entry^.Size - Entry^.Offset;
+
+        Entry := BufferIterate(Network^.ReceiveQueue.Buffer,Entry);
+       end;
+
+      {Allocate Receive Queue Entries}
+      SetLength(Network^.ReceiveQueue.Entries, PCYW43455Network(Network)^.ReceiveEntryCount);
+
+      {Allocate Transmit Queue Buffer}
+      Network^.TransmitQueue.Buffer := BufferCreate(SizeOf(TNetworkEntry), PCYW43455Network(Network)^.TransmitEntryCount);
+      if Network^.TransmitQueue.Buffer = INVALID_HANDLE_VALUE then
+       begin
+        if WIFI_LOG_ENABLED then WIFILogError(nil, 'CYW43455: Failed to create transmit queue buffer');
+
+        Exit;
+       end;
+
+      {Allocate Transmit Queue Semaphore}
+      Network^.TransmitQueue.Wait := SemaphoreCreate(PCYW43455Network(Network)^.TransmitEntryCount);
+      if Network^.TransmitQueue.Wait = INVALID_HANDLE_VALUE then
+       begin
+        if WIFI_LOG_ENABLED then WIFILogError(nil, 'CYW43455: Failed to create transmit queue semaphore');
+
+        Exit;
+       end;
+
+      {Allocate Transmit Queue Buffers}
+      Entry:=BufferIterate(Network^.TransmitQueue.Buffer, nil);
+      while Entry <> nil do
+       begin
+        {Initialize Entry}
+        Entry^.Size := PCYW43455Network(Network)^.TransmitRequestSize;
+        Entry^.Offset := IOCTL_LEN_BYTES + SDPCM_HEADER_SIZE + BCDC_HEADER_SIZE;
+        Entry^.Count := PCYW43455Network(Network)^.TransmitPacketCount;
+
+        {Allocate Request Buffer}
+        Entry^.Buffer := DMABufferAllocate(DMAHostGetDefault, Entry^.Size);
+        if Entry^.Buffer = nil then
+         begin
+          if WIFI_LOG_ENABLED then WIFILogError(nil, 'CYW43455: Failed to allocate wifi transmit buffer');
+
+          Exit;
+         end;
+
+        if not(DMA_CACHE_COHERENT) then
+         begin
+          {Clean Cache (Dest)}
+          CleanDataCacheRange(PtrUInt(Entry^.Buffer), Entry^.Size);
+         end;
+
+        {Initialize Packets}
+        SetLength(Entry^.Packets, PCYW43455Network(Network)^.TransmitPacketCount);
+
+        {Initialize First Packet}
+        Entry^.Packets[0].Buffer := Entry^.Buffer;
+        Entry^.Packets[0].Data := Entry^.Buffer + Entry^.Offset;
+        Entry^.Packets[0].Length := Entry^.Size - Entry^.Offset;
+
+        Entry := BufferIterate(Network^.TransmitQueue.Buffer,Entry);
+       end;
+
+      {Allocate Transmit Queue Entries}
+      SetLength(Network^.TransmitQueue.Entries, PCYW43455Network(Network)^.TransmitEntryCount);
+
+      // create the receive thread
+      if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Creating Worker Thread');
+
+      PCYW43455Network(Network)^.WorkerThread := TCYW43455WorkerThread.Create(true, PCYW43455Network(Network));
+      PCYW43455Network(Network)^.WorkerThread.Start;
+
+      // create the reconnect thread
+      PCYW43455Network(Network)^.BackgroundJoinThread := TCYW43455ReconnectionThread.Create(PCYW43455Network(Network));
+
+      // call initialisation (loads country code etc)
+      // note this code requires the worker thread to be running otherwise
+      // responses won't be received.
+      WirelessInit(PCYW43455Network(Network));
+
+      {Set State to Open}
+      Network^.NetworkState := NETWORK_STATE_OPEN;
+
+      {Notify the State}
+      NotifierNotify(@Network^.Device, DEVICE_NOTIFICATION_OPEN);
+
+      Result := ERROR_SUCCESS;
+    finally
+      {Release the Lock}
+      MutexUnlock(Network^.Lock);
     end;
-
-   if not(DMA_CACHE_COHERENT) then
-    begin
-     {Clean Cache (Dest)}
-     CleanDataCacheRange(PtrUInt(Entry^.Buffer), Entry^.Size);
-    end;
-
-   {Initialize Packets}
-   SetLength(Entry^.Packets,PCYW43455Network(Network)^.ReceivePacketCount);
-
-   {Initialize First Packet}
-   Entry^.Packets[0].Buffer:=Entry^.Buffer;
-   Entry^.Packets[0].Data:=Entry^.Buffer + Entry^.Offset;
-   Entry^.Packets[0].Length:=Entry^.Size - Entry^.Offset;
-
-   Entry:=BufferIterate(Network^.ReceiveQueue.Buffer,Entry);
-  end;
-
- {Allocate Receive Queue Entries}
- SetLength(Network^.ReceiveQueue.Entries,PCYW43455Network(Network)^.ReceiveEntryCount);
-
- {Allocate Transmit Queue Buffer}
- Network^.TransmitQueue.Buffer:=BufferCreate(SizeOf(TNetworkEntry),PCYW43455Network(Network)^.TransmitEntryCount);
- if Network^.TransmitQueue.Buffer = INVALID_HANDLE_VALUE then
+  end
+  else
   begin
-   if WIFI_LOG_ENABLED then WIFILogError(nil,'CY43455: Failed to create transmit queue buffer');
-
-   Exit;
+    Result := ERROR_CAN_NOT_COMPLETE;
   end;
-
- {Allocate Transmit Queue Semaphore}
- Network^.TransmitQueue.Wait:=SemaphoreCreate(PCYW43455Network(Network)^.TransmitEntryCount);
- if Network^.TransmitQueue.Wait = INVALID_HANDLE_VALUE then
-  begin
-   if WIFI_LOG_ENABLED then WIFILogError(nil,'CY43455: Failed to create transmit queue semaphore');
-
-   Exit;
-  end;
-
- {Allocate Transmit Queue Buffers}
- Entry:=BufferIterate(Network^.TransmitQueue.Buffer,nil);
- while Entry <> nil do
-  begin
-   {Initialize Entry}
-   Entry^.Size:=PCYW43455Network(Network)^.TransmitRequestSize;
-   Entry^.Offset:=IOCTL_LEN_BYTES + SDPCM_HEADER_SIZE + BCDC_HEADER_SIZE;
-   Entry^.Count:=PCYW43455Network(Network)^.TransmitPacketCount;
-
-   {Allocate Request Buffer}
-   Entry^.Buffer:=DMABufferAllocate(DMAHostGetDefault,Entry^.Size);
-   if Entry^.Buffer = nil then
-    begin
-     if WIFI_LOG_ENABLED then WIFILogError(nil,'CY43455: Failed to allocate wifi transmit buffer');
-
-     Exit;
-    end;
-
-   if not(DMA_CACHE_COHERENT) then
-    begin
-     {Clean Cache (Dest)}
-     CleanDataCacheRange(PtrUInt(Entry^.Buffer), Entry^.Size);
-    end;
-
-   {Initialize Packets}
-   SetLength(Entry^.Packets,PCYW43455Network(Network)^.TransmitPacketCount);
-
-   {Initialize First Packet}
-   Entry^.Packets[0].Buffer:=Entry^.Buffer;
-   Entry^.Packets[0].Data:=Entry^.Buffer + Entry^.Offset;
-   Entry^.Packets[0].Length:=Entry^.Size - Entry^.Offset;
-
-   Entry:=BufferIterate(Network^.TransmitQueue.Buffer,Entry);
-  end;
-
- {Allocate Transmit Queue Entries}
- SetLength(Network^.TransmitQueue.Entries,PCYW43455Network(Network)^.TransmitEntryCount);
-
- // create the receive thread
-
- if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Creating WIFI Worker Thread');
-
- WIFI^.WorkerThread := TWIFIWorkerThread.Create(true, WIFI);
- WIFI^.WorkerThread.Start;
-
- WIFI^.BackgroundJoinThread := TWirelessReconnectionThread.Create(WIFI);
-
- // call initialisation (loads country code etc)
- // note this code requires the worker thread to be running otherwise
- // responses won't be received.
- WirelessInit(WIFI);
-
- {Set State to Open}
- Network^.NetworkState := NETWORK_STATE_OPEN;
-
- {Notify the State}
- NotifierNotify(@Network^.Device, DEVICE_NOTIFICATION_OPEN);
-
- Result := ERROR_SUCCESS;
 end;
 
 function CYW43455DeviceClose(Network:PNetworkDevice):LongWord;
+var
+ MMC: PMMCDevice;
 begin
+  Result:=ERROR_INVALID_PARAMETER;
+
+  {Check Network}
+  if Network = nil then Exit;
+  if Network^.Device.Signature <> DEVICE_SIGNATURE then Exit;
+
+  {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+  if NETWORK_LOG_ENABLED then NetworkLogDebug(Network, 'CYW43455: Network Close');
+  {$ENDIF}
+
+  {Get MMC}
+  MMC := PMMCDevice(Network^.Device.DeviceData);
+  if MMC = nil then Exit;
+
+  {Leave Network}
   if PCYW43455Network(Network)^.JoinCompleted then
     WirelessLeaveNetwork;
 
-  {Set State to Closed}
-  Network^.NetworkState := NETWORK_STATE_CLOSED;
+  {Check State}
+  Result:=ERROR_NOT_OPEN;
+  if Network^.NetworkState <> NETWORK_STATE_OPEN then Exit;
 
-  {Notify the State}
-  NotifierNotify(@Network^.Device, DEVICE_NOTIFICATION_CLOSE);
+  {Set State to Closing}
+  Result := ERROR_OPERATION_FAILED;
+  if NetworkDeviceSetState(Network, NETWORK_STATE_CLOSING) <> ERROR_SUCCESS then Exit;
 
-  Result := ERROR_SUCCESS;
+  {Acquire the Lock}
+  if MutexLock(Network^.Lock) = ERROR_SUCCESS then
+  begin
+    try
+
+      //To Do //TestingSDIO // More to add here
+
+      {Set State to Closed}
+      Network^.NetworkState := NETWORK_STATE_CLOSED;
+
+      {Notify the State}
+      NotifierNotify(@Network^.Device, DEVICE_NOTIFICATION_CLOSE);
+
+      {Free Buffers}
+      DMABufferRelease(PCYW43455Network(Network)^.TXBuffer);
+      DMABufferRelease(PCYW43455Network(Network)^.RXBuffer);
+      DMABufferRelease(PCYW43455Network(Network)^.DMABuffer);
+
+      {Destroy Up Semaphore}
+      SemaphoreDestroy(PCYW43455Network(Network)^.NetworkUpSignal);
+
+      Result := ERROR_SUCCESS;
+    finally
+      {Release the Lock}
+      MutexUnlock(Network^.Lock);
+    end;
+ end
+ else
+ begin
+   Result := ERROR_CAN_NOT_COMPLETE;
+ end;
 end;
 
 function CYW43455DeviceControl(Network:PNetworkDevice;Request:Integer;Argument1:PtrUInt;var Argument2:PtrUInt):LongWord;
  var
+  MMC:PMMCDevice;
   Status:LongWord;
-  WIFI:PWIFIDevice;
 begin
   {}
   Result:=ERROR_INVALID_PARAMETER;
@@ -1639,13 +1384,13 @@ begin
   if Network = nil then Exit;
   if Network^.Device.Signature <> DEVICE_SIGNATURE then Exit;
 
-  {$IF DEFINED(LAN78XX_DEBUG) or DEFINED(NETWORK_DEBUG)}
-  if NETWORK_LOG_ENABLED then NetworkLogDebug(Network,'LAN78XX: Network Control');
+  {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+  if NETWORK_LOG_ENABLED then NetworkLogDebug(Network, 'CYW43455: Network Control');
   {$ENDIF}
 
-  {Get WIFI}
-  WIFI:=PWIFIDevice(Network^.Device.DeviceData);
-  if WIFI = nil then Exit;
+  {Get MMC}
+  MMC:=PMMCDevice(Network^.Device.DeviceData);
+  if MMC = nil then Exit;
 
   {Acquire the Lock}
   if MutexLock(Network^.Lock) = ERROR_SUCCESS then
@@ -1689,8 +1434,8 @@ begin
        end;
       NETWORK_CONTROL_SET_MAC:begin
         {Set the MAC for this device}
-        {$ifdef CYW43455_DEBUG}
-        if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'set mac address to '
+        {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+        if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: set mac address to '
                          + inttohex(phardwareaddress(argument1)^[0], 2) + ':'
                          + inttohex(phardwareaddress(argument1)^[1], 2) + ':'
                          + inttohex(phardwareaddress(argument1)^[2], 2) + ':'
@@ -1698,12 +1443,12 @@ begin
                          + inttohex(phardwareaddress(argument1)^[4], 2) + ':'
                          + inttohex(phardwareaddress(argument1)^[5], 2)
                          );
-        {$endif}
+        {$ENDIF}
         Status := MMC_STATUS_SUCCESS;
        end;
       NETWORK_CONTROL_GET_MAC:begin
         {Get the MAC for this device}
-        move(WIFI^.macaddress[0], PHardwareAddress(Argument1)^, sizeof(THardwareAddress));
+        move(PCYW43455Network(Network)^.macaddress[0], PHardwareAddress(Argument1)^, sizeof(THardwareAddress));
         Status := MMC_STATUS_SUCCESS;
        end;
       NETWORK_CONTROL_SET_LOOPBACK:begin
@@ -1720,7 +1465,7 @@ begin
        end;
       NETWORK_CONTROL_GET_HARDWARE:begin
         {Get Hardware address for this device}
-       move(WIFI^.macaddress[0], PHardwareAddress(Argument1)^, sizeof(THardwareAddress));
+       move(PCYW43455Network(Network)^.macaddress[0], PHardwareAddress(Argument1)^, sizeof(THardwareAddress));
        Status := MMC_STATUS_SUCCESS;
        end;
       NETWORK_CONTROL_GET_BROADCAST:begin
@@ -1778,8 +1523,8 @@ begin
  if Network = nil then Exit;
  if Network^.Device.Signature <> DEVICE_SIGNATURE then Exit;
 
- {$IF DEFINED(LAN78XX_DEBUG) or DEFINED(NETWORK_DEBUG)}
- if NETWORK_LOG_ENABLED then NetworkLogDebug(Network,'LAN78XX: Buffer Allocate');
+ {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+ if NETWORK_LOG_ENABLED then NetworkLogDebug(Network,'CYW43455: Buffer Allocate');
  {$ENDIF}
 
  {Check State}
@@ -1817,7 +1562,7 @@ begin
    Result:=ERROR_SUCCESS;
   end
  else
-   WIFILogError(nil, 'Failed to get a transmit buffer!');
+   WIFILogError(nil, 'CYW43455: Failed to get a transmit buffer!');
 
 end;
 
@@ -1830,7 +1575,7 @@ begin
  if Network = nil then Exit;
  if Network^.Device.Signature <> DEVICE_SIGNATURE then Exit;
 
- {$IFDEF CYW43455_DEBUG}
+ {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
  if WIFI_LOG_ENABLED then WIFILogDebug(nil,'CYW43455: Buffer Release');
  {$ENDIF}
 
@@ -1857,7 +1602,7 @@ begin
  if Network = nil then Exit;
  if Network^.Device.Signature <> DEVICE_SIGNATURE then Exit;
 
- {$IFDEF CYW43455_DEBUG}
+ {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
  if WIFI_LOG_ENABLED then WIFILogDebug(nil,'CYW43455: Buffer Receive');
  {$ENDIF}
 
@@ -1908,7 +1653,7 @@ begin
   if Network = nil then Exit;
   if Network^.Device.Signature <> DEVICE_SIGNATURE then Exit;
 
-  {$IFDEF CYW43455_DEBUG}
+  {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'CYW43455: Buffer Transmit');
   {$ENDIF}
 
@@ -1940,7 +1685,7 @@ begin
        begin
         {Start Transmit}
         // this needs to be filled in with something!
-        //LAN78XXTransmitStart(PLAN78XXNetwork(Network));
+        //CYW43455TransmitStart(PCYW43455Network(Network));
        end;
 
       {Return Result}
@@ -1960,443 +1705,161 @@ begin
    end;
 end;
 
-{Initialization Functions}
-procedure WIFIPreInit;
-// Under SDIO this is not required
-const
-  {$IFDEF RPI}
-  SDHOST_DESCRIPTION = BCM2708_SDHOST_DESCRIPTION;
-  {$ENDIF}
-  {$IFDEF RPI3}
-  SDHOST_DESCRIPTION = BCM2710_SDHOST_DESCRIPTION;
-  {$ENDIF}
-  {$IFDEF RPI4}
-  SDHOST_DESCRIPTION = BCM2711_EMMC2_DESCRIPTION;
-  {$ENDIF}
-
+function WIFIDeviceInitialize(Network: PCYW43455Network): LongWord;
 var
-  SDHCI: PSDHCIHost;
-begin
-  {$ifdef CYW43455_DEBUG}
-  if WIFI_LOG_ENABLED then WIFILogDebug(nil, '========================= WIFIPreInit =========================');
-  {$endif}
-
-  SDHCI := PSDHCIHost(DeviceFindByDescription(SDHOST_DESCRIPTION));
-  if SDHCI <> nil then
-    SDHCIHostStart(SDHCI);
-end;
-
-procedure WIFIInit;
-// Under SDIO this is not required
-var
-  Network:PCYW43455Network;
-  SDHCI: PSDHCIHost;
-begin
- {Check Initialized}
- if WIFIInitialized then Exit;
-
- {Initialize Logging}
- WIFI_LOG_ENABLED:=(WIFI_DEFAULT_LOG_LEVEL <> WIFI_LOG_LEVEL_NONE);
-
- if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'WIFI Initialize');
-
- // Under SDIO this all moves to the Bind function
-
- {Create Network}
- Network:=PCYW43455Network(NetworkDeviceCreateEx(SizeOf(TCYW43455Network)));
- if Network = nil then
-  begin
-   if WIFI_LOG_ENABLED then WIFILogError(nil,'CYW43455: Failed to create new network device');
-   Exit;
-  end;
-
- {Update Network}
- {Device}
- Network^.Network.Device.DeviceBus:=DEVICE_BUS_SD;
- Network^.Network.Device.DeviceType:=NETWORK_TYPE_ETHERNET;
- Network^.Network.Device.DeviceFlags:=NETWORK_FLAG_RX_BUFFER or NETWORK_FLAG_TX_BUFFER or NETWORK_FLAG_RX_MULTIPACKET;
- Network^.Network.Device.DeviceData:=nil;
- Network^.Network.Device.DeviceDescription:=CYW43455_NETWORK_DESCRIPTION;
- {Network}
- Network^.Network.NetworkState:=NETWORK_STATE_CLOSED;
- Network^.Network.NetworkStatus:=NETWORK_STATUS_DOWN;
- Network^.Network.DeviceOpen:=@CYW43455DeviceOpen;
- Network^.Network.DeviceClose:=@CYW43455DeviceClose;
- Network^.Network.DeviceControl:=@CYW43455DeviceControl;
- Network^.Network.BufferAllocate:=@CYW43455BufferAllocate;
- Network^.Network.BufferRelease:=@CYW43455BufferRelease;
- Network^.Network.BufferReceive:=@CYW43455BufferReceive;
- Network^.Network.BufferTransmit:=@CYW43455BufferTransmit;
-
- {Register Network}
- if NetworkDeviceRegister(@Network^.Network) <> ERROR_SUCCESS then
-  begin
-   if WIFI_LOG_ENABLED then WIFILogError(nil,'CYW43455: Failed to register new network device');
-
-   {Destroy Network}
-   NetworkDeviceDestroy(@Network^.Network);
-   Exit;
-  end;
-
- // We need to get an SDHCI Host to assign for the device data
- SDHCIHostEnumerate(@SDHCIEnum, Network);
-
- SDHCI := Network^.SDHCI;
- if (SDHCI <> nil) then
- begin
-   // Save Network to Device Data
-   SDHCI^.Device.DeviceData := Network;
-
-   // Update host flags to include non standard
-   SDHCI^.Device.DeviceFlags := SDHCI^.Device.DeviceFlags or SDHCI_FLAG_NON_STANDARD;
-
-   // Insert new HostStart method and save original method
-   Network^.OriginalHostStart := SDHCI^.HostStart;
-   SDHCI^.HostStart := @WIFIHostStart;
-
-   SDHCIHostStart(SDHCI);
- end
- else
- begin
-   WIFILogError(nil, 'Could not find an SDHCI host to initialize');
-
-   {Destroy Network}
-   NetworkDeviceDestroy(@Network^.Network);
-   exit;
- end;
-
- {$ifdef CYW43455_DEBUG}
- if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'WIFIInit Complete');
- {$endif}
-
- // EAPOL queue locks for use with supplicant
- InitializeCriticalSection(EAPOLQueueLock);
-
- WIFIInitialized:=True;
-end;
-
-function WIFIDeviceInitialize(WIFI:PWIFIDevice):LongWord;
-{Reference: Section 3.6 of SD Host Controller Simplified Specification V3.0 partA2_300.pdf}
-var
- SDHCI:PSDHCIHost;
- updatevalue : word;
- ioreadyvalue : word;
- chipid : word;
- chipidrev : byte;
- bytevalue : byte;
+ chipid: word;
+ chipidrev: byte;
+ bytevalue: byte;
 begin
  {}
  try
- if WIFI_LOG_ENABLED then WIFILogInfo(nil,'WIFIDeviceInitialize');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil,'CYW43455: WIFIDeviceInitialize');
 
- Result:=MMC_STATUS_INVALID_PARAMETER;
+   Result:=MMC_STATUS_INVALID_PARAMETER;
 
- {Check WIFI}
- if WIFI = nil then Exit;
-
- {Check Initialize}
- if Assigned(WIFI^.MMC.DeviceInitialize) then
-  begin
-   {$ifdef CYW43455_DEBUG}
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'WIFI^.DeviceInitialize');
-   {$endif}
-   Result:=WIFI^.MMC.DeviceInitialize(@WIFI^.MMC);
-  end
- else
-  begin
-   {Default Method}
-   {Get SDHCI}
-   {$ifdef CYW43455_DEBUG}
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'Default initialize method');
-   {$endif}
-
-   SDHCI:=PSDHCIHost(WIFI^.MMC.Device.DeviceData);
-   if SDHCI = nil then
-   begin
-    WIFILogError(nil, 'The SDHCI host is nil');
-    Exit;
-   end;
-
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil,'Set initial power');
-
-   // should already have been done elsewhere.
-   {Set Initial Power}
-   {$ifdef CYW43455_DEBUG}
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'sdhci^.voltages is ' + inttostr(sdhci^.voltages) + 'firstbitsetof()='+inttostr(firstbitset(sdhci^.voltages)));
-   {$endif}
-   Result:=SDHCIHostSetPower(SDHCI,FirstBitSet(SDHCI^.Voltages));
-   if Result <> MMC_STATUS_SUCCESS then
-    begin
-     WIFILogError(nil,'failed to Set initial power');
-
-     Exit;
-    end;
-
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil,'Set bus width');
-   {Set Initial Bus Width}
-   Result:=MMCDeviceSetBusWidth(@WIFI^.MMC,MMC_BUS_WIDTH_1);
-   if Result <> MMC_STATUS_SUCCESS then Exit;
-
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil,'Set device clock');
-   {Set Initial Clock}
-   Result:=MMCDeviceSetClock(@WIFI^.MMC,MMC_BUS_SPEED_DEFAULT);
-   if Result <> MMC_STATUS_SUCCESS then
-     WIFILogError(nil, 'failed to set the clock speed to default')
-   {$ifdef CYW43455_DEBUG}
-   else
-     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Set device clock succeeded');
-   {$else} ; {$endif}
-
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'SDIO WIFI Device Reset');
-   {Perform an SDIO Reset}
-   SDIODeviceReset(@WIFI^.MMC);
-
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'WIFI Device Go Idle');
-   {Set the Card to Idle State}
-   MMCDeviceGoIdle(@WIFI^.MMC);
-
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'send interface condition request');
-   {Get the Interface Condition}
-   SDDeviceSendInterfaceCondition(@WIFI^.MMC);
-
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'send operation condition');
-   {Check for an SDIO Card}
-   if SDIODeviceSendOperationCondition(@WIFI^.MMC,True) = MMC_STATUS_SUCCESS then
-    begin
-     {$ifdef CYW43455_DEBUG}
-     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'send operation condition successful');
-     {$endif}
-    end
-    else
-    begin
-      WIFILogError(nil, 'send operation condition failed');
-      Exit;
-    end;
-
-   WIFI^.MMC.MMCState:=MMC_STATE_INSERTED;
-   WIFI^.MMC.Device.DeviceBus:=DEVICE_BUS_SD;
-   WIFI^.MMC.Device.DeviceType:=MMC_TYPE_SDIO;
-   WIFI^.MMC.RelativeCardAddress:=0;
-
-   {$ifdef CYW43455_DEBUG}
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil,'MMC Initialize Card Type is SDIO');
-   {$ENDIF}
-
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Get operation condition');
-   {Get the Operation Condition}
-   Result:=SDIODeviceSendOperationCondition(@WIFI^.MMC,False);
-   if Result <> MMC_STATUS_SUCCESS then Exit;
-
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Get card relative address');
-   {Get Relative Address}
-   Result:=SDDeviceSendRelativeAddress(@WIFI^.MMC);
-   if Result <> MMC_STATUS_SUCCESS then Exit;
-
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Selecting wifi device with cmd7');
-   {Select Card}
-   Result:=MMCDeviceSelectCard(@WIFI^.MMC);
-   if Result <> MMC_STATUS_SUCCESS then Exit;
-
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Reading wifi device common registers');
-   {Read the common registers}
-   Result:=SDIODeviceReadCCCR(@WIFI^.MMC);
-   if Result <> MMC_STATUS_SUCCESS then Exit;
-
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Reading wifi device common CIS tuples');
-   {Read the common CIS tuples}
-   Result:=SDIODeviceReadCommonCIS(@WIFI^.MMC);
-   if Result <> MMC_STATUS_SUCCESS then Exit;
-
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Switching wifi device to high speed');
-   {Switch to High Speed if supported}
-   Result:=SDIODeviceEnableHighspeed(@WIFI^.MMC);
-   if Result = MMC_STATUS_SUCCESS then
-    begin
-     {Set Timing}
-     Result:=MMCDeviceSetTiming(@WIFI^.MMC,MMC_TIMING_SD_HS);
-     if Result <> MMC_STATUS_SUCCESS then Exit;
-    end
-   else if Result <> MMC_STATUS_UNSUPPORTED_REQUEST then
-    begin
-     Exit;
-    end;
-
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil,'Set device clock');
-   {Set Clock}
-   Result:=MMCDeviceSetClock(@WIFI^.MMC,SDIODeviceGetMaxClock(@WIFI^.MMC));
-   if Result <> MMC_STATUS_SUCCESS then Exit;
-
-   {Switch to 4 bit bus if supported}
-   Result:=SDIODeviceEnableWideBus(@WIFI^.MMC);
-   if Result <> MMC_STATUS_SUCCESS then Exit;
-
-   {Update Device}
-   if not SDHCIHasCMD23(SDHCI) then WIFI^.MMC.Device.DeviceFlags:=WIFI^.MMC.Device.DeviceFlags and not(MMC_FLAG_SET_BLOCK_COUNT);
-
-   //Below is mostly WiFI specific //To Do //TestingSDIO
+   {Check Network}
+   if Network = nil then Exit;
 
    // if we get here we have successfully set the fn0 block size in CCCR and therefore the backplane is up.
 
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'setting backplane block size');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: setting backplane block size');
 
    // set block sizes for fn1 and fn2 in their respective function registers.
    // note these are still writes to the common IO area (function 0).
-   updatevalue := WIFI_BAK_BLK_BYTES;
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'setting backplane fn1 block size to 64');
-   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BUS_FUNCTION, BUS_BAK_BLKSIZE_REG, updatevalue and $ff,nil);
-   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BUS_FUNCTION, BUS_BAK_BLKSIZE_REG+1,(updatevalue shr 8) and $ff,nil);
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: setting backplane fn1 block size to ' + IntToStr(Network^.Func1^.MaxBlockSize));
+   Result := SDIOFunctionSetBlockSize(Network^.Func1, Network^.Func1^.MaxBlockSize);
 
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'setting backplane fn2 (radio) block size to 512');
-   updatevalue := 512;
-   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BUS_FUNCTION, BUS_RAD_BLKSIZE_REG, updatevalue and $ff,nil);
-   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BUS_FUNCTION, BUS_RAD_BLKSIZE_REG+1,(updatevalue shr 8) and $ff,nil);
-
-   // we only check the last result here. Needs changing really.
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: setting backplane fn2 (radio) block size to ' + IntToStr(Network^.Func2^.MaxBlockSize));
+   Result := SDIOFunctionSetBlockSize(Network^.Func2, Network^.Func2^.MaxBlockSize);
    if (Result = MMC_STATUS_SUCCESS) then
    begin
-     {$ifdef CYW43455_DEBUG}
-     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Successfully updated backplane block sizes');
-     {$endif}
+     {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: Successfully updated backplane block sizes');
+     {$ENDIF}
    end
    else
-     WIFILogError(nil, 'Failed to update backplane block sizes');
+     WIFILogError(nil, 'CYW43455: Failed to update backplane block sizes');
 
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'IO Enable backplane function 1');
-   ioreadyvalue := 0;
-   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True,BUS_FUNCTION,SDIO_CCCR_IOEx, 1 shl 1,nil);
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: IO Enable backplane function 1');
+   Result:=SDIOFunctionEnable(Network^.Func1);
    if (Result = MMC_STATUS_SUCCESS) then
    begin
-     {$ifdef CYW43455_DEBUG}
-     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'io enable successfully set for function 1');
-     {$endif}
+     {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: io enable successfully set for function 1');
+     {$ENDIF}
    end
    else
-     WIFILogError(nil, 'io enable could not be set for function 1');
+     WIFILogError(nil, 'CYW43455: io enable could not be set for function 1');
 
-   // at this point ether4330.c turns off all interrupts and then does to ioready check below.
-
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Waiting for IOReady function 1');
-   ioreadyvalue := 0;
-   while (ioreadyvalue and (1 shl 1)) = 0 do
-   begin
-     Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,False,BUS_FUNCTION, SDIO_CCCR_IORx,  0, @ioreadyvalue);
-     if (Result <> MMC_STATUS_SUCCESS) then
-     begin
-       WIFILogError(nil, 'Could not read IOReady value');
-       exit;
-     end;
-     sleep(10);
-   end;
-
-   {$ifdef CYW43455_DEBUG}
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Reading the Chip ID');
-   {$endif}
+   {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: Reading the Chip ID');
+   {$ENDIF}
 
    chipid := 0;
-   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,False,BACKPLANE_FUNCTION,0,  0, @chipid);
-   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,False,BACKPLANE_FUNCTION,1,  0, pbyte(@chipid)+1);
-   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,False,BACKPLANE_FUNCTION,2,  0, @chipidrev);
+   Result:=SDIODeviceReadWriteDirect(Network^.Func1^.MMC,False,BACKPLANE_FUNCTION,0,  0, @chipid);
+   Result:=SDIODeviceReadWriteDirect(Network^.Func1^.MMC,False,BACKPLANE_FUNCTION,1,  0, pbyte(@chipid)+1);
+   Result:=SDIODeviceReadWriteDirect(Network^.Func1^.MMC,False,BACKPLANE_FUNCTION,2,  0, @chipidrev);
    chipidrev := chipidrev and $f;
    if (Result = MMC_STATUS_SUCCESS) then
    begin
-     if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'WIFI Chip ID is 0x'+inttohex(chipid, 4) + ' rev ' + inttostr(chipidrev));
-     WIFI^.chipid := chipid;
-     WIFI^.chipidrev := chipidrev;
+     if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: WIFI Chip ID is 0x'+inttohex(chipid, 4) + ' rev ' + inttostr(chipidrev));
+     Network^.chipid := chipid;
+     Network^.chipidrev := chipidrev;
    end;
 
    // scan the cores to establish various key addresses
-   WIFIDeviceCoreScan(WIFI);
+   WIFIDeviceCoreScan(Network);
 
-   if (WIFI^.armctl = 0) or (WIFI^.dllctl = 0) or
-     ((WIFI^.armcore = ARMcm3) and ((WIFI^.socramctl = 0) or (WIFI^.socramregs = 0))) then
+   if (Network^.armctl = 0) or (Network^.dllctl = 0) or
+     ((Network^.armcore = ARMcm3) and ((Network^.socramctl = 0) or (Network^.socramregs = 0))) then
    begin
-     WIFILogError(nil, 'Corescan did not find essential cores!');
+     WIFILogError(nil, 'CYW43455: Corescan did not find essential cores!');
      exit;
    end;
 
-   {$ifdef CYW43455_DEBUG}
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Disable core');
-   {$endif}
+   {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: Disable core');
+   {$ENDIF}
 
-   if (WIFI^.armcore = ARMcr4) then
+   if (Network^.armcore = ARMcr4) then
    begin
-     {$ifdef CYW43455_DEBUG}
-     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'sbreset armcr4 core');
-     {$endif}
+     {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: sbreset armcr4 core');
+     {$ENDIF}
 
-     sbreset(WIFI, WIFI^.armctl, Cr4Cpuhalt, Cr4CpuHalt)
+     sbreset(Network, Network^.armctl, Cr4Cpuhalt, Cr4CpuHalt)
    end
    else
    begin
-     {$ifdef CYW43455_DEBUG}
-     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'sbdisable armctl core');
-     {$endif}
+     {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: sbdisable armctl core');
+     {$ENDIF}
 
-     sbdisable(WIFI, WIFI^.armctl, 0, 0);
+     sbdisable(Network, Network^.armctl, 0, 0);
    end;
 
-   sbreset(WIFI, WIFI^.dllctl, 8 or 4, 4);
+   sbreset(Network, Network^.dllctl, 8 or 4, 4);
 
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'WIFI Device RAM scan');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: WIFI Device RAM scan');
 
-   WIFIDeviceRamScan(WIFI);
+   WIFIDeviceRamScan(Network);
 
    // Set clock on function 1
-   Result := SDIODeviceReadWriteDirect(@WIFI^.MMC, True, BACKPLANE_FUNCTION, BAK_CHIP_CLOCK_CSR_REG, 0, nil);
+   Result := SDIODeviceReadWriteDirect(Network^.Func1^.MMC, True, BACKPLANE_FUNCTION, BAK_CHIP_CLOCK_CSR_REG, 0, nil);
    if (Result <> MMC_STATUS_SUCCESS) then
-     WIFILogError(nil, 'Unable to update config at chip clock csr register');
+     WIFILogError(nil, 'CYW43455: Unable to update config at chip clock csr register');
    MicrosecondDelay(10);
 
    // check active low power clock availability
 
-   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BACKPLANE_FUNCTION, BAK_CHIP_CLOCK_CSR_REG, 0, nil);
+   Result:=SDIODeviceReadWriteDirect(Network^.Func1^.MMC,True, BACKPLANE_FUNCTION, BAK_CHIP_CLOCK_CSR_REG, 0, nil);
    sleep(1);
-   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BACKPLANE_FUNCTION, BAK_CHIP_CLOCK_CSR_REG, Nohwreq or ReqALP, nil);
+   Result:=SDIODeviceReadWriteDirect(Network^.Func1^.MMC,True, BACKPLANE_FUNCTION, BAK_CHIP_CLOCK_CSR_REG, Nohwreq or ReqALP, nil);
 
    // now we keep reading them until we have some availability
    bytevalue := 0;
    while (bytevalue and (HTavail or ALPavail) = 0) do
    begin
-     Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,False, BACKPLANE_FUNCTION, BAK_CHIP_CLOCK_CSR_REG, 0, @bytevalue);
+     Result:=SDIODeviceReadWriteDirect(Network^.Func1^.MMC,False, BACKPLANE_FUNCTION, BAK_CHIP_CLOCK_CSR_REG, 0, @bytevalue);
      if (Result <> MMC_STATUS_SUCCESS) then
-       WIFILogError(nil, 'failed to read clock settings');
+       WIFILogError(nil, 'CYW43455: failed to read clock settings');
      MicrosecondDelay(10);
    end;
 
-   {$ifdef CYW43455_DEBUG}
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Clock availability is 0x' + inttohex(bytevalue, 2));
-   {$endif}
+   {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: Clock availability is 0x' + inttohex(bytevalue, 2));
+   {$ENDIF}
 
    // finally we can clear active low power request. Not sure if any of this is needed to be honest.
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'clearing active low power clock request');
-   Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BACKPLANE_FUNCTION, BAK_CHIP_CLOCK_CSR_REG, Nohwreq or ForceALP, nil);
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: clearing active low power clock request');
+   Result:=SDIODeviceReadWriteDirect(Network^.Func1^.MMC,True, BACKPLANE_FUNCTION, BAK_CHIP_CLOCK_CSR_REG, Nohwreq or ForceALP, nil);
 
    MicrosecondDelay(65);
 
-  WIFIDeviceSetBackplaneWindow(WIFI, WIFI^.chipcommon);
+  WIFIDeviceSetBackplaneWindow(Network, Network^.chipcommon);
 
-  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Disable pullups');
-  Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BACKPLANE_FUNCTION, gpiopullup, 0, nil);
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Disable pullups');
+  Result:=SDIODeviceReadWriteDirect(Network^.Func1^.MMC,True, BACKPLANE_FUNCTION, gpiopullup, 0, nil);
   if (Result = MMC_STATUS_SUCCESS) then
   begin
-   {$ifdef CYW43455_DEBUG}
-    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Successfully disabled SDIO extra pullups');
-   {$endif}
+   {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: Successfully disabled SDIO extra pullups');
+   {$ENDIF}
   end
   else
-    WIFILogError(nil, 'Failed to disable SDIO extra pullups');
+    WIFILogError(nil, 'CYW43455: Failed to disable SDIO extra pullups');
 
-  Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BACKPLANE_FUNCTION, Gpiopulldown, 0, nil);
+  Result:=SDIODeviceReadWriteDirect(Network^.Func1^.MMC,True, BACKPLANE_FUNCTION, Gpiopulldown, 0, nil);
   if (Result = MMC_STATUS_SUCCESS) then
   begin
-   {$ifdef CYW43455_DEBUG}
-    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Successfully disabled SDIO extra pulldowns');
-    {$endif}
+   {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: Successfully disabled SDIO extra pulldowns');
+    {$ENDIF}
   end
   else
-    WIFILogError(nil, 'Failed to disable SDIO extra pulldowns');
+    WIFILogError(nil, 'CYW43455: Failed to disable SDIO extra pulldowns');
 
-   if (WIFI^.chipid = $4330) or (WIFI^.chipid = 43362) then
+   if (Network^.chipid = $4330) or (Network^.chipid = 43362) then
    begin
     // there is other stuff from sbinit() to do here
     // however the chipids are not either 3b or zero as far as I can tell so
@@ -2404,58 +1867,57 @@ begin
     // relates to power management by the look of it. PMU, drive strength.
    end;
 
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Download WIFI firmware to Cypress SOC');
-   Result := WIFIDeviceDownloadFirmware(WIFI);
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Download WIFI firmware to Cypress SOC');
+   Result := WIFIDeviceDownloadFirmware(Network);
 
    // Enable the device. This should boot the firmware we just loaded to the chip
-   sbenable(WIFI);
+   sbenable(Network);
 
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Enabling interrupts for all functions');
-   Result := SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BUS_FUNCTION, SDIO_CCCR_IENx, (INTR_CTL_MASTER_EN or INTR_CTL_FUNC1_EN or INTR_CTL_FUNC2_EN), nil );
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Enabling interrupts for all functions');
+   Result := SDIODeviceReadWriteDirect(Network^.Func1^.MMC,True, BUS_FUNCTION, SDIO_CCCR_IENx, (INTR_CTL_MASTER_EN or INTR_CTL_FUNC1_EN or INTR_CTL_FUNC2_EN), nil );
    if (Result = MMC_STATUS_SUCCESS) then
    begin
-     {$ifdef CYW43455_DEBUG}
-     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Successfully enabled interrupts');
-     {$endif}
+     {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+     if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: Successfully enabled interrupts');
+     {$ENDIF}
    end
    else
-     WIFILogError(nil, 'Failed  to enable interrupts');
+     WIFILogError(nil, 'CYW43455: Failed to enable interrupts');
 
-   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'End of WIFIDeviceInitialize');
+   if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: End of WIFIDeviceInitialize');
    Result:=MMC_STATUS_SUCCESS;
-  end;
 
  except
-   on e : exception do
-   WIFILogError(nil, 'Exception ' + e.message + ' at ' + inttohex(longword(exceptaddr), 8) + ' during wifiinitialize');
+   on e: exception do
+   WIFILogError(nil, 'CYW43455: Exception ' + e.message + ' at ' + PtrToHex(exceptaddr) + ' in WIFIDeviceInitialize');
  end;
 end;
 
-function WIFIDeviceSetBackplaneWindow(WIFI : PWIFIDevice; addr : longword) : longword;
+function WIFIDeviceSetBackplaneWindow(Network: PCYW43455Network; addr: longword): longword;
 begin
  addr := addr and (not $7fff);
 
  {$ifdef CYW43455_SDIO_DEBUG}
- if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'setting backplane address to ' + inttohex((addr shr 8) and $ff, 8) + ' '
+ if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: setting backplane address to ' + inttohex((addr shr 8) and $ff, 8) + ' '
                   + inttohex((addr shr 16) and $ff, 8) + ' '
                   + inttohex((addr shr 24) and $ff, 8));
  {$endif}
 
- Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BACKPLANE_FUNCTION, BAK_WIN_ADDR_REG, (addr shr 8) and $ff,nil);
- Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BACKPLANE_FUNCTION, BAK_WIN_ADDR_REG+1,(addr shr 16) and $ff,nil);
- Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BACKPLANE_FUNCTION, BAK_WIN_ADDR_REG+2,(addr shr 24) and $ff,nil);
+ Result:=SDIODeviceReadWriteDirect(Network^.Func1^.MMC,True, BACKPLANE_FUNCTION, BAK_WIN_ADDR_REG, (addr shr 8) and $ff,nil);
+ Result:=SDIODeviceReadWriteDirect(Network^.Func1^.MMC,True, BACKPLANE_FUNCTION, BAK_WIN_ADDR_REG+1,(addr shr 16) and $ff,nil);
+ Result:=SDIODeviceReadWriteDirect(Network^.Func1^.MMC,True, BACKPLANE_FUNCTION, BAK_WIN_ADDR_REG+2,(addr shr 24) and $ff,nil);
 
  if (Result = MMC_STATUS_SUCCESS) then
  begin
   {$ifdef CYW43455_SDIO_DEBUG}
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'function ' + inttostr(1) + ' backplanewindow updated to ' + inttohex(addr, 8));
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: function ' + inttostr(1) + ' backplanewindow updated to ' + inttohex(addr, 8));
   {$endif}
  end
  else
-   WIFILogError(nil, 'something went wrong in setbackplanewindow');
+   WIFILogError(nil, 'CYW43455: something went wrong in setbackplanewindow');
 end;
 
-function WIFIDeviceCoreScan(WIFI : PWIFIDevice) : longint;
+function WIFIDeviceCoreScan(Network: PCYW43455Network): longint;
 const
   corescansz = 512;
   CID_ID_MASK  =   $0000ffff;
@@ -2465,20 +1927,20 @@ const
   CID_TYPE_SHIFT = 28;
 
 var
- buf : PByte;
- i, coreid, corerev : integer;
- addr : longint;
- addressbytes : array[1..4] of byte;
- address : longword;
- chipidbuf : longword;
- {$ifdef CYW43455_DEBUG}
- chipid : word;
- chiprev : word;
- socitype : word;
- str : string;
- {$endif}
+ buf: PByte;
+ i, coreid, corerev: integer;
+ addr: longint;
+ addressbytes: array[1..4] of byte;
+ address: longword;
+ chipidbuf: longword;
+ {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+ chipid: word;
+ chiprev: word;
+ socitype: word;
+ str: string;
+ {$ENDIF}
 begin
- if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Starting WIFI core scan');
+ if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Starting WIFI core scan');
 
  Result := MMC_STATUS_INVALID_PARAMETER;
 
@@ -2491,48 +1953,48 @@ begin
   end;
 
  // set backplane window
- Result := WIFIDeviceSetBackplaneWindow(WIFI, BAK_BASE_ADDR);
+ Result := WIFIDeviceSetBackplaneWindow(Network, BAK_BASE_ADDR);
 
  // read 32 bits containing chip id and other info
- Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,False,BACKPLANE_FUNCTION,0,  0, pbyte(@chipidbuf));
+ Result:=SDIODeviceReadWriteDirect(Network^.Func1^.MMC,False,BACKPLANE_FUNCTION,0,  0, pbyte(@chipidbuf));
  if (Result <> MMC_STATUS_SUCCESS) then
-    WIFILogError(nil, 'failed to read the first byte of the chip id');
+    WIFILogError(nil, 'CYW43455: failed to read the first byte of the chip id');
 
- Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,False,BACKPLANE_FUNCTION,1,  0, pbyte(@chipidbuf)+1);
- Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,False,BACKPLANE_FUNCTION,2,  0, pbyte(@chipidbuf)+2);
- Result:=SDIODeviceReadWriteDirect(@WIFI^.MMC,False,BACKPLANE_FUNCTION,2,  0, pbyte(@chipidbuf)+3);
+ Result:=SDIODeviceReadWriteDirect(Network^.Func1^.MMC,False,BACKPLANE_FUNCTION,1,  0, pbyte(@chipidbuf)+1);
+ Result:=SDIODeviceReadWriteDirect(Network^.Func1^.MMC,False,BACKPLANE_FUNCTION,2,  0, pbyte(@chipidbuf)+2);
+ Result:=SDIODeviceReadWriteDirect(Network^.Func1^.MMC,False,BACKPLANE_FUNCTION,2,  0, pbyte(@chipidbuf)+3);
 
- {$ifdef CYW43455_DEBUG}
+ {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
  chipid := chipidbuf  and CID_ID_MASK;
  chiprev := (chipidbuf and CID_REV_MASK) shr CID_REV_SHIFT;
  socitype := (chipidbuf and CID_TYPE_MASK) shr CID_TYPE_SHIFT;
- if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'chipid ' + inttohex(chipid,4) + ' chiprev ' + inttohex(chiprev, 4) + ' socitype ' + inttohex(socitype,4));
- {$endif}
+ if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: chipid ' + inttohex(chipid,4) + ' chiprev ' + inttohex(chiprev, 4) + ' socitype ' + inttohex(socitype,4));
+ {$ENDIF}
 
  // read pointer to core info structure.
  // 63*4 is yucky. Could do with a proper address definition for it.
- Result := SDIODeviceReadWriteExtended(@WIFI^.MMC, False, BACKPLANE_FUNCTION, 63*4, true, @addressbytes[1], 0, 4);
+ Result := SDIODeviceReadWriteExtended(Network^.Func1^.MMC, False, BACKPLANE_FUNCTION, 63*4, true, @addressbytes[1], 0, 4);
  address := plongint(@addressbytes[1])^;
 
- {$ifdef CYW43455_DEBUG}
- if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Core info pointer is read as ' + inttohex(address, 8));
- {$endif}
+ {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+ if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: Core info pointer is read as ' + inttohex(address, 8));
+ {$ENDIF}
 
  // we must get the top 15 bits from the address and set the bakplane window to it
- WIFIDeviceSetBackplaneWindow(WIFI, address);
+ WIFIDeviceSetBackplaneWindow(Network, address);
 
  address := (address and $7fff) or $8000;
 
  try
    // read the core info from the device
-   Result := SDIODeviceReadWriteExtended(@WIFI^.MMC, False, BACKPLANE_FUNCTION, address, true, buf, 8, 64);
+   Result := SDIODeviceReadWriteExtended(Network^.Func1^.MMC, False, BACKPLANE_FUNCTION, address, true, buf, 8, 64);
    if (Result <> MMC_STATUS_SUCCESS) then
    begin
-     WIFILogError(nil, 'Failed to read Core information from the SDIO device.');
+     WIFILogError(nil, 'CYW43455: Failed to read Core information from the SDIO device.');
      exit;
    end;
 
-   {$ifdef CYW43455_DEBUG}
+   {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
    // dump the block into the log so we can take a look at it during development
    // this code will be deleted later.
    str := '';
@@ -2546,7 +2008,7 @@ begin
      end;
    end;
    if WIFI_LOG_ENABLED then WIFILogDebug(nil, str);
-   {$endif}
+   {$ENDIF}
 
    coreid := 0;
    corerev := 0;
@@ -2557,9 +2019,9 @@ begin
     begin
        case buf[i] and $0f of
  	    $0F: begin
-                   {$ifdef CYW43455_DEBUG}
-                   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Reached end of descriptor');
-                   {$endif}
+                   {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+                   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: Reached end of descriptor');
+                   {$ENDIF}
 
                    break;
                  end;
@@ -2578,44 +2040,44 @@ begin
   		    case coreid of
   		      $800:
                       begin
-                         WIFI^.chipcommon := addr;
+                         Network^.chipcommon := addr;
                       end;
                       ARMcm3,
   		      ARM7tdmi,
   		      ARMcr4:
                       begin
-                         WIFI^.armcore := coreid;
+                         Network^.armcore := coreid;
                          if ((buf[i] and $c0) > 0) then
                          begin
-                           if (WIFI^.armctl = 0) then
-                             WIFI^.armctl := addr;
+                           if (Network^.armctl = 0) then
+                             Network^.armctl := addr;
                          end
                          else
-                         if (WIFI^.armregs = 0) then
-                            WIFI^.armregs := addr;
+                         if (Network^.armregs = 0) then
+                            Network^.armregs := addr;
                       end;
 
   		      $80E:
                       begin
                          if ((buf[i] and $c0) > 0) then
-                           WIFI^.socramctl := addr
+                           Network^.socramctl := addr
                          else
-                         if (WIFI^.socramregs = 0) then
-                           WIFI^.socramregs := addr;
-                         WIFI^.socramrev := corerev;
+                         if (Network^.socramregs = 0) then
+                           Network^.socramregs := addr;
+                         Network^.socramrev := corerev;
                       end;
 
                       $829:
                       begin
                          if ((buf[i] and $c0) = 0) then
-                           WIFI^.sdregs := addr;
-                         WIFI^.sdiorev := corerev;
+                           Network^.sdregs := addr;
+                         Network^.sdiorev := corerev;
                       end;
 
                       $812:
                       begin
                          if ((buf[i] and $c0) > 0) then
-                           WIFI^.dllctl := addr;
+                           Network^.dllctl := addr;
                       end;
                     end;
                  end;
@@ -2625,119 +2087,119 @@ begin
 
     DMABufferRelease(buf);
 
-    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Corescan completed.');
+    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Corescan completed.');
 
-    {$ifdef CYW43455_DEBUG}
+    {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
     if WIFI_LOG_ENABLED then
     begin
-      WIFILogDebug(nil,'chipcommon=0x' + inttohex(WIFI^.chipcommon,8));
-      WIFILogDebug(nil,'armcore=0x' + inttohex(WIFI^.armcore,8));
-      WIFILogDebug(nil,'armctl=0x' + inttohex(WIFI^.armctl,8));
-      WIFILogDebug(nil,'armregs=0x' + inttohex(WIFI^.armregs,8));
-      WIFILogDebug(nil,'socramctl=0x' + inttohex(WIFI^.socramctl,8));
-      WIFILogDebug(nil,'socramregs=0x' + inttohex(WIFI^.socramregs,8));
-      WIFILogDebug(nil,'socramrev=0x' + inttohex(WIFI^.socramrev,8));
-      WIFILogDebug(nil,'sdregs=0x' + inttohex(WIFI^.sdregs,8));
-      WIFILogDebug(nil,'sdiorev=0x' + inttohex(WIFI^.sdiorev,8));
-      WIFILogDebug(nil,'dllctl=0x' + inttohex(WIFI^.dllctl,8));
+      WIFILogDebug(nil,'CYW43455: chipcommon=0x' + inttohex(Network^.chipcommon,8));
+      WIFILogDebug(nil,'CYW43455: armcore=0x' + inttohex(Network^.armcore,8));
+      WIFILogDebug(nil,'CYW43455: armctl=0x' + inttohex(Network^.armctl,8));
+      WIFILogDebug(nil,'CYW43455: armregs=0x' + inttohex(Network^.armregs,8));
+      WIFILogDebug(nil,'CYW43455: socramctl=0x' + inttohex(Network^.socramctl,8));
+      WIFILogDebug(nil,'CYW43455: socramregs=0x' + inttohex(Network^.socramregs,8));
+      WIFILogDebug(nil,'CYW43455: socramrev=0x' + inttohex(Network^.socramrev,8));
+      WIFILogDebug(nil,'CYW43455: sdregs=0x' + inttohex(Network^.sdregs,8));
+      WIFILogDebug(nil,'CYW43455: sdiorev=0x' + inttohex(Network^.sdiorev,8));
+      WIFILogDebug(nil,'CYW43455: dllctl=0x' + inttohex(Network^.dllctl,8));
     end;
-    {$endif}
+    {$ENDIF}
 
     Result := MMC_STATUS_SUCCESS;
 
  except
-   on e : exception do
-     WIFILogError(nil, 'exception in corescan: ' + e.message);
+   on e: exception do
+     WIFILogError(nil, 'CYW43455: exception in corescan: ' + e.message);
  end;
 
 end;
 
-function cfgreadl(WIFI : PWIFIDevice; addr : longword; trace : string = '') : longword;
+function cfgreadl(Network: PCYW43455Network; addr: longword; trace: string = ''): longword;
 begin
-  PLongWord(WIFI^.DMABuffer)^ := 0;
+  PLongWord(Network^.DMABuffer)^ := 0;
 
-  Result := SDIODeviceReadWriteExtended(@WIFI^.MMC, False, BACKPLANE_FUNCTION, (addr and $1ffff) or $8000, true, WIFI^.DMABuffer, 0, 4);
+  Result := SDIODeviceReadWriteExtended(Network^.Func1^.MMC, False, BACKPLANE_FUNCTION, (addr and $1ffff) or $8000, true, Network^.DMABuffer, 0, 4);
   if (Result <> MMC_STATUS_SUCCESS) then
-    WIFILogError(nil, 'Failed to read config item 0x'+inttohex(addr, 8) + ' result='+inttostr(Result));
+    WIFILogError(nil, 'CYW43455: Failed to read config item 0x'+inttohex(addr, 8) + ' result='+inttostr(Result));
 
-  Result := PLongWord(WIFI^.DMABuffer)^;
+  Result := PLongWord(Network^.DMABuffer)^;
 end;
 
-procedure cfgwritel(WIFI : PWIFIDevice; addr : longword; v : longword; trace : string = '');
+procedure cfgwritel(Network: PCYW43455Network; addr: longword; v: longword; trace: string = '');
 var
-  Result : longword;
+  Result: longword;
 begin
- PLongWord(WIFI^.DMABuffer)^ := v;
+ PLongWord(Network^.DMABuffer)^ := v;
 
- Result := SDIODeviceReadWriteExtended(@WIFI^.MMC, True, BACKPLANE_FUNCTION, (addr and $1ffff) or $8000, true, WIFI^.DMABuffer, 0, 4);
+ Result := SDIODeviceReadWriteExtended(Network^.Func1^.MMC, True, BACKPLANE_FUNCTION, (addr and $1ffff) or $8000, true, Network^.DMABuffer, 0, 4);
  if (Result <> MMC_STATUS_SUCCESS) then
-   WIFILogError(nil,'Failed to update config item 0x'+inttohex(addr, 8));
+   WIFILogError(nil,'CYW43455: Failed to update config item 0x'+inttohex(addr, 8));
 end;
 
-procedure cfgw(WIFI : PWIFIDevice; offset : longword; value : byte);
+procedure cfgw(Network: PCYW43455Network; offset: longword; value: byte);
 var
-  Result : longword;
+  Result: longword;
 begin
-  Result := SDIODeviceReadWriteDirect(@WIFI^.MMC, True, BACKPLANE_FUNCTION, offset, value, nil);
+  Result := SDIODeviceReadWriteDirect(Network^.Func1^.MMC, True, BACKPLANE_FUNCTION, offset, value, nil);
   if (Result <> MMC_STATUS_SUCCESS) then
-    WIFILogError(nil, 'Failed to write config item 0x'+inttohex(offset, 8));
+    WIFILogError(nil, 'CYW43455: Failed to write config item 0x'+inttohex(offset, 8));
 end;
 
-function cfgr(WIFI : PWIFIDevice; offset : longword) : byte;
+function cfgr(Network: PCYW43455Network; offset: longword): byte;
 var
-  Res : longword;
-  value : byte;
+  Res: longword;
+  value: byte;
 begin
-  Res := SDIODeviceReadWriteDirect(@WIFI^.MMC, False, BACKPLANE_FUNCTION, offset, 0, @value);
+  Res := SDIODeviceReadWriteDirect(Network^.Func1^.MMC, False, BACKPLANE_FUNCTION, offset, 0, @value);
   if (Res <> MMC_STATUS_SUCCESS) then
-    WIFILogError(nil, 'Failed to read config item 0x'+inttohex(offset, 8));
+    WIFILogError(nil, 'CYW43455: Failed to read config item 0x'+inttohex(offset, 8));
 
   Result := value;
 end;
 
-procedure sbdisable(WIFI : PWIFIDevice; regs : longword; pre : word; ioctl : word);
+procedure sbdisable(Network: PCYW43455Network; regs: longword; pre: word; ioctl: word);
 begin
  try
-  WIFIDeviceSetBackplaneWindow(WIFI,  regs);
+  WIFIDeviceSetBackplaneWindow(Network,  regs);
 
-  if ((cfgreadl(WIFI, regs + Resetctrl) and 1) <> 0) then
+  if ((cfgreadl(Network, regs + Resetctrl) and 1) <> 0) then
   begin
-    cfgwritel(WIFI, regs + Ioctrl, 3 or ioctl);
-    cfgreadl(WIFI, regs + Ioctrl);
+    cfgwritel(Network, regs + Ioctrl, 3 or ioctl);
+    cfgreadl(Network, regs + Ioctrl);
     exit;
   end;
 
-  cfgwritel(WIFI, regs + Ioctrl, 3 or pre);
-  cfgreadl(WIFI, regs + Ioctrl);
-  cfgwritel(WIFI, regs + Resetctrl, 1);
+  cfgwritel(Network, regs + Ioctrl, 3 or pre);
+  cfgreadl(Network, regs + Ioctrl);
+  cfgwritel(Network, regs + Resetctrl, 1);
 
   MicrosecondDelay(10);
 
-  while((cfgreadl(WIFI, regs + Resetctrl) and 1) = 0) do
+  while((cfgreadl(Network, regs + Resetctrl) and 1) = 0) do
     begin
       MicrosecondDelay(10);
     end;
 
-  cfgwritel(WIFI, regs + Ioctrl, 3 or ioctl);
-  cfgreadl(WIFI, regs + Ioctrl);
+  cfgwritel(Network, regs + Ioctrl, 3 or ioctl);
+  cfgreadl(Network, regs + Ioctrl);
  except
-   on e : exception do
-     WIFILogError(nil, 'exception in sbdisable 0x' + inttohex(longword(exceptaddr), 8));
+   on e: exception do
+     WIFILogError(nil, 'CYW43455: exception in sbdisable 0x' + PtrToHex(exceptaddr));
  end;
 end;
 
-procedure sbmem(WIFI : PWIFIDevice; write : boolean; buf : pointer; len : longword; off : longword);
+procedure sbmem(Network: PCYW43455Network; write: boolean; buf: pointer; len: longword; off: longword);
 var
-  n : longword;
-  addr : longword;
-  Res : longword;
+  n: longword;
+  addr: longword;
+  Res: longword;
 begin
   n := (((off)+(Sbwsize)-1) div (Sbwsize) * (Sbwsize)) - off;
   if (n = 0) then
     n := Sbwsize;
 
   {$ifdef CYW43455_SDIO_DEBUG}
-  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'sbmem len='+inttostr(len) + ' n=' + inttostr(n) + ' offset=0x'+inttohex(off,8) + ' off&(sbwsize-1)=0x' + inttohex(off and (Sbwsize-1), 8));
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: sbmem len='+inttostr(len) + ' n=' + inttostr(n) + ' offset=0x'+inttohex(off,8) + ' off&(sbwsize-1)=0x' + inttohex(off and (Sbwsize-1), 8));
   {$endif}
 
   while (len > 0) do
@@ -2745,23 +2207,23 @@ begin
     if (n > len) then
       n := len;
 
-    WIFIDeviceSetBackplaneWindow(WIFI, off);
+    WIFIDeviceSetBackplaneWindow(Network, off);
     addr := off and (sbwsize-1);
 
     if (len >= 4) then
       addr := addr or $8000;
 
-    if (n < WIFI_BAK_BLK_BYTES) then
-      Res := SDIODeviceReadWriteExtended(@WIFI^.MMC, True, BACKPLANE_FUNCTION, addr, true, buf, 0, n)
+    if (n < Network^.Func1^.MaxBlockSize) then
+      Res := SDIODeviceReadWriteExtended(Network^.Func1^.MMC, True, BACKPLANE_FUNCTION, addr, true, buf, 0, n)
     else
     begin
-      Res := SDIODeviceReadWriteExtended(@WIFI^.MMC, True, BACKPLANE_FUNCTION, addr, true, buf, n div WIFI_BAK_BLK_BYTES, WIFI_BAK_BLK_BYTES);
-      n := (n div WIFI_BAK_BLK_BYTES) * WIFI_BAK_BLK_BYTES;
+      Res := SDIODeviceReadWriteExtended(Network^.Func1^.MMC, True, BACKPLANE_FUNCTION, addr, true, buf, n div Network^.Func1^.MaxBlockSize, Network^.Func1^.MaxBlockSize);
+      n := (n div Network^.Func1^.MaxBlockSize) * Network^.Func1^.MaxBlockSize;
     end;
 
     if (Res <> MMC_STATUS_SUCCESS) then
     begin
-      WIFILogError(nil, 'Error transferring to/from backplane 0x' + inttohex(addr,8) + ' ' + inttostr(n) + 'bytes (write='+booltostr(write, true)+')');
+      WIFILogError(nil, 'CYW43455: Error transferring to/from backplane 0x' + inttohex(addr,8) + ' ' + inttostr(n) + 'bytes (write='+booltostr(write, true)+')');
     end;
 
     off += n;
@@ -2771,115 +2233,115 @@ begin
   end;
 end;
 
-procedure sbreset(WIFI : PWIFIDevice; regs : longword; pre : word; ioctl : word);
+procedure sbreset(Network: PCYW43455Network; regs: longword; pre: word; ioctl: word);
 
 begin
- sbdisable(WIFI, regs, pre, ioctl);
- WIFIDeviceSetBackplaneWindow(WIFI, regs);
- {$ifdef CYW43455_DEBUG}
- if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'sbreset entry regs 0x' + inttohex(regs, 8) + ' regs+ioctrl val 0x'
-                   + inttohex(cfgreadl(WIFI, regs + IOCtrl), 8)
-                   + ' regs+resetctrl val 0x ' + inttohex(cfgreadl(WIFI, regs + Resetctrl), 8));
- {$endif}
+ sbdisable(Network, regs, pre, ioctl);
+ WIFIDeviceSetBackplaneWindow(Network, regs);
+ {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+ if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: sbreset entry regs 0x' + inttohex(regs, 8) + ' regs+ioctrl val 0x'
+                   + inttohex(cfgreadl(Network, regs + IOCtrl), 8)
+                   + ' regs+resetctrl val 0x ' + inttohex(cfgreadl(Network, regs + Resetctrl), 8));
+ {$ENDIF}
 
-  while ((cfgreadl(WIFI, regs + Resetctrl) and 1) <> 0) do
+  while ((cfgreadl(Network, regs + Resetctrl) and 1) <> 0) do
   begin
-    cfgwritel(WIFI, regs + Resetctrl, 0);
+    cfgwritel(Network, regs + Resetctrl, 0);
     MicrosecondDelay(40);
   end;
 
-  cfgwritel(WIFI, regs + Ioctrl, 1 or ioctl);
-  cfgreadl(WIFI, regs + Ioctrl);
+  cfgwritel(Network, regs + Ioctrl, 1 or ioctl);
+  cfgreadl(Network, regs + Ioctrl);
 
-  {$ifdef CYW43455_DEBUG}
-  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'sbreset exit regs+ioctrl val 0x' + inttohex(cfgreadl(WIFI, regs + IOCtrl), 8)
-                    + ' regs+resetctrl val 0x ' + inttohex(cfgreadl(WIFI, regs + Resetctrl), 8));
-  {$endif}
+  {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: sbreset exit regs+ioctrl val 0x' + inttohex(cfgreadl(Network, regs + IOCtrl), 8)
+                    + ' regs+resetctrl val 0x ' + inttohex(cfgreadl(Network, regs + Resetctrl), 8));
+  {$ENDIF}
 end;
 
-procedure WIFIDeviceRamScan(WIFI : PWIFIDevice);
+procedure WIFIDeviceRamScan(Network: PCYW43455Network);
 var
- n, size : longword;
- r : longword;
- banks, i : longword;
+ n, size: longword;
+ r: longword;
+ banks, i: longword;
 begin
-  if (WIFI^.armcore = ARMcr4) then
+  if (Network^.armcore = ARMcr4) then
   begin
-    r := WIFI^.armregs;
-    {$ifdef CYW43455_DEBUG}
-    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'ramscan armcr4 0x' + inttohex(r, 8));
-    {$endif}
+    r := Network^.armregs;
+    {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: ramscan armcr4 0x' + inttohex(r, 8));
+    {$ENDIF}
 
-    WIFIDeviceSetBackplaneWindow(WIFI, r);
+    WIFIDeviceSetBackplaneWindow(Network, r);
     r := (r and $7fff) or $8000;
-    n := cfgreadl(WIFI, r + Cr4Cap);
+    n := cfgreadl(Network, r + Cr4Cap);
 
-    {$ifdef CYW43455_DEBUG}
-    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'cr4 banks 0x' + inttohex(n, 8));
-    {$endif}
+    {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: cr4 banks 0x' + inttohex(n, 8));
+    {$ENDIF}
 
     banks := ((n shr 4) and $F) + (n and $F);
     size := 0;
 
-    {$ifdef CYW43455_DEBUG}
-    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'banks='+inttostr(banks));
-    {$endif}
+    {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: banks='+inttostr(banks));
+    {$ENDIF}
 
     for i := 0 to banks - 1 do
     begin
-       cfgwritel(WIFI, r + Cr4Bankidx, i);
-       n := cfgreadl(WIFI, r + Cr4Bankinfo);
-       {$ifdef CYW43455_DEBUG}
-       if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'bank ' + inttostr(i) + ' reg 0x' + inttohex(n, 2) + ' size 0x' + inttohex(8192 * ((n and $3F) + 1), 8));
-       {$endif}
+       cfgwritel(Network, r + Cr4Bankidx, i);
+       n := cfgreadl(Network, r + Cr4Bankinfo);
+       {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+       if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: bank ' + inttostr(i) + ' reg 0x' + inttohex(n, 2) + ' size 0x' + inttohex(8192 * ((n and $3F) + 1), 8));
+       {$ENDIF}
 
        size += 8192 * ((n and $3F) + 1);
     end;
-    WIFI^.socramsize := size;
-    WIFI^.rambase := $198000;
-    {$ifdef CYW43455_DEBUG}
-    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Socram size=0x'+inttohex(size, 8) + ' rambase=0x'+inttohex(WIFI^.rambase, 8));
-    {$endif}
+    Network^.socramsize := size;
+    Network^.rambase := $198000;
+    {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: Socram size=0x'+inttohex(size, 8) + ' rambase=0x'+inttohex(Network^.rambase, 8));
+    {$ENDIF}
 
     exit;
   end;
 
-  sbreset(WIFI, WIFI^.socramctl, 0, 0);
-  r := WIFI^.socramregs;
-  WIFIDeviceSetBackplaneWindow(WIFI, r);
-  n := cfgreadl(WIFI, r + Coreinfo);
+  sbreset(Network, Network^.socramctl, 0, 0);
+  r := Network^.socramregs;
+  WIFIDeviceSetBackplaneWindow(Network, r);
+  n := cfgreadl(Network, r + Coreinfo);
 
-  {$ifdef CYW43455_DEBUG}
-  if WIFI_LOG_ENABLED then WIFILogDebug(nil ,'socramrev ' + inttostr(WIFI^.socramrev) + ' coreinfo 0x' + inttohex(n, 8));
-  {$endif}
+  {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil ,'CYW43455: socramrev ' + inttostr(Network^.socramrev) + ' coreinfo 0x' + inttohex(n, 8));
+  {$ENDIF}
 
   banks := (n>>4) and $F;
   size := 0;
   for i := 0 to banks-1 do
   begin
-    cfgwritel(WIFI, r + Bankidx, i);
-    n := cfgreadl(WIFI, r + Bankinfo);
-    {$ifdef CYW43455_DEBUG}
-    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'bank ' + inttostr(i) + ' reg 0x' + inttohex(n, 2) + ' size 0x' + inttohex(8192 * ((n and $3F) + 1), 8));
-    {$endif}
+    cfgwritel(Network, r + Bankidx, i);
+    n := cfgreadl(Network, r + Bankinfo);
+    {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: bank ' + inttostr(i) + ' reg 0x' + inttohex(n, 2) + ' size 0x' + inttohex(8192 * ((n and $3F) + 1), 8));
+    {$ENDIF}
 
     size += 8192 * ((n and $3F) + 1);
   end;
-  WIFI^.socramsize := size;
-  WIFI^.rambase := 0;
-  if(WIFI^.chipid = 43430) then
+  Network^.socramsize := size;
+  Network^.rambase := 0;
+  if(Network^.chipid = 43430) then
   begin
-    {$ifdef CYW43455_DEBUG}
-    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'updating bankidx values for 43430');
-    {$endif}
+    {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: updating bankidx values for 43430');
+    {$ENDIF}
 
-    cfgwritel(WIFI, r + Bankidx, 3);
-    cfgwritel(WIFI, r + Bankpda, 0);
+    cfgwritel(Network, r + Bankidx, 3);
+    cfgwritel(Network, r + Bankpda, 0);
   end;
 
-  {$ifdef CYW43455_DEBUG}
-  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Socram size=0x'+inttohex(size, 8) + ' rambase=0x'+inttohex(WIFI^.rambase, 8));
-  {$endif}
+  {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: Socram size=0x'+inttohex(size, 8) + ' rambase=0x'+inttohex(Network^.rambase, 8));
+  {$ENDIF}
 end;
 
 (*
@@ -2892,12 +2354,12 @@ end;
  *	- pad with nulls to multiple of 4 bytes total length
  *)
 
-function condense(buf : pchar; n : integer) : integer;
+function condense(buf: pchar; n: integer): integer;
 var
- p, ep, lp, op : pchar;
- c : char;
- skipping : boolean;
- // i : integer;
+ p, ep, lp, op: pchar;
+ c: char;
+ skipping: boolean;
+ // i: integer;
 begin
 
   Result := 0;
@@ -2912,9 +2374,9 @@ begin
     c := p^;
 
     case c of
-      '#' : skipping := true;
+      '#': skipping := true;
       #0,
-      #10 : begin
+      #10: begin
               skipping := false;
     	      if (op <> lp) then
               begin
@@ -2957,7 +2419,7 @@ begin
   Result := n;
 end;
 
-procedure put4(var p : byte4; v : longword);
+procedure put4(var p: byte4; v: longword);
 begin
   p[1] := byte(v and $ff);
   p[2] := byte(v >> 8);
@@ -2965,7 +2427,7 @@ begin
   p[4] := byte(v >> 24);
 end;
 
-procedure put4_2(p  : pbyte; v : longword);
+procedure put4_2(p: pbyte; v: longword);
 begin
   p^ := byte(v and $ff);
   (p+1)^ := byte(v >> 8);
@@ -2973,38 +2435,40 @@ begin
   (p+3)^ := byte(v >> 24);
 end;
 
-procedure put2(p : pbyte; v : word);
+procedure put2(p: pbyte; v: word);
 begin
   p^ := v and $ff;
   (p+1)^ := (v shr 8) and $ff;
 end;
 
-function WIFIDeviceDownloadFirmware(WIFI : PWIFIDevice) : Longword;
+function WIFIDeviceDownloadFirmware(Network: PCYW43455Network): Longword;
 
 var
- FirmwareFile : file of byte;
- firmwarep : pbyte;
- off : longword;
- fsize : longword;
- i : integer;
- lastramvalue : longword;
- chunksize : longword;
- bytesleft : longword;
- bytestransferred : longword;
- Found : boolean;
- ConfigFilename : string;
- FirmwareFilename : string;
- bytebuf : array[1..4] of byte;
+ firmwarep: pbyte;
+ off: longword;
+ fsize: LongInt;
+ i: integer;
+ lastramvalue: longword;
+ chunksize: LongInt;
+ bytesleft: longword;
+ bytestransferred: LongInt;
+ Found: boolean;
+ ConfigFilename: string;
+ FirmwareFilename: string;
+ bytebuf: array[1..4] of byte;
+
+ Handle: THandle;
+ Status: LongWord;
 begin
  try
   Result := MMC_STATUS_INVALID_PARAMETER;
 
   // zero out an address of some sort which is at the top of the ram?
   lastramvalue := 0;
-  WIFIDeviceSetBackplaneWindow(WIFI, WIFI^.rambase + WIFI^.socramsize - 4);
-  SDIODeviceReadWriteExtended(@WIFI^.MMC, True, BACKPLANE_FUNCTION, (WIFI^.rambase + WIFI^.socramsize - 4) and $7fff{ or $8000}, true, @lastramvalue, 0, 4);
+  WIFIDeviceSetBackplaneWindow(Network, Network^.rambase + Network^.socramsize - 4);
+  SDIODeviceReadWriteExtended(Network^.Func1^.MMC, True, BACKPLANE_FUNCTION, (Network^.rambase + Network^.socramsize - 4) and $7fff{ or $8000}, true, @lastramvalue, 0, 4);
 
-  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Starting WIFI firmware load...');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Starting WIFI firmware load...');
 
   // locate firmware detils based on chip id and revision
 
@@ -3012,10 +2476,10 @@ begin
 
   for i := 1 to FIRWMARE_OPTIONS_COUNT do
   begin
-    if (firmware[i].chipid = WIFI^.chipid) and (firmware[i].chipidrev = WIFI^.chipidrev) then
+    if (firmware[i].chipid = Network^.chipid) and (firmware[i].chipidrev = Network^.chipidrev) then
     begin
-      FirmwareFilename := FIRMWARE_FILENAME_ROOT + firmware[i].firmwarefilename;
-      ConfigFilename := FIRMWARE_FILENAME_ROOT + firmware[i].configfilename;
+      FirmwareFilename := firmware[i].firmwarefilename;
+      ConfigFilename := firmware[i].configfilename;
       Found := true;
       break;
     end;
@@ -3023,95 +2487,105 @@ begin
 
   if (not Found) then
   begin
-    WIFILogError(nil, 'Unable to find a suitable firmware file to load for chip id 0x' + inttohex(WIFI^.chipid, 4) + ' revision 0x' + inttohex(WIFI^.chipidrev, 4));
+    WIFILogError(nil, 'CYW43455: Unable to find a suitable firmware file to load for chip id 0x' + inttohex(Network^.chipid, 4) + ' revision 0x' + inttohex(Network^.chipidrev, 4));
     exit;
   end;
 
-  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Using ' + FirmwareFilename + ' for firmware.');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Using ' + FirmwareFilename + ' for firmware.');
 
-  // open file and read entire block into memory. Perhaps ought to do this in
-  // chunks really? If we do, then the verify stuff needs to be done a chunk
-  // at a time as well.
-
-  if (not FileExists(FirmwareFilename)) then
+  // Open firmware file
+  Status := DeviceFirmwareOpen(DEVICE_CLASS_ANY, FirmwareFilename, CYW43455_FIRMWARE_TIMEOUT, Handle);
+  if Status <> ERROR_SUCCESS then
   begin
-    Result := MMC_STATUS_INVALID_DATA;
-    exit;
+    if Status <> ERROR_NOT_READY then
+    begin
+      Result := MMC_STATUS_DEVICE_UNSUPPORTED;
+      Exit;
+    end
+    else
+    begin
+      Result := MMC_STATUS_NOT_READY;
+      Exit;
+    end;
   end;
 
-  assignfile(FirmwareFile, FirmwareFilename);
-  reset(FirmwareFile);
-  fsize := filesize(FirmwareFile);
-  firmwarep := DMABufferAllocate(DMAHostGetDefault, fsize);
+  fsize := DeviceFirmwareSize(Handle);
+
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Size of firmware file is ' + inttostr(fsize) + ' bytes');
+
+  firmwarep := DMABufferAllocate(DMAHostGetDefault, FIRMWARE_CHUNK_SIZE);
 
   if not(DMA_CACHE_COHERENT) then
    begin
     // Clean Cache (Dest)
-    CleanDataCacheRange(PtrUInt(firmwarep), fsize);
+    CleanDataCacheRange(PtrUInt(firmwarep), FIRMWARE_CHUNK_SIZE);
    end;
 
-  blockread(FirmwareFile, firmwarep^, fsize);
-  closefile(FirmwareFile);
-
-  // transfer firmware over the bus to the chip.
-  // first, grab the reset vector from the first 4 bytes of the firmware.
-  // Not needed on a Pi Zero as the firmware loads at addres 0 by default - needs updating to suit.
-
-  move(firmwarep^, WIFI^.resetvec, 4);
-  {$ifdef CYW43455_DEBUG}
-  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Reset vector of 0x' + inttohex(WIFI^.resetvec, 8) + ' copied out of firmware');
-  {$endif}
-
+  // Upload File
   off := 0;
-  if (fsize > FIRMWARE_CHUNK_SIZE) then
-    chunksize := FIRMWARE_CHUNK_SIZE
-  else
-    chunksize := fsize;
-
-  // dword align the buffer size.
-  if (fsize mod 4 <> 0) then
-    fsize := ((fsize div 4) + 1) * 4;
-
-  {$ifdef CYW43455_DEBUG}
-  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Bytes to transfer: ' + inttostr(fsize));
-  {$endif}
-
   bytestransferred := 0;
 
   while bytestransferred < fsize do
   begin
-    sbmem(WIFI, true, firmwarep+off, chunksize, WIFI^.rambase + off);
-    bytestransferred := bytestransferred + chunksize;
+    // Read Next Block
+    chunksize := DeviceFirmwareRead(Handle, firmwarep, FIRMWARE_CHUNK_SIZE);
+    if chunksize <= 0 then
+      Break;
 
-    off += chunksize;
-    bytesleft := fsize - bytestransferred;
-    if (bytesleft < chunksize) then
-      chunksize := bytesleft;
+    if off = 0 then
+    begin
+      // Copy the reset vector from the first 4 bytes of the firmware.
+      // Not needed on a Pi Zero as the firmware loads at addres 0 by default - needs updating to suit.
+      move(firmwarep^, Network^.resetvec, 4);
+
+      {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+      if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: Reset vector of 0x' + inttohex(Network^.resetvec, 8) + ' copied out of firmware');
+      {$ENDIF}
+    end;
+
+    // Zero Pad Unaligned Bytes
+    while (chunksize and 3) <> 0 do
+     begin
+      firmwarep[chunksize] := 0;
+      Inc(chunksize);
+     end;
+
+    // Upload Block
+    sbmem(Network, true, firmwarep, chunksize, Network^.rambase + off);
+    Inc(bytestransferred, chunksize);
+
+    Inc(off, chunksize);
   end;
-
-  off := 0;
-  if (fsize > FIRMWARE_CHUNK_SIZE) then
-    chunksize := FIRMWARE_CHUNK_SIZE
-  else
-    chunksize := fsize;
 
   DMABufferRelease(firmwarep);
 
-  // now we need to upload the configuration to ram
+  // Close firmware file
+  DeviceFirmwareClose(Handle);
 
-  if (not FileExists(ConfigFilename)) then
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Finished transferring firmware file to socram');
+
+  // now we need to upload the configuration to ram
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Using ' + ConfigFilename + ' for config.');
+
+  // Open configuration file
+  Status := DeviceFirmwareOpen(DEVICE_CLASS_ANY, ConfigFilename, CYW43455_FIRMWARE_TIMEOUT, Handle);
+  if Status <> ERROR_SUCCESS then
   begin
-    Result := MMC_STATUS_INVALID_DATA;
-    exit;
+    if Status <> ERROR_NOT_READY then
+    begin
+      Result := MMC_STATUS_DEVICE_UNSUPPORTED;
+      Exit;
+    end
+    else
+    begin
+      Result := MMC_STATUS_NOT_READY;
+      Exit;
+    end;
   end;
 
-  AssignFile(FirmwareFile, ConfigFilename);
-  Reset(FirmwareFile);
-  FSize := FileSize(FirmwareFile);
+  FSize := DeviceFirmwareSize(Handle);
 
-  {$ifdef CYW43455_DEBUG}
-  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Size of firmware config file is ' + inttostr(fsize) + ' bytes');
-  {$endif}
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Size of config file is ' + inttostr(fsize) + ' bytes');
 
   // dword align to be sure
   if (fsize mod 4 <> 0) then
@@ -3125,23 +2599,26 @@ begin
     CleanDataCacheRange(PtrUInt(firmwarep), fsize);
    end;
 
-  BlockRead(FirmwareFile, FirmwareP^, FileSize(FirmwareFile));
+  // Read configuration file
+  DeviceFirmwareRead(Handle, firmwarep, DeviceFirmwareSize(Handle));
 
-  fsize := Condense(PChar(FirmwareP), Filesize(FirmwareFile)); // note we deliberately *don't* use fsize here!
+  fsize := Condense(PChar(FirmwareP), DeviceFirmwareSize(Handle)); // note we deliberately *don't* use fsize here!
 
-  CloseFile(FirmwareFile);
+  // Close configuration file
+  DeviceFirmwareClose(Handle);
 
   // Although what we've done here is correct, I noticed that ether4330.c only
   // reads the first 2048 bytes of the config which it then condenses, resulting
   // in a config string of 1720 bytes which misses off the last few items and
-  // truncates on of the assigned values.
+  // truncates one of the assigned values.
   // This just looks like a simple bug - on a Pi3B the file is about 2074 bytes
   // and perhaps in the past it was smaller so would fit in the 2048 byte read.
 
-  off := WIFI^.rambase + WIFI^.socramsize - fsize - 4;
-  {$ifdef CYW43455_DEBUG}
-  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Tansferring config file to socram at offset 0x' + inttohex(off, 8));
-  {$endif}
+  off := Network^.rambase + Network^.socramsize - fsize - 4;
+
+  {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: Tansferring config file to socram at offset 0x' + inttohex(off, 8));
+  {$ENDIF}
 
   bytestransferred := 0;
 
@@ -3152,7 +2629,7 @@ begin
 
   while bytestransferred < fsize do
   begin
-    sbmem(WIFI, true, firmwarep+bytestransferred, chunksize, off);
+    sbmem(Network, true, firmwarep+bytestransferred, chunksize, off);
     bytestransferred := bytestransferred + chunksize;
 
     off += chunksize;
@@ -3163,7 +2640,7 @@ begin
 
   DMABufferRelease(firmwarep);
 
-  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Finished transferring config file to socram');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Finished transferring config file to socram');
 
   // I believe this is some sort of checksum
   fsize := fsize div 4;
@@ -3172,331 +2649,357 @@ begin
   // write checksum thingy to ram.
 
   put4(bytebuf, fsize);
-  sbmem(WIFI, true, @bytebuf[1], 4, WIFI^.rambase + WIFI^.socramsize - 4);
+  sbmem(Network, true, @bytebuf[1], 4, Network^.rambase + Network^.socramsize - 4);
 
   // I think this brings the arm core back up after writing the firmware.
-  if (WIFI^.armcore = ARMcr4) then
+  if (Network^.armcore = ARMcr4) then
   begin
-     WIFIDeviceSetBackplaneWindow(WIFI, WIFI^.sdregs);
-     cfgwritel(WIFI, WIFI^.sdregs + IntStatus, $ffffffff);
+     WIFIDeviceSetBackplaneWindow(Network, Network^.sdregs);
+     cfgwritel(Network, Network^.sdregs + IntStatus, $ffffffff);
      // write reset vector to bottom of RAM
-     if (WIFI^.resetvec <> 0) then
+     if (Network^.resetvec <> 0) then
      begin
-       {$ifdef CYW43455_DEBUG}
-       if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Firmware upload: Writing reset vector to address 0');
-       {$endif}
+       {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+       if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: Firmware upload: Writing reset vector to address 0');
+       {$ENDIF}
 
-       sbmem(WIFI, true, @WIFI^.resetvec, sizeof(WIFI^.resetvec), 0);
+       sbmem(Network, true, @Network^.resetvec, sizeof(Network^.resetvec), 0);
      end;
 
      // reactivate the core.
-     sbreset(WIFI, WIFI^.armctl, Cr4Cpuhalt, 0);
+     sbreset(Network, Network^.armctl, Cr4Cpuhalt, 0);
   end
   else
-     sbreset(WIFI, WIFI^.armctl, 0, 0);
+     sbreset(Network, Network^.armctl, 0, 0);
  except
-   on e : exception do
-     WIFILogError(nil, 'exception : ' + e.message + ' at address ' + inttohex(longword(exceptaddr),8));
+   on e: exception do
+     WIFILogError(nil, 'CYW43455: exception: ' + e.message + ' at address ' + PtrToHex(exceptaddr));
  end;
 end;
 
-procedure sbenable(WIFI : PWIFIDevice);
+procedure sbenable(Network: PCYW43455Network);
 var
-  i : integer;
-  iobits : byte;
-  mbox : longword;
-  ints : longword;
+  i: integer;
+  mbox: longword;
+  ints: longword;
+  Status: LongWord;
 begin
-  WIFIDeviceSetBackplaneWindow(WIFI, BAK_BASE_ADDR);
-  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Enabling high throughput clock...');
-  cfgw(WIFI, BAK_CHIP_CLOCK_CSR_REG, 0);
+  WIFIDeviceSetBackplaneWindow(Network, BAK_BASE_ADDR);
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Enabling high throughput clock...');
+  cfgw(Network, BAK_CHIP_CLOCK_CSR_REG, 0);
   sleep(1);
-  cfgw(WIFI, BAK_CHIP_CLOCK_CSR_REG, ReqHT);
+  cfgw(Network, BAK_CHIP_CLOCK_CSR_REG, ReqHT);
 
   // wait for HT clock to become available. 100ms timeout approx
   i := 0;
-  while ((cfgr(WIFI, BAK_CHIP_CLOCK_CSR_REG) and HTavail) = 0) do
+  while ((cfgr(Network, BAK_CHIP_CLOCK_CSR_REG) and HTavail) = 0) do
   begin
     i += 1;
     if (i = 100) then
     begin
-      WIFILogError(nil, 'Could not enable HT clock; csr=' + inttohex(cfgr(WIFI, BAK_CHIP_CLOCK_CSR_REG), 8));
+      WIFILogError(nil, 'CYW43455: Could not enable HT clock; csr=' + inttohex(cfgr(Network, BAK_CHIP_CLOCK_CSR_REG), 8));
       exit;
     end;
 
     Sleep(1);
   end;
 
-  cfgw(WIFI, BAK_CHIP_CLOCK_CSR_REG, cfgr(WIFI, BAK_CHIP_CLOCK_CSR_REG) or ForceHT);
+  cfgw(Network, BAK_CHIP_CLOCK_CSR_REG, cfgr(Network, BAK_CHIP_CLOCK_CSR_REG) or ForceHT);
   sleep(10);
 
-  {$ifdef CYW43455_DEBUG}
-  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'After request for HT clock, CSR_REG=0x' + inttohex(cfgr(WIFI, BAK_CHIP_CLOCK_CSR_REG), 4));
-  {$endif}
+  {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: After request for HT clock, CSR_REG=0x' + inttohex(cfgr(Network, BAK_CHIP_CLOCK_CSR_REG), 4));
+  {$ENDIF}
 
-  WIFIDeviceSetBackplaneWindow(WIFI, WIFI^.sdregs);
+  WIFIDeviceSetBackplaneWindow(Network, Network^.sdregs);
 
-  cfgwritel(WIFI, WIFI^.sdregs + Sbmboxdata, 4 shl 16);   // set protocol version
-  cfgwritel(WIFI, WIFI^.sdregs + Intmask, FrameInt or MailboxInt or Fcchange);
+  cfgwritel(Network, Network^.sdregs + Sbmboxdata, 4 shl 16);   // set protocol version
+  cfgwritel(Network, Network^.sdregs + Intmask, FrameInt or MailboxInt or Fcchange);
 
   // enable function 2
-  SDIODeviceReadWriteDirect(@WIFI^.MMC, False, BUS_FUNCTION, SDIO_CCCR_IOEx, 0, @iobits);
-  SDIODeviceReadWriteDirect(@WIFI^.MMC, True, BUS_FUNCTION, SDIO_CCCR_IOEx, iobits or SDIO_FUNC_ENABLE_2, nil);
-
-  // now wait for function 2 to be ready
-  i := 0;
-  iobits := 0;
-  while ((iobits and SDIO_FUNC_ENABLE_2) = 0) do
+  Status := SDIOFunctionEnable(Network^.Func2);
+  if (Status <> MMC_STATUS_SUCCESS) then
   begin
-    i += 1;
-    if (i = 10) then
-    begin
-      WIFILogError(nil, 'Could not enable SDIO function 2; iobits=0x'+inttohex(iobits, 8));
-      exit;
-    end;
+    WIFILogError(nil, 'CYW43455: io enable could not be set for function 2');
 
-    SDIODeviceReadWriteDirect(@WIFI^.MMC, False, BUS_FUNCTION, SDIO_CCCR_IORx, 0, @iobits);
-
-    Sleep(100);
+    Exit;
   end;
 
-  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Radio function (f2) successfully enabled');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Radio function (f2) successfully enabled');
 
   // enable interrupts.
-  SDIODeviceReadWriteDirect(@WIFI^.MMC,True, BUS_FUNCTION, SDIO_CCCR_IENx, (INTR_CTL_MASTER_EN or INTR_CTL_FUNC1_EN or INTR_CTL_FUNC2_EN), nil );
+  SDIODeviceReadWriteDirect(Network^.Func1^.MMC,True, BUS_FUNCTION, SDIO_CCCR_IENx, (INTR_CTL_MASTER_EN or INTR_CTL_FUNC1_EN or INTR_CTL_FUNC2_EN), nil );
 
   ints := 0;
   while (ints = 0) do
   begin
-    ints := cfgreadl(WIFI, WIFI^.sdregs + Intstatus);
-    cfgwritel(WIFI, WIFI^.sdregs + Intstatus, ints);
+    ints := cfgreadl(Network, Network^.sdregs + Intstatus);
+    cfgwritel(Network, Network^.sdregs + Intstatus, ints);
 
     if ((ints and mailboxint) > 0) then
     begin
-      mbox := cfgreadl(WIFI, WIFI^.sdregs + Hostmboxdata);
-      cfgwritel(WIFI, WIFI^.sdregs + Sbmbox, 2);	//ack
+      mbox := cfgreadl(Network, Network^.sdregs + Hostmboxdata);
+      cfgwritel(Network, Network^.sdregs + Sbmbox, 2);	//ack
       if ((mbox and $8) = $8) then
       begin
-         if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'The Broadcom firmware reports it is ready!')
+         if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: The Broadcom firmware reports it is ready!')
       end
       else
-        WIFILogError(nil, 'The firmware is not ready! mbox=0x'+inttohex(mbox, 8));
+        WIFILogError(nil, 'CYW43455: The firmware is not ready! mbox=0x'+inttohex(mbox, 8));
     end
     else
-      WIFILogError(nil, 'Mailbox interrupt was not set as expected ints=0x'+inttohex(ints, 8));
+      WIFILogError(nil, 'CYW43455: Mailbox interrupt was not set as expected ints=0x'+inttohex(ints, 8));
   end;
 
   // It seems like we need to execute a read first to kick things off. If we don't do this the first
   // IOCTL command response will be an empty one rather than the one for the IOCTL we sent.
-  if (SDIODeviceReadWriteExtended(@WIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, @ioctl_rxmsg, 0, 64) <> MMC_STATUS_SUCCESS) then
-     WIFILogError(nil, 'Unsuccessful initial read from WIFI function 2 (packets)')
+  if (SDIODeviceReadWriteExtended(Network^.Func2^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, Network^.RXBuffer, 0, 64) <> MMC_STATUS_SUCCESS) then
+     WIFILogError(nil, 'CYW43455: Unsuccessful initial read from WIFI function 2 (packets)')
   else
   begin
-   {$ifdef CYW43455_DEBUG}
-    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Successfully read function 2 first empty response.');
-   {$endif}
+   {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: Successfully read function 2 first empty response.');
+   {$ENDIF}
   end;
 
 
-  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'WIFI Device Enabled');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: WIFI Device Enabled');
 end;
 
-function WirelessIOCTLCommand(WIFI : PWIFIDevice; cmd : integer;
-                                   InputP : Pointer;
-                                   InputLen : Longword;
-                                   write : boolean; ResponseDataP : Pointer;
-                                   ResponseDataLen : integer;
-                                   trace : string = '') : longword;
+function WirelessIOCTLCommand(Network: PCYW43455Network; cmd: integer;
+                                   InputP: Pointer;
+                                   InputLen: Longword;
+                                   write: boolean; ResponseDataP: Pointer;
+                                   ResponseDataLen: integer;
+                                   trace: string = ''): longword;
 
 var
-  msgp : PIOCTL_MSG = @ioctl_txmsg;
-  responseP  : PIOCTL_MSG;
-  cmdp : IOCTL_CMDP;
-  TransmitDataLen : longword;
-  HeaderLen : longword;
-  TransmitLen : longword;
-  Res : longword;
-  WorkerRequestP : PWIFIRequestItem;
-  status : longword;
+  msgp: PIOCTL_MSG;
+  responseP: PIOCTL_MSG;
+  cmdp: IOCTL_CMDP;
+  TransmitDataLen: longword;
+  HeaderLen: longword;
+  TransmitLen: longword;
+  Res: longword;
+  WorkerRequestP: PWIFIRequestItem;
+  status: longword;
 
+  Lock: Boolean;
 begin
   Result := MMC_STATUS_INVALID_PARAMETER;
 
-  if txglom then
-    cmdp := @(msgp^.glom_cmd.cmd)
+  // Check lock already owned
+  Lock := MutexOwner(Network^.Network.Lock) <> ThreadGetCurrent;
+
+  // Acquire lock (Conditional)
+  if Lock then
+    status := MutexLock(Network^.Network.Lock)
   else
-    cmdp := @(msgp^.cmd);
-
-  {$ifdef CYW43455_SDIO_DEBUG}
-  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'wirelessioctlcmd write='+booltostr(write, true)
-                   + ' cmd='+inttostr(cmd)
-                   + ' InputLen='+inttostr(InputLen)
-                   + ' datalen='+inttostr(responsedatalen));
-  {$endif}
-
-  if (write) then
-    TransmitDataLen := InputLen + ResponseDataLen
-  else
-    TransmitDataLen := max(InputLen, ResponseDataLen);
-
-  // works out header length by subtracting addresses
-  // this might look wrong but cmdp is a pointer to msgp's cmd and msgp is
-  // a pointer to ioctl_txmsg. therefore the address are from the same instance.
-  HeaderLen := longword(@cmdp^.data) - longword(@ioctl_txmsg);
-  TransmitLen := ((HeaderLen + TransmitDataLen + 3) div 4) * 4;
-
-    // Prepare IOCTL command
-  fillchar(msgp^, sizeof(IOCTL_MSG), 0);
-
-  msgp^.len := HeaderLen + TransmitDataLen;
-  msgp^.notlen := not msgp^.len;
-
-  if (txglom) then
+    status := ERROR_SUCCESS;
+  if status = ERROR_SUCCESS then
   begin
-    msgp^.glom_cmd.glom_hdr.len := HeaderLen + TransmitDataLen - 4;
-    msgp^.glom_cmd.glom_hdr.flags := 1;
-  end;
+    try
 
-  cmdp^.sdpcmheader.seq := txseq;
-  if (txseq < 255) then
-    txseq += 1
-  else
-    txseq := 0;
+      msgp := Network^.TXBuffer;
 
-  if (txglom) then
-    cmdp^.sdpcmheader.hdrlen := 20
-  else
-    cmdp^.sdpcmheader.hdrlen := 12;
+      if Network^.txglom then
+        cmdp := @(msgp^.glom_cmd.cmd)
+      else
+        cmdp := @(msgp^.cmd);
 
-  cmdp^.cmd := cmd;
-  cmdp^.outlen := TransmitDataLen;
+      {$ifdef CYW43455_SDIO_DEBUG}
+      if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: wirelessioctlcmd write='+booltostr(write, true)
+                       + ' cmd='+inttostr(cmd)
+                       + ' InputLen='+inttostr(InputLen)
+                       + ' datalen='+inttostr(responsedatalen));
+      {$endif}
 
-  // request id is a word, so need to stay within limits.
-  if (ioctl_reqid > $fffe) then
-    ioctl_reqid := 1
-  else
-    ioctl_reqid := ioctl_reqid + 1;
+      if (write) then
+        TransmitDataLen := InputLen + ResponseDataLen
+      else
+        TransmitDataLen := max(InputLen, ResponseDataLen);
 
-  if (write) then
-    cmdp^.flags := (ioctl_reqid << 16) or 2
-  else
-    cmdp^.flags := (ioctl_reqid << 16);
+      // works out header length by subtracting addresses
+      // this might look wrong but cmdp is a pointer to msgp's cmd and msgp is
+      // a pointer to TXBuffer. therefore the address are from the same instance.
+      HeaderLen := PtrUInt(@cmdp^.data) - PtrUInt(msgp);
+      TransmitLen := ((HeaderLen + TransmitDataLen + 3) div 4) * 4;
 
-  if (InputLen > 0) then
-  begin
-    move(InputP^, cmdp^.data[0], InputLen);
-  end;
+        // Prepare IOCTL command
+      fillchar(msgp^, sizeof(IOCTL_MSG), 0);
 
-  if (write) then
-    move(ResponseDataP^, PByte(@(cmdp^.data[0])+InputLen)^, ResponseDataLen);
+      msgp^.len := HeaderLen + TransmitDataLen;
+      msgp^.notlen := not msgp^.len;
 
-  // Signal to the worker thread that we need a response for this request.
-  WorkerRequestP := WIFI^.WorkerThread.AddRequest(ioctl_reqid, [], nil, nil);
+      if (Network^.txglom) then
+      begin
+        msgp^.glom_cmd.glom_hdr.len := HeaderLen + TransmitDataLen - 4;
+        msgp^.glom_cmd.glom_hdr.flags := 1;
+      end;
 
-  // Send IOCTL command.
-  // Is it safe to submit multiple ioctl commands and then see the events come through
-  // out of order? I think so but needs testing and investigating.
-  // requests are safe because the sdio read write functions have a spinlock.
+      cmdp^.sdpcmheader.seq := Network^.txseq;
+      if (Network^.txseq < 255) then
+        Network^.txseq += 1
+      else
+        Network^.txseq := 0;
 
-  {$ifdef CYW43455_SDIO_DEBUG}
-  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'sending ' + inttostr(TransmitLen) + ' bytes to the wifi device');
-  {$endif}
+      if (Network^.txglom) then
+        cmdp^.sdpcmheader.hdrlen := 20
+      else
+        cmdp^.sdpcmheader.hdrlen := 12;
 
-  Res := SDIODeviceReadWriteExtended(@WIFI^.MMC, True, WLAN_FUNCTION, BAK_BASE_ADDR and $1FFFF{ SB_32BIT_WIN}, false, msgp, 0, TransmitLen);
-  Result := Res;
-  if (Res <> MMC_STATUS_SUCCESS) then
-    WIFILogError(nil, 'failed to send cmd53 for ioctl command ' + inttostr(res));
+      cmdp^.cmd := cmd;
+      cmdp^.outlen := TransmitDataLen;
 
-  // wait for the worker thread to process the response.
-  status := SemaphoreWaitEx(WorkerRequestP^.Signal, 10000);
-  if (status = ERROR_WAIT_TIMEOUT) then
-  begin
-    WIFI^.WorkerThread.DoneWithRequest(WorkerRequestP);
-    exit;
-  end;
+      // request id is a word, so need to stay within limits.
+      if (Network^.ioctl_reqid > $fffe) then
+        Network^.ioctl_reqid := 1
+      else
+        Network^.ioctl_reqid := Network^.ioctl_reqid + 1;
 
-  // use old variable for now so copy paste from old code works still
-  ResponseP := WorkerRequestP^.MsgP;
-  if (ResponseP = nil) then
-  begin
-    WIFILogError(nil, 'Nil response item in WirelessIOCTLCommand');
-    exit;
-  end;
+      if (write) then
+        cmdp^.flags := (Network^.ioctl_reqid << 16) or 2
+      else
+        cmdp^.flags := (Network^.ioctl_reqid << 16);
 
-  // Now we have the response we can validate it.
-  if ((responseP^.cmd.sdpcmheader.chan and $f) <> 0) then
-    WIFILogError(nil, 'IOCTL response received for a non-zero channel');
+      if (InputLen > 0) then
+      begin
+        move(InputP^, cmdp^.data[0], InputLen);
+      end;
 
-  if (((ResponseP^.cmd.flags >> 16) and $ffff) <> WorkerRequestP^.RequestID) then
-    WIFILogError(nil, 'IOCTL response received for a different request id. We got one for '
-                      + inttostr(responsep^.cmd.flags >> 16)
-                      + ' whereas our request was for '
-                      + inttostr(workerrequestp^.RequestID));
+      if (write) then
+        move(ResponseDataP^, PByte(@(cmdp^.data[0])+InputLen)^, ResponseDataLen);
 
-  // in cases where the response is smaller than the command parameters we have to move less data.
-  // need to verify this as I had some weird if statement in there before.
-  move(ResponseP^.cmd.Data[0], ResponseDataP^, ResponseDataLen);
+      // Signal to the worker thread that we need a response for this request.
+      WorkerRequestP := Network^.WorkerThread.AddRequest(Network^.ioctl_reqid, [], nil, nil);
 
-  WIFI^.WorkerThread.DoneWithRequest(WorkerRequestP);
+      // Send IOCTL command.
+      // Is it safe to submit multiple ioctl commands and then see the events come through
+      // out of order? I think so but needs testing and investigating.
+      // requests are safe because the sdio read write functions have a spinlock.
+
+      {$ifdef CYW43455_SDIO_DEBUG}
+      if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: sending ' + inttostr(TransmitLen) + ' bytes to the wifi device');
+      {$endif}
+
+      Res := SDIOFunctionWrite(Network^.Func2, BAK_BASE_ADDR and $1FFFF{ SB_32BIT_WIN}, msgp, TransmitLen);
+      if (Res <> MMC_STATUS_SUCCESS) then
+        WIFILogError(nil, 'CYW43455: failed to send cmd53 for ioctl command ' + inttostr(res));
+
+      // Release lock (Always)
+      MutexUnlock(Network^.Network.Lock);
+
+      // wait for the worker thread to process the response.
+      status := SemaphoreWaitEx(WorkerRequestP^.Signal, 10000);
+      if (status = ERROR_WAIT_TIMEOUT) then
+      begin
+        Network^.WorkerThread.DoneWithRequest(WorkerRequestP);
+
+        Lock := False;
+        exit;
+      end;
+
+      // Reacquire lock (Always)
+      status := MutexLock(Network^.Network.Lock);
+      if status <> ERROR_SUCCESS then
+      begin
+        Network^.WorkerThread.DoneWithRequest(WorkerRequestP);
+
+        exit;
+      end;
+
+      // use old variable for now so copy paste from old code works still
+      ResponseP := WorkerRequestP^.MsgP;
+      if (ResponseP = nil) then
+      begin
+        WIFILogError(nil, 'CYW43455: Nil response item in WirelessIOCTLCommand');
+        exit;
+      end;
+
+      // Now we have the response we can validate it.
+      if ((responseP^.cmd.sdpcmheader.chan and $f) <> 0) then
+        WIFILogError(nil, 'CYW43455: IOCTL response received for a non-zero channel');
+
+      if (((ResponseP^.cmd.flags >> 16) and $ffff) <> WorkerRequestP^.RequestID) then
+        WIFILogError(nil, 'CYW43455: IOCTL response received for a different request id. We got one for '
+                          + inttostr(responsep^.cmd.flags >> 16)
+                          + ' whereas our request was for '
+                          + inttostr(workerrequestp^.RequestID));
+
+      // in cases where the response is smaller than the command parameters we have to move less data.
+      // need to verify this as I had some weird if statement in there before.
+      move(ResponseP^.cmd.Data[0], ResponseDataP^, ResponseDataLen);
+
+      Network^.WorkerThread.DoneWithRequest(WorkerRequestP);
+
+      Result := Res;
+    finally
+      // Release lock (Conditional)
+      if Lock then MutexUnlock(Network^.Network.Lock);
+    end
+  end
 end;
 
-function WirelessGetVar(WIFI : PWIFIDevice; varname : string; ValueP : PByte; len : integer) : longword;
+function WirelessGetVar(Network: PCYW43455Network; varname: string; ValueP: PByte; len: integer): longword;
 begin
   // getvar name must have a null on the end of it.
   varname := varname + #0;
 
-  Result := WirelessIOCTLCommand(WIFI, WLC_GET_VAR, @varname[1], length(varname), false, ValueP, len);
+  Result := WirelessIOCTLCommand(Network, WLC_GET_VAR, @varname[1], length(varname), false, ValueP, len);
 end;
 
-function WirelessSetVar(WIFI : PWIFIDevice; varname : string; InputValueP : PByte; Inputlen : integer; trace : string = '') : longword;
+function WirelessSetVar(Network: PCYW43455Network; varname: string; InputValueP: PByte; Inputlen: integer; trace: string = ''): longword;
 begin
   varname := varname + #0;
-  Result := WirelessIOCTLCommand(WIFI, WLC_SET_VAR, @varname[1], length(varname), true, InputValueP, Inputlen, trace);
+  Result := WirelessIOCTLCommand(Network, WLC_SET_VAR, @varname[1], length(varname), true, InputValueP, Inputlen, trace);
 end;
 
-function WirelessSetInt(WIFI : PWIFIDevice; varname : string; Value : longword) : longword;
+function WirelessSetInt(Network: PCYW43455Network; varname: string; Value: longword): longword;
 begin
-  Result := WirelessSetVar(WIFI, varname, @Value, 4);
+  Result := WirelessSetVar(Network, varname, @Value, 4);
 end;
 
-function WirelessCommandInt(WIFI : PWIFIDevice; wlccmd : longword; Value : longword) : longword;
+function WirelessCommandInt(Network: PCYW43455Network; wlccmd: longword; Value: longword): longword;
 var
-  response : byte4;
+  response: byte4;
 begin
-  Result := WirelessIOCTLCommand(WIFI, wlccmd, @Value, 4, true, @response[1], 4);
+  Result := WirelessIOCTLCommand(Network, wlccmd, @Value, 4, true, @response[1], 4);
 end;
 
-function WIFIDeviceUploadRegulatoryFile(WIFI : PWIFIDevice) : longword;
+function WIFIDeviceUploadRegulatoryFile(Network: PCYW43455Network): longword;
 const
   Reguhdr = 2+2+4+4;
-  Regusz = 400;
+  Regusz = 1400;
   Regutyp = 2;
   Flagclm = 1 shl 12;
   Firstpkt = 1 shl 1;
   Lastpkt = 1 shl 2;
 
 var
- FirmwareFile : file of byte;
- firmwarep : pbyte;
- off : longword;
- fsize : longword;
- i : integer;
- chunksize : longword;
- Found : boolean;
- RegulatoryFilename : string;
- flag : word;
+ //FirmwareFile: file of byte;
+ firmwarep: pbyte;
+ off: longword;
+ fsize: LongInt;
+ i: integer;
+ chunksize: LongInt;
+ Found: boolean;
+ RegulatoryFilename: string;
+ flag: word;
+
+ Handle: THandle;
+ Status: LongWord;
 
 begin
   Result := MMC_STATUS_SUCCESS;
 
   // locate regulatory detils based on chip id and revision
 
-  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Starting to upload regulatory file');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Starting to upload regulatory file');
   Found := false;
 
   for i := 1 to FIRWMARE_OPTIONS_COUNT do
   begin
-    if (firmware[i].chipid = WIFI^.chipid) and (firmware[i].chipidrev = WIFI^.chipidrev) then
+    if (firmware[i].chipid = Network^.chipid) and (firmware[i].chipidrev = Network^.chipidrev) then
     begin
       // If no regulatory file just succeed
       if Length(firmware[i].regufilename) = 0 then
@@ -3505,7 +3008,7 @@ begin
        Exit;
       end;
 
-      RegulatoryFilename := FIRMWARE_FILENAME_ROOT + firmware[i].regufilename;
+      RegulatoryFilename := firmware[i].regufilename;
       Found := true;
       break;
     end;
@@ -3514,30 +3017,43 @@ begin
   if (not Found) then
   begin
     Result := MMC_STATUS_INVALID_PARAMETER;
-    WIFILogError(nil, 'Unable to find a suitable firmware file to load for chip id 0x' + inttohex(WIFI^.chipid, 4) + ' revision 0x' + inttohex(WIFI^.chipidrev, 4));
+    WIFILogError(nil, 'CYW43455: Unable to find a suitable firmware file to load for chip id 0x' + inttohex(Network^.chipid, 4) + ' revision 0x' + inttohex(Network^.chipidrev, 4));
     exit;
   end;
 
-  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Using ' + RegulatoryFilename + ' for regulatory file.');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Using ' + RegulatoryFilename + ' for regulatory file.');
 
-  // now regulatory file if there is one.
-
-  if (not FileExists(RegulatoryFilename)) then
+  // Open regulatory file
+  Status := DeviceFirmwareOpen(DEVICE_CLASS_ANY, RegulatoryFilename, CYW43455_FIRMWARE_TIMEOUT, Handle);
+  if Status <> ERROR_SUCCESS then
   begin
-    Result := MMC_STATUS_INVALID_DATA;
-    exit;
+    if Status <> ERROR_NOT_READY then
+    begin
+      Result := MMC_STATUS_DEVICE_UNSUPPORTED;
+      Exit;
+    end
+    else
+    begin
+      Result := MMC_STATUS_NOT_READY;
+      Exit;
+    end;
   end;
 
-  AssignFile(FirmwareFile, RegulatoryFilename);
-  Reset(FirmwareFile);
-  FSize := FileSize(FirmwareFile);
+  FSize := DeviceFirmwareSize(Handle);
 
-  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Size of regulatory file is ' + inttostr(fsize) + ' bytes');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Size of regulatory file is ' + inttostr(fsize) + ' bytes');
 
-  GetMem(firmwarep, Reguhdr+Regusz+1);
+  firmwarep := DMABufferAllocate(DMAHostGetDefault, Reguhdr + Regusz + 1);
 
-  put2(firmwarep+2, Regutyp);
-  put2(firmwarep+8, 0);
+  if not(DMA_CACHE_COHERENT) then
+   begin
+    // Clean Cache (Dest)
+    CleanDataCacheRange(PtrUInt(firmwarep), Reguhdr + Regusz + 1);
+   end;
+
+  // Setup header
+  put2(firmwarep + 2, Regutyp);
+  put2(firmwarep + 8, 0);
   off := 0;
   flag := Flagclm or Firstpkt;
   chunksize := 0;
@@ -3545,26 +3061,27 @@ begin
   try
     while ((flag and Lastpkt) = 0) do
     begin
-      // read a block of data from the file
-      BlockRead(FirmwareFile, (firmwarep+Reguhdr)^, Regusz, chunksize);
-      if (chunksize <= 0) then
-        break;
+      // Read Next Block
+      chunksize := DeviceFirmwareRead(Handle, firmwarep + Reguhdr, Regusz);
+      if chunksize <= 0 then
+        Break;
 
       if (chunksize <> Regusz) then
       begin
         // fill out end of the block with zeroes.
         while ((chunksize and 7) > 0) do
         begin
-          (firmwarep+Reguhdr+chunksize)^ := 0;
+          (firmwarep + Reguhdr + chunksize)^ := 0;
           chunksize += 1;
         end;
         flag := flag or Lastpkt;
       end;
 
-      put2(firmwarep+0, flag);
-      put4_2(firmwarep+4, chunksize);
+      // Update header
+      put2(firmwarep + 0, flag);
+      put4_2(firmwarep + 4, chunksize);
 
-      Result := WirelessSetVar(WIFI, 'clmload', firmwarep, Reguhdr + chunksize);
+      Result := WirelessSetVar(Network, 'clmload', firmwarep, Reguhdr + chunksize);
       if (Result <> MMC_STATUS_SUCCESS) then
         exit;
 
@@ -3573,17 +3090,19 @@ begin
     end;
 
   finally
-   freemem(firmwarep);
-   closefile(FirmwareFile);
+    DMABufferRelease(firmwarep);
+
+    // Close regulatory file
+    DeviceFirmwareClose(Handle);
   end;
 
-  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Finished transferring regulatory file');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Finished transferring regulatory file');
 end;
 
-function whd_tlv_find_tlv8(message : pbyte; message_length : longword; atype : byte) : pwhd_tlv8_data;
+function whd_tlv_find_tlv8(message: pbyte; message_length: longword; atype: byte): pwhd_tlv8_data;
 var
-  current_tlv_type : byte;
-  current_tlv_length : byte;
+  current_tlv_type: byte;
+  current_tlv_length: byte;
 begin
   // scans list of TLV's for the one with tge specified atype.
   // and returns a pointer to it.
@@ -3612,17 +3131,17 @@ begin
   end;
 end;
 
-procedure WirelessScanCallback(Event : TWIFIEvent;
-            EventRecordP : pwhd_event;
-            RequestItemP : PWIFIRequestItem;
-            DataLength : longint);
+procedure WirelessScanCallback(Event: TWIFIEvent;
+            EventRecordP: pwhd_event;
+            RequestItemP: PWIFIRequestItem;
+            DataLength: longint);
 var
-  ScanResultP : pwl_escan_result;
-  ssidstr, s : string;
+  ScanResultP: pwl_escan_result;
+  ssidstr, s: string;
 begin
   if (Event = WLC_E_ESCAN_RESULT) then
   begin
-    scanresultp := pwl_escan_result(pbyte(longword(@eventrecordp^.whd_event) + sizeof(whd_event_msg)));
+    scanresultp := pwl_escan_result(pbyte(PtrUInt(@eventrecordp^.whd_event) + sizeof(whd_event_msg)));
     ssidstr := buftostr(@scanresultp^.bss_info[1].SSID[0], scanresultp^.bss_info[1].SSID_len, true);
     if (ssidstr = '') then
       ssidstr := '<hidden>';
@@ -3650,37 +3169,37 @@ begin
     end;
   end
   else
-    WIFILogError(nil, 'Wireless Scan: Unexpected event received');
+    WIFILogError(nil, 'CYW43455: Wireless Scan: Unexpected event received');
 
 end;
 
-procedure WirelessScan(UserCallback : TWIFIScanUserCallback; WaitTime : Longint = 10000); cdecl;
+procedure WirelessScan(UserCallback: TWIFIScanUserCallback; WaitTime: Longint = 10000); cdecl;
 
 var
-  WIFI:PWIFIDevice;
-  scanparams : wl_escan_params;
-  i : integer;
-  RequestItemP : PWIFIRequestItem;
+  Network: PCYW43455Network;
+  scanparams: wl_escan_params;
+  i: integer;
+  RequestItemP: PWIFIRequestItem;
 
 begin
   // scan for wifi networks
   // passive scan - listens for beacons only.
 
-  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Starting wireless network scan');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Starting wireless network scan');
 
   // Get Wireless Device
-  WIFI := PWIFIDevice(MMCDeviceFindByDescription(CYW43455_SDIO_DESCRIPTION));
-  if WIFI = nil then Exit;
+  Network := PCYW43455Network(NetworkDeviceFindByDescription(CYW43455_NETWORK_DESCRIPTION));
+  if Network = nil then Exit;
 
-  WirelessCommandInt(WIFI, $b9, $28); // scan channel time
-  WirelessCommandInt(WIFI, $bb, $28); // scan unassoc time
-  WirelessCommandInt(WIFI, $102, $82); // passive scan time
+  WirelessCommandInt(Network, $b9, $28); // scan channel time
+  WirelessCommandInt(Network, $bb, $28); // scan unassoc time
+  WirelessCommandInt(Network, $102, $82); // passive scan time
 
-  WIFIDeviceSetBackplaneWindow(WIFI, WIFI^.sdregs);
-  cfgwritel(WIFI, WIFI^.sdregs + IntStatus, 0);
+  WIFIDeviceSetBackplaneWindow(Network, Network^.sdregs);
+  cfgwritel(Network, Network^.sdregs + IntStatus, 0);
 
-  WirelessCommandInt(WIFI, 49, 0);	// PASSIVE_SCAN */
-  WirelessCommandInt(WIFI, 2, 0); // up (command has no parameters)
+  WirelessCommandInt(Network, 49, 0);	// PASSIVE_SCAN */
+  WirelessCommandInt(Network, 2, 0); // up (command has no parameters)
 
   // clear scan parameters.
   fillchar(scanparams, sizeof(scanparams), 0);
@@ -3704,21 +3223,21 @@ begin
   scanparams.params.channel_num:=14;
 
   // add interest in the scan result event so we can get a callback. Add in the user callback too.
-  RequestItemP := WIFI^.WorkerThread.AddRequest(0, [WLC_E_ESCAN_RESULT], @WirelessScanCallback, UserCallback);
+  RequestItemP := Network^.WorkerThread.AddRequest(0, [WLC_E_ESCAN_RESULT], @WirelessScanCallback, UserCallback);
 
   // it's lights out and away we go!
-  WirelessSetVar(WIFI, 'escan', @scanparams, sizeof(scanparams));
+  WirelessSetVar(Network, 'escan', @scanparams, sizeof(scanparams));
 
   // wait 10 seconds (this semaphmore won't actually be signalled although it
   // could be in the future if we were scanning for a specific network name).
   SemaphoreWaitEx(RequestItemP^.Signal, WaitTime);
 
-  WIFI^.WorkerThread.DoneWithRequest(RequestItemP);
+  Network^.WorkerThread.DoneWithRequest(RequestItemP);
 end;
 
-procedure JoinCallback(Event : TWIFIEvent; EventRecordP : pwhd_event; RequestItemP : PWIFIRequestItem; DataLength : Longint);
+procedure JoinCallback(Event: TWIFIEvent; EventRecordP: pwhd_event; RequestItemP: PWIFIRequestItem; DataLength: Longint);
 begin
-  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'wireless join callback: removing an event ' + inttostr(ord(event)) + ' from the list (status='+inttostr(eventrecordp^.whd_event.status)+')');
+  if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: wireless join callback: removing an event ' + inttostr(ord(event)) + ' from the list (status='+inttostr(eventrecordp^.whd_event.status)+')');
 
   if (EventRecordP^.whd_event.event_type = Ord(WLC_E_LINK)) then
   begin
@@ -3737,16 +3256,16 @@ begin
     SemaphoreSignal(RequestItemP^.Signal);
 end;
 
-function WirelessJoinNetwork(JoinType : TWIFIJoinType;
-                             timeout : integer = 10000) : longword; cdecl;
+function WirelessJoinNetwork(JoinType: TWIFIJoinType;
+                             timeout: integer = 10000): longword; cdecl;
 var
-  WIFI:PWIFIDevice;
+  Network: PCYW43455Network;
 begin
   Result := ERROR_INVALID_DATA;
 
   // Get Wireless Device
-  WIFI := PWIFIDevice(MMCDeviceFindByDescription(CYW43455_SDIO_DESCRIPTION));
-  if WIFI = nil then Exit;
+  Network := PCYW43455Network(NetworkDeviceFindByDescription(CYW43455_NETWORK_DESCRIPTION));
+  if Network = nil then Exit;
 
   Result := ERROR_SUCCESS;
 
@@ -3754,33 +3273,33 @@ begin
 
   //the wpa_supplicant must now be initialized, once we have a mac address (which is done in wirelessinit)
   //the supplicant runs its own event loop, so it runs in a thread to allow this.
-  if (WIFI^.WPASupplicantThread = nil) then
-    WIFI^.WPASupplicantThread := TWPASupplicantThread.Create(WIFI);
+  if (Network^.WPASupplicantThread = nil) then
+    Network^.WPASupplicantThread := TWPASupplicantThread.Create(Network);
 
-  if (WIFI^.WPASupplicantThread <> nil) then
-    WIFI^.WPASupplicantThread.Start;
+  if (Network^.WPASupplicantThread <> nil) then
+    Network^.WPASupplicantThread.Start;
 
   if (JoinType = WIFIJoinBlocking) then
-    Result := SemaphoreWaitEx(PCYW43455Network(WIFI^.NetworkP)^.NetworkUpSignal, timeout);
+    Result := SemaphoreWaitEx(PCYW43455Network(Network)^.NetworkUpSignal, timeout);
 end;
 
-function FirmwareWirelessJoinNetwork(ssid : string; security_key : string;
-                             countrycode : string;
-                             JoinType : TWIFIJoinType;
-                             ReconnectType : TWIFIReconnectionType;
-                             bssid : THardwareAddress;
-                             usebssid : boolean = false) : longword; cdecl;
+function FirmwareWirelessJoinNetwork(ssid: string; security_key: string;
+                             countrycode: string;
+                             JoinType: TWIFIJoinType;
+                             ReconnectType: TWIFIReconnectionType;
+                             bssid: THardwareAddress;
+                             usebssid: boolean = false): longword; cdecl;
 var
-  WIFI:PWIFIDevice;
-  data : array[0..1] of longword;
-  psk : wsec_pmk;
-  responseval : longword;
-  auth_mfp : longword;
-  wpa_auth : longword;
-  simplessid : wlc_ssid;
-  RequestEntryP : PWIFIRequestItem;
-  countrysettings : countryparams;
-  clen : integer;
+  Network: PCYW43455Network;
+  data: array[0..1] of longword;
+  psk: wsec_pmk;
+  responseval: longword;
+  auth_mfp: longword;
+  wpa_auth: longword;
+  simplessid: wlc_ssid;
+  RequestEntryP: PWIFIRequestItem;
+  countrysettings: countryparams;
+  clen: integer;
 
 begin
   (*
@@ -3792,37 +3311,37 @@ begin
   Result := MMC_STATUS_INVALID_DATA;
 
   // Get Wireless Device
-  WIFI := PWIFIDevice(MMCDeviceFindByDescription(CYW43455_SDIO_DESCRIPTION));
-  if WIFI = nil then Exit;
+  Network := PCYW43455Network(NetworkDeviceFindByDescription(CYW43455_NETWORK_DESCRIPTION));
+  if Network = nil then Exit;
 
   WIFI_USE_SUPPLICANT := false;
 
   // pass connection details to the retry thread for handling loss of connection.
-  WIFI^.BackgroundJoinThread.SetConnectionDetails(SSID, security_key, countrycode, BSSID, UseBSSID, ReconnectType);
+  Network^.BackgroundJoinThread.SetConnectionDetails(SSID, security_key, countrycode, BSSID, UseBSSID, ReconnectType);
 
   if (JoinType = WIFIJoinBackground) then
   begin
     // set network status down, schedule the join thread to do a background join
     // (it will call this function in blocking form to achieve that)
-   {$ifdef CYW43455_DEBUG}
-   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CY43455: Background join scheduled.');
-   {$endif}
+   {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+   if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: Background join scheduled.');
+   {$ENDIF}
 
     // Set join not completed
-    PCYW43455Network(WIFI^.NetworkP)^.JoinCompleted := False;
+    Network^.JoinCompleted := False;
 
     {Set Status to Down}
-    WIFI^.NetworkP^.NetworkStatus := NETWORK_STATUS_DOWN;
+    Network^.Network.NetworkStatus := NETWORK_STATUS_DOWN;
 
-    SemaphoreSignal(WIFI^.BackgroundJoinThread.FConnectionLost);
+    SemaphoreSignal(Network^.BackgroundJoinThread.FConnectionLost);
     Result := MMC_STATUS_SUCCESS;
     exit;
   end;
 
   // set country code
-  {$ifdef CYW43455_DEBUG}
-  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Setting country code');
-  {$endif}
+  {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: Setting country code');
+  {$ENDIF}
 
   clen := length(countrycode);
   fillchar(countrysettings, 0, sizeof(countrysettings));
@@ -3830,17 +3349,17 @@ begin
   move(countrycode[1], countrysettings.country_code[1], clen);
   countrysettings.revision := -1;
 
-  Result := WirelessSetVar(WIFI, 'country', @countrysettings, sizeof(countrysettings));
+  Result := WirelessSetVar(Network, 'country', @countrysettings, sizeof(countrysettings));
   if Result <> MMC_STATUS_SUCCESS then
     exit;
 
   // Set infrastructure mode
   // 1 = normal, 0 = access point
-  Result := WirelessCommandInt(WIFI, WLC_SET_INFRA, 1);
+  Result := WirelessCommandInt(Network, WLC_SET_INFRA, 1);
   if (Result <> MMC_STATUS_SUCCESS) then
     exit;
 
-  Result := WirelessCommandInt(WIFI, WLC_SET_AUTH, WL_AUTH_OPEN_SYSTEM);
+  Result := WirelessCommandInt(Network, WLC_SET_AUTH, WL_AUTH_OPEN_SYSTEM);
   if (Result <> MMC_STATUS_SUCCESS) then
     exit;
 
@@ -3852,20 +3371,20 @@ begin
   if (security_key <> '') then
   begin
     // Set Wireless Security Type
-    Result := WirelessCommandInt(WIFI, WLC_SET_WSEC, AES_ENABLED);
+    Result := WirelessCommandInt(Network, WLC_SET_WSEC, AES_ENABLED);
     if (Result <> MMC_STATUS_SUCCESS) then
       exit;
 
     data[0] := 0;  // this is the primary interface
     data[1] := 1;  // wpa security on (enables the firmware supplicant)
-    Result := WirelessSetVar(WIFI, 'bsscfg:sup_wpa', @data[0], sizeof(data));
+    Result := WirelessSetVar(Network, 'bsscfg:sup_wpa', @data[0], sizeof(data));
     if (Result <> MMC_STATUS_SUCCESS) then
       exit;
 
     // Set the EAPOL version to whatever the AP is using (-1) */
     data[0] := 0;
     data[1] := longword(-1);
-    Result := WirelessSetVar(WIFI, 'bsscfg:sup_wpa2_eapver', @data[0], sizeof(data));
+    Result := WirelessSetVar(Network, 'bsscfg:sup_wpa2_eapver', @data[0], sizeof(data));
     if (Result <> MMC_STATUS_SUCCESS) then
       exit;
 
@@ -3874,13 +3393,13 @@ begin
     // events aren't reported. If the IOVAR is unsupported then continue.
     data[0] := 0;
     data[1] := DEFAULT_EAPOL_KEY_PACKET_TIMEOUT;
-    Result := WirelessSetVar(WIFI, 'bsscfg:sup_wpa_tmo', @data, sizeof(data));
+    Result := WirelessSetVar(Network, 'bsscfg:sup_wpa_tmo', @data, sizeof(data));
     if (Result <> MMC_STATUS_SUCCESS) then
       exit;
 
     // Set WPA authentication mode
     wpa_auth := WPA2_AUTH_PSK;
-    Result := WirelessIOCTLCommand(WIFI, WLC_SET_WPA_AUTH, @wpa_auth, sizeof(wpa_auth), true, @responseval, 4);
+    Result := WirelessIOCTLCommand(Network, WLC_SET_WPA_AUTH, @wpa_auth, sizeof(wpa_auth), true, @responseval, 4);
     if (Result <> MMC_STATUS_SUCCESS) then
       exit;
 
@@ -3892,12 +3411,12 @@ begin
     // Delay required to allow radio firmware to be ready to receive PMK and avoid intermittent failure
     sleep(10);
 
-    Result := WirelessIOCTLCommand(WIFI, WLC_SET_WSEC_PMK, @psk, sizeof(psk), true, @responseval, 4);
+    Result := WirelessIOCTLCommand(Network, WLC_SET_WSEC_PMK, @psk, sizeof(psk), true, @responseval, 4);
     if (Result <> MMC_STATUS_SUCCESS) then
       exit;
 
     auth_mfp := 0;
-    Result := WirelessSetVar(WIFI, 'mfp', @auth_mfp, 4);
+    Result := WirelessSetVar(Network, 'mfp', @auth_mfp, 4);
     if (Result <> MMC_STATUS_SUCCESS) then
       exit;
   end;
@@ -3905,7 +3424,7 @@ begin
   // if there is a BSSID we set it here. Setting the SSID (mandatory) is what initiates the join.
   if (usebssid) then
   begin
-    Result := WirelessIOCTLCommand(WIFI, WLC_SET_BSSID, @bssid, sizeof(bssid), true, @responseval, 4);
+    Result := WirelessIOCTLCommand(Network, WLC_SET_BSSID, @bssid, sizeof(bssid), true, @responseval, 4);
     if (Result <> MMC_STATUS_SUCCESS) then
       exit;
   end;
@@ -3914,93 +3433,93 @@ begin
   fillchar(simplessid, sizeof(simplessid), 0);
   move(ssid[1], simplessid.SSID[0], length(ssid));
   simplessid.SSID_len:=length(ssid);
-  Result := WirelessIOCTLCommand(WIFI, WLC_SET_SSID, @simplessid, sizeof(simplessid), true, @responseval, 4);
+  Result := WirelessIOCTLCommand(Network, WLC_SET_SSID, @simplessid, sizeof(simplessid), true, @responseval, 4);
   if (Result <> MMC_STATUS_SUCCESS) then
     exit;
 
   // register for join events we are interested in.
   // for an open network we don't expect to see the PSK_SUP event.
   if (security_key <> '') then
-    RequestEntryP := WIFI^.WorkerThread.AddRequest(0, [WLC_E_SET_SSID, WLC_E_LINK, WLC_E_PSK_SUP], @JoinCallback, nil)
+    RequestEntryP := Network^.WorkerThread.AddRequest(0, [WLC_E_SET_SSID, WLC_E_LINK, WLC_E_PSK_SUP], @JoinCallback, nil)
   else
-    RequestEntryP := WIFI^.WorkerThread.AddRequest(0, [WLC_E_SET_SSID, WLC_E_LINK], @JoinCallback, nil);
+    RequestEntryP := Network^.WorkerThread.AddRequest(0, [WLC_E_SET_SSID, WLC_E_LINK], @JoinCallback, nil);
 
   // wait for 5 seconds or a completion signal.
-  SemaphoreWaitEx(RequestEntryP^.Signal, 7000);
+  SemaphoreWaitEx(RequestEntryP^.Signal, 15000); //7000
 
   if (RequestEntryP^.RegisteredEvents = []) then
   begin
-    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Successfully joined WIFI network ' + SSID);
+    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Successfully joined WIFI network ' + SSID);
 
     // Set join completed
-    PCYW43455Network(WIFI^.NetworkP)^.JoinCompleted := True;
+    Network^.JoinCompleted := True;
 
     {Set Status to Up}
-    WIFI^.NetworkP^.NetworkStatus := NETWORK_STATUS_UP;
+    Network^.Network.NetworkStatus := NETWORK_STATUS_UP;
 
     {Notify the Status}
-    NotifierNotify(@WIFI^.NetworkP^.Device, DEVICE_NOTIFICATION_UP);
+    NotifierNotify(@Network^.Network.Device, DEVICE_NOTIFICATION_UP);
   end
   else
   begin
     Result := MMC_STATUS_INVALID_PARAMETER;
-    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'The join attempt to network ' + SSID + ' was unsuccessful');
+    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: The join attempt to network ' + SSID + ' was unsuccessful');
 
     if (ReconnectType = WIFIReconnectAlways) then
     begin
-      if (WIFI^.BackgroundJoinThread.Suspended) then
-        WIFI^.BackgroundJoinThread.Start;
+      if (Network^.BackgroundJoinThread.Suspended) then
+        Network^.BackgroundJoinThread.Start;
 
       // Set join not completed
-      PCYW43455Network(WIFI^.NetworkP)^.JoinCompleted := False;
+      Network^.JoinCompleted := False;
 
       {Set Status to Down}
-      WIFI^.NetworkP^.NetworkStatus := NETWORK_STATUS_DOWN;
+      Network^.Network.NetworkStatus := NETWORK_STATUS_DOWN;
 
       // tell the join thread to make another join attempt.
-      SemaphoreSignal(WIFI^.BackgroundJoinThread.FConnectionLost);
+      SemaphoreSignal(Network^.BackgroundJoinThread.FConnectionLost);
     end;
 
-    {$ifdef CYW43455_DEBUG}
+    {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
     if WIFI_LOG_ENABLED then
     begin
       if (WLC_E_SET_SSID in RequestEntryP^.RegisteredEvents) then
-        WIFILogDebug(nil, 'WLC_E_SET_SSID event was not returned from the join request');
+        WIFILogDebug(nil, 'CYW43455: WLC_E_SET_SSID event was not returned from the join request');
 
       if (WLC_E_LINK in RequestEntryP^.RegisteredEvents) then
-        WIFILogDebug(nil, 'WLC_E_LINK event was not returned from the join request');
+        WIFILogDebug(nil, 'CYW43455: WLC_E_LINK event was not returned from the join request');
 
       if (WLC_E_PSK_SUP in RequestEntryP^.RegisteredEvents) then
-        WIFILogDebug(nil, 'WLC_E_PSK_SUP event was not returned from the join request');
+        WIFILogDebug(nil, 'CYW43455: WLC_E_PSK_SUP event was not returned from the join request');
     end;
-    {$endif}
+    {$ENDIF}
   end;
 
-  WIFI^.WorkerThread.DoneWithRequest(RequestEntryP);
+  Network^.WorkerThread.DoneWithRequest(RequestEntryP);
 end;
 
-function WirelessLeaveNetwork : longword;
+function WirelessLeaveNetwork: longword;
 var
- WIFI:PWIFIDevice;
- simplessid : wlc_ssid;
- responseval : longword;
+ Network: PCYW43455Network;
+ simplessid: wlc_ssid;
+ responseval: longword;
 
 begin
  Result := MMC_STATUS_INVALID_DATA;
 
  // Get Wireless Device
- WIFI := PWIFIDevice(MMCDeviceFindByDescription(CYW43455_SDIO_DESCRIPTION));
- if WIFI = nil then Exit;
+ Network := PCYW43455Network(NetworkDeviceFindByDescription(CYW43455_NETWORK_DESCRIPTION));
+ if Network = nil then Exit;
 
  Result := MMC_STATUS_SUCCESS;
 
  {disable the automatic reconnection}
-// WIFI^.BackgroundJoinThread.FReconnectionType:=WIFIReconnectNever;
+// Network^.BackgroundJoinThread.FReconnectionType:=WIFIReconnectNever;
 
  {blank out the SSID to leave the network?}
  fillchar(simplessid, sizeof(simplessid), 0);
  simplessid.SSID_len:=0;
- Result := WirelessIOCTLCommand(WIFI, WLC_SET_SSID, @simplessid, sizeof(simplessid), true, @responseval, 4);
+ Result := WirelessIOCTLCommand(Network, WLC_SET_SSID, @simplessid, sizeof(simplessid), true, @responseval, 4);
 (* if (Result <> MMC_STATUS_SUCCESS) then
    exit;*)
 
@@ -4008,22 +3527,22 @@ begin
  if (WIFI_USE_SUPPLICANT) then
  begin
     UltiboEloopTerminate;
-    if (WIFI^.WPASupplicantThread <> nil) then
-      WIFI^.WPASupplicantThread.Terminate;
+    if (Network^.WPASupplicantThread <> nil) then
+      Network^.WPASupplicantThread.Terminate;
 
-    WIFI^.WPASupplicantThread := nil;
+    Network^.WPASupplicantThread := nil;
  end;
 end;
 
-function WirelessInit(WIFI : PWIFIDevice) : longword;
+function WirelessInit(Network: PCYW43455Network): longword;
 const
   WLC_SET_PM = 86;
 
 var
-  version : array[1..250] of byte;
-  eventmask : array[0..WL_EVENTING_MASK_LEN] of byte;
+  version: array[1..250] of byte;
+  eventmask: array[0..WL_EVENTING_MASK_LEN] of byte;
 
-  procedure DisableEvent(id : integer);
+  procedure DisableEvent(id: integer);
   begin
      EventMask[id div 8] := EventMask[id div 8] and (not (1 << (id mod 8)));
   end;
@@ -4047,90 +3566,90 @@ begin
  DisableEvent(51);	// WLC_E_MULTICAST_DECODE_ERROR. We get this during the authentication process for broadcast
                         // packets on the network (e.g. my home automation devices). Ignore.
 
- Result := WirelessSetVar(WIFI, 'event_msgs', @eventmask, sizeof(eventmask));
+ Result := WirelessSetVar(Network, 'event_msgs', @eventmask, sizeof(eventmask));
  if Result <> MMC_STATUS_SUCCESS then
    exit;
 
  // request the mac address of the wifi device
- fillchar(WIFI^.macaddress[0], HARDWARE_ADDRESS_SIZE, 0);
+ fillchar(Network^.macaddress[0], HARDWARE_ADDRESS_SIZE, 0);
 
- if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Requesting MAC address from the WIFI device...');
- Result := WirelessGetVar(WIFI, 'cur_etheraddr', @WIFI^.macaddress[0], HARDWARE_ADDRESS_SIZE);
+ if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Requesting MAC address from the WIFI device...');
+ Result := WirelessGetVar(Network, 'cur_etheraddr', @Network^.macaddress[0], HARDWARE_ADDRESS_SIZE);
  if Result <> MMC_STATUS_SUCCESS then
    exit;
 
- if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Current MAC address is ' + HardwareAddressToString(WIFI^.macaddress,':'));
+ if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Current MAC address is ' + HardwareAddressToString(Network^.macaddress,':'));
 
  // upload regulatory file - can't set country and join a network without this.
- Result := WIFIDeviceUploadRegulatoryFile(WIFI);
+ Result := WIFIDeviceUploadRegulatoryFile(Network);
  if Result <> MMC_STATUS_SUCCESS then
    exit;
 
  // do some further initialisation once the firmware is booted.
- Result := WirelessSetInt(WIFI, 'assoc_listen', 10);
+ Result := WirelessSetInt(Network, 'assoc_listen', 10);
  if Result <> MMC_STATUS_SUCCESS then
    exit;
 
  // powersave
- if (WIFI^.chipid = 43430) or (WIFI^.chipid=$4345) then
-   Result := WirelessCommandInt(WIFI, WLC_SET_PM, 0)  // powersave off
+ if (Network^.chipid = 43430) or (Network^.chipid=$4345) then
+   Result := WirelessCommandInt(Network, WLC_SET_PM, 0)  // powersave off
  else
-   Result := WirelessCommandInt(WIFI, WLC_SET_PM, 2); // powersave fast
+   Result := WirelessCommandInt(Network, WLC_SET_PM, 2); // powersave fast
  if Result <> MMC_STATUS_SUCCESS then
    exit;
 
  {$ifndef notxglom}
- WIFILogInfo(nil, 'Enabling support for receiving glom packets');
+ WIFILogInfo(nil, 'CYW43455: Enabling support for receiving glom packets');
  // this is NOT an error. txglom = receive, because the context is access point.
- Result := WirelessSetInt(WIFI, 'bus:txglom', 1);
+ Result := WirelessSetInt(Network, 'bus:txglom', 1);
 // if Result <> MMC_STATUS_SUCCESS then
 //  exit;
  {$else}
- Result := WirelessSetInt(WIFI, 'bus:txglom', 0);
+ Result := WirelessSetInt(Network, 'bus:txglom', 0);
  {$endif}
 
- Result := WirelessSetInt(WIFI, 'bus:rxglom', 0);
+ Result := WirelessSetInt(Network, 'bus:rxglom', 0);
  // Linux driver says this is allowed to fail
  //if Result <> MMC_STATUS_SUCCESS then
  // exit;
 
- Result := WirelessSetInt(WIFI, 'bcn_timeout', 10);
+ Result := WirelessSetInt(Network, 'bcn_timeout', 10);
  if Result <> MMC_STATUS_SUCCESS then
    exit;
 
- Result := WirelessSetInt(WIFI, 'assoc_retry_max', 3);
+ Result := WirelessSetInt(Network, 'assoc_retry_max', 3);
  if Result <> MMC_STATUS_SUCCESS then
    exit;
 
  // get first 50 chars of the firmware version string
- Result := WirelessGetVar(WIFI, 'ver', @version[1], 50);
+ Result := WirelessGetVar(Network, 'ver', @version[1], 50);
  if Result <> MMC_STATUS_SUCCESS then
    exit;
 
- if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Firmware version string (partial): ' + buftostr(@version[1], 50));
+ if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Firmware version string (partial): ' + buftostr(@version[1], 50));
 
- Result := WirelessSetInt(WIFI, 'roam_off', 1);
+ Result := WirelessSetInt(Network, 'roam_off', 1);
  if Result <> MMC_STATUS_SUCCESS then
    exit;
 
- Result := WirelessCommandInt(WIFI, $14, 1); // set infra 1
+ Result := WirelessCommandInt(Network, $14, 1); // set infra 1
  if Result <> MMC_STATUS_SUCCESS then
    exit;
 
- Result := WirelessCommandInt(WIFI, 10, 0);  // promiscuous
+ Result := WirelessCommandInt(Network, 10, 0);  // promiscuous
 end;
 
-constructor TWIFIWorkerThread.Create(CreateSuspended : boolean; AWIFI : PWIFIDevice);
+constructor TCYW43455WorkerThread.Create(CreateSuspended: boolean; ANetwork: PCYW43455Network);
 begin
   inherited Create(CreateSuspended,THREAD_STACK_DEFAULT_SIZE);
-  FWIFI := AWIFI;
+  FNetwork := ANetwork;
 
   FRequestQueueP := nil;
   FLastRequestQueueP := nil;
   FQueueProtect := CriticalSectionCreate;
 end;
 
-destructor TWIFIWorkerThread.Destroy;
+destructor TCYW43455WorkerThread.Destroy;
 begin
   // free memory allocated to the queue and release any semaphores.
   // do this later - most apps just get turned off on shutdown anyway!
@@ -4140,10 +3659,10 @@ begin
   inherited Destroy;
 end;
 
-procedure TWIFIWorkerThread.dumpqueue;
+procedure TCYW43455WorkerThread.dumpqueue;
 var
-  entryp : PWIFIRequestItem;
-  count : integer;
+  entryp: PWIFIRequestItem;
+  count: integer;
 begin
  CriticalSectionLock(FQueueProtect);
  try
@@ -4151,7 +3670,7 @@ begin
    count := 0;
    while (entryp <> nil) do
    begin
-     WIFILogInfo(nil, inttostr(count) + ' 0x' + inttohex(longword(entryp), 8)
+     WIFILogInfo(nil, inttostr(count) + ' 0x' + PtrToHex(entryp)
           + ' 0x' + inttohex(psemaphoreentry(entryp^.signal)^.Signature, 8)
           + ' handle ' + inttostr(entryp^.signal)
           + ' request id ' + inttostr(entryp^.RequestID)
@@ -4164,9 +3683,9 @@ begin
  end;
 end;
 
-function TWIFIWorkerThread.AddRequest(ARequestID : word; InterestedEvents : TWIFIEventSet; Callback : TWirelessEventCallback; UserDataP : Pointer) : PWIFIRequestItem;
+function TCYW43455WorkerThread.AddRequest(ARequestID: word; InterestedEvents: TWIFIEventSet; Callback: TWirelessEventCallback; UserDataP: Pointer): PWIFIRequestItem;
 var
-  ItemP : PWIFIRequestItem;
+  ItemP: PWIFIRequestItem;
 begin
   Result := nil;
   CriticalSectionLock(FQueueProtect);
@@ -4196,9 +3715,9 @@ begin
   end;
 end;
 
-procedure TWIFIWorkerThread.DoneWithRequest(ARequestItemP : PWIFIRequestItem);
+procedure TCYW43455WorkerThread.DoneWithRequest(ARequestItemP: PWIFIRequestItem);
 var
-  CurP, PrevP : PWIFIRequestItem;
+  CurP, PrevP: PWIFIRequestItem;
 begin
   CriticalSectionLock(FQueueProtect);
 
@@ -4233,16 +3752,16 @@ begin
 
     end
     else
-      WIFILogError(nil, 'Unable to locate item in the request queue');
+      WIFILogError(nil, 'CYW43455: Unable to locate item in the request queue');
 
   finally
     CriticalSectionUnLock(FQueueProtect);
   end;
 end;
 
-function TWIFIWorkerThread.FindRequest(ARequestId : word) : PWIFIRequestItem;
+function TCYW43455WorkerThread.FindRequest(ARequestId: word): PWIFIRequestItem;
 var
-  CurP : PWIFIRequestItem;
+  CurP: PWIFIRequestItem;
 
 begin
   Result := nil;
@@ -4260,9 +3779,9 @@ begin
   Result := CurP;
 end;
 
-function TWIFIWorkerThread.FindRequestByEvent(AEvent : longword) : PWIFIRequestItem;
+function TCYW43455WorkerThread.FindRequestByEvent(AEvent: longword): PWIFIRequestItem;
 var
-  CurP : PWIFIRequestItem;
+  CurP: PWIFIRequestItem;
 begin
   // find the first request item that has an interest in the specified event.
   // we really need to find a list of items but we can do that later. We currently
@@ -4283,19 +3802,19 @@ begin
   Result := CurP;
 end;
 
-procedure TWIFIWorkerThread.ProcessDevicePacket(var responseP : PIOCTL_MSG;
-                             NetworkEntryP : PNetworkEntry;
-                             var bytesleft : longword;
-                             var isfinished : boolean);
+procedure TCYW43455WorkerThread.ProcessDevicePacket(var responseP: PIOCTL_MSG;
+                             NetworkEntryP: PNetworkEntry;
+                             var bytesleft: longword;
+                             var isfinished: boolean);
 var
- SequenceNumber : word;
- RequestEntryP : PWIFIRequestItem;
- EventRecordP : pwhd_event;
- Framelength : word;
- EtherHeaderP : pether_header;
- k : integer;
- BCDCHeaderP : PBCDC_HEADER;
- Offset : LongWord;
+ SequenceNumber: word;
+ RequestEntryP: PWIFIRequestItem;
+ EventRecordP: pwhd_event;
+ Framelength: word;
+ EtherHeaderP: pether_header;
+ k: integer;
+ BCDCHeaderP: PBCDC_HEADER;
+ Offset: LongWord;
 
 begin
  // the channel has 4 bits flags in the upper nibble and 4 bits channel number in the lower nibble.
@@ -4318,7 +3837,7 @@ begin
          SemaphoreSignal(RequestEntryP^.Signal);
         end
         else
-          WIFILogError(nil, 'Failed to find a request for sequence number ' + inttostr(sequencenumber));
+          WIFILogError(nil, 'CYW43455: Failed to find a request for sequence number ' + inttostr(sequencenumber));
       end;
 
    // event
@@ -4340,14 +3859,14 @@ begin
         EventRecordP^.whd_event.reason:= NetSwapLong(EventRecordP^.whd_event.reason);
         EventRecordP^.whd_event.flags := NetSwapWord(EventRecordP^.whd_event.flags);
 
-        if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'event message received ' + inttostr(eventrecordp^.whd_event.event_type)
+        if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: event message received ' + inttostr(eventrecordp^.whd_event.event_type)
             + ' status='+inttostr(eventrecordp^.whd_event.status)
             + ' reason='+inttostr(eventrecordp^.whd_event.reason)
             + ' reponsep len='+inttostr(responsep^.len) + ' hdrlen='+inttostr(responsep^.cmd.sdpcmheader.hdrlen));
 
 (*      if (EventRecordP^.whd_event.event_type = ord(WLC_E_EAPOL_MSG)) then
         begin
-          wifiloginfo(nil, 'eapol rx dump including headers');
+          wifiloginfo(nil, 'CYW43455: eapol rx dump including headers');
           hexdump(pbyte(responsep), responsep^.len);
         end;
 *)
@@ -4361,31 +3880,31 @@ begin
                 and (EventRecordP^.whd_event.flags and CYW43455_EVENT_FLAG_LINK = 0))
            )
            and
-           (FWIFI^.NetworkP^.NetworkStatus = NETWORK_STATUS_UP)
+           (FNetwork^.Network.NetworkStatus = NETWORK_STATUS_UP)
            then
         begin
           // the wifi link has gone down. Reset conection
-          if (WIFI_LOG_ENABLED) then WIFILogInfo(nil, 'The WIFI link appears to have been lost (flags='+inttostr(EventRecordP^.whd_event.flags)+')');
+          if (WIFI_LOG_ENABLED) then WIFILogInfo(nil, 'CYW43455: The WIFI link appears to have been lost (flags='+inttostr(EventRecordP^.whd_event.flags)+')');
 
           // Set join not completed
-          PCYW43455Network(FWIFI^.NetworkP)^.JoinCompleted := False;
+          FNetwork^.JoinCompleted := False;
 
           if (WIFI_USE_SUPPLICANT) then
           begin
             // Set EAPOL not completed
-            PCYW43455Network(FWIFI^.NetworkP)^.EAPOLCompleted := False;
+            FNetwork^.EAPOLCompleted := False;
             for k := 0 to WPA_KEY_MAX do
-              PCYW43455Network(FWIFI^.NetworkP)^.ValidKeys[k] := false;
+              FNetwork^.ValidKeys[k] := false;
             SupplicantOperatingState:=0;
           end;
 
           {Set Status to Down}
-          FWIFI^.NetworkP^.NetworkStatus := NETWORK_STATUS_DOWN;
+          FNetwork^.Network.NetworkStatus := NETWORK_STATUS_DOWN;
 
           {Notify the Status}
-          NotifierNotify(@FWIFI^.NetworkP^.Device, DEVICE_NOTIFICATION_DOWN);
+          NotifierNotify(@FNetwork^.Network.Device, DEVICE_NOTIFICATION_DOWN);
 
-          SemaphoreSignal(FWIFI^.BackgroundJoinThread.FConnectionLost);
+          SemaphoreSignal(FNetwork^.BackgroundJoinThread.FConnectionLost);
         end;
 
         // see if there are any requests interested in this event, and if so trigger
@@ -4398,9 +3917,9 @@ begin
         end
         else
         begin
-          {$ifdef CYW43455_DEBUG}
-          if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'there was no interest in event ' + IntToStr(EventRecordP^.whd_event.event_type));
-          {$endif}
+          {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+          if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: there was no interest in event ' + IntToStr(EventRecordP^.whd_event.event_type));
+          {$ENDIF}
         end;
    end;
 
@@ -4420,7 +3939,7 @@ begin
         // detect supplicant status. Needs to be more resilient.
         if WIFI_USE_SUPPLICANT and (WordBEtoN(EtherHeaderP^.ethertype) = PACKET_TYPE_EAPOL) then
         begin
-          wifiloginfo(nil,'EAPOL network packet received (after join); length='+inttostr(FrameLength) + ' operatingstate='+inttostr(SupplicantOperatingState));
+          wifiloginfo(nil,'CYW43455: EAPOL network packet received (after join); length='+inttostr(FrameLength) + ' operatingstate='+inttostr(SupplicantOperatingState));
           RequestEntryP := FindRequestByEvent(longword(WLC_E_EAPOL_MSG));
           if (RequestEntryP <> nil) and (RequestEntryP^.Callback <> nil) {and (SupplicantOperatingState=0)} then
           begin
@@ -4440,16 +3959,16 @@ begin
           NetworkEntryP^.Packets[NetworkEntryP^.Count - 1].Length:=FrameLength;
 
           {Update Statistics}
-          Inc(FWIFI^.NetworkP^.ReceiveCount);
-          Inc(FWIFI^.NetworkP^.ReceiveBytes,NetworkEntryP^.Packets[NetworkEntryP^.Count - 1].Length);
+          Inc(FNetwork^.Network.ReceiveCount);
+          Inc(FNetwork^.Network.ReceiveBytes, NetworkEntryP^.Packets[NetworkEntryP^.Count - 1].Length);
 
           // update bytesleft from current packet read
-          bytesleft := bytesleft - RoundUp(ResponseP^.len, FWIFI^.DMAAlignment);
+          bytesleft := bytesleft - RoundUp(ResponseP^.len, FNetwork^.DMAAlignment);
 
           // check enough bytes left for a worst case packet for the next read.
           if (bytesleft > sizeof(IOCTL_MSG)) then
           begin
-            ResponseP := PIOCTL_MSG(PByte(ResponseP) + RoundUp(ResponseP^.Len, FWIFI^.DMAAlignment));
+            ResponseP := PIOCTL_MSG(PByte(ResponseP) + RoundUp(ResponseP^.Len, FNetwork^.DMAAlignment));
           end
           else
           begin
@@ -4460,69 +3979,69 @@ begin
 
         end;
       except
-        on e : exception do
-          WIFILogError(nil, 'network packet exception ' + e.message + ' at ' + inttohex(longword(exceptaddr), 8));
+        on e: exception do
+          WIFILogError(nil, 'CYW43455: network packet exception ' + e.message + ' at ' + PtrToHex(exceptaddr));
       end;
       end;
    end;
 
 end;
 
-procedure TWIFIWorkerThread.Execute;
+procedure TCYW43455WorkerThread.Execute;
 var
-  istatus : longword;
-  responseP  : PIOCTL_MSG;
-  blockcount, remainder, offset : longword;
-  NetworkEntryP : PNetworkEntry;
-  PacketP : PNetworkPacket;
-  txlen : longword;
-  i : integer;
-  BytesLeft : longword;
-  isfinished : boolean;
-  nGlomPackets : integer;
-  SubPacketLengthP : PWord;
-  GlomDescriptor : TGlomDescriptor;
-  p : integer;
-  PrevResponseP : PIOCTL_MSG;
-  LastCredit : byte;
-  seqdiff : integer;
-  SDPCMHeaderP : PSDPCM_HEADER;
-  BCDCHeaderP : PBCDC_HEADER;
+  istatus: longword;
+  responseP: PIOCTL_MSG;
+  blockcount, remainder, offset: longword;
+  NetworkEntryP: PNetworkEntry;
+  PacketP: PNetworkPacket;
+  txlen: longword;
+  i: integer;
+  BytesLeft: longword;
+  isfinished: boolean;
+  nGlomPackets: integer;
+  SubPacketLengthP: PWord;
+  GlomDescriptor: TGlomDescriptor;
+  p: integer;
+  PrevResponseP: PIOCTL_MSG;
+  LastCredit: byte;
+  seqdiff: integer;
+  SDPCMHeaderP: PSDPCM_HEADER;
+  BCDCHeaderP: PBCDC_HEADER;
 
 begin
-  {$ifdef CYW43455_DEBUG}
-  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'WIFI Worker thread started.');
-  {$endif}
+  {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+  if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: WIFI Worker thread started.');
+  {$ENDIF}
 
-  ThreadSetName(ThreadGetCurrent, 'WIFI Worker Thread');
+  ThreadSetName(ThreadGetCurrent, 'CYW43455 Worker Thread');
 
-  txseq := 0;
+  FNetwork^.txseq := 0;
 
   try
 
   while not terminated do
   begin
      // this polls for the interrupt status changing, which tells us there is some data to read.
-     istatus := cfgreadl(FWIFI, FWIFI^.sdregs + IntStatus);
-     while (istatus and $40 <> $40) and (FWIFI^.NetworkP^.TransmitQueue.Count = 0) do        // safe to check transmit queue here?
+     istatus := cfgreadl(FNetwork, FNetwork^.sdregs + IntStatus);
+     while (istatus and $40 <> $40) and (FNetwork^.Network.TransmitQueue.Count = 0) do        // safe to check transmit queue here?
      begin
        // give up timeslice to other threads.
        Yield;
-       istatus := cfgreadl(FWIFI, FWIFI^.sdregs + IntStatus);
+       istatus := cfgreadl(FNetwork, FNetwork^.sdregs + IntStatus);
      end;
 
      if (istatus and $40 = $40) then
      begin
        // clear interrupt status (seems like writing the value back does this based on other drivers)
-       cfgwritel(FWIFI, FWIFI^.sdregs + IntStatus, istatus);
-       cfgreadl(FWIFI, FWIFI^.sdregs + IntStatus);
+       cfgwritel(FNetwork, FNetwork^.sdregs + IntStatus, istatus);
+       cfgreadl(FNetwork, FNetwork^.sdregs + IntStatus);
      end;
 
-     if MutexLock(FWIFI^.NetworkP^.Lock) = ERROR_SUCCESS then
+     if MutexLock(FNetwork^.Network.Lock) = ERROR_SUCCESS then
      begin
       try
          ResponseP := nil;
-         NetworkEntryP:=BufferGet(FWIFI^.NetworkP^.ReceiveQueue.Buffer);
+         NetworkEntryP:=BufferGet(FNetwork^.Network.ReceiveQueue.Buffer);
          if (NetworkEntryP <> nil) then
          begin
            if (NetworkEntryP^.Buffer <> nil) then
@@ -4530,7 +4049,7 @@ begin
              // Point our structure that we read data into from SDIO interface to the receive buffer
              ResponseP := NetworkEntryP^.Buffer;
              NetworkEntryP^.Count := 0;
-             BytesLeft := PCYW43455Network(FWIFI^.NetworkP)^.ReceiveRequestSize;
+             BytesLeft := FNetwork^.ReceiveRequestSize;
            end;
          end;
 
@@ -4539,9 +4058,9 @@ begin
 
          if (ResponseP <> nil) and (NetworkEntryP <> nil) and (istatus and $40 = $40) then
          begin
-           if SDIODeviceReadWriteExtended(@FWIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, ResponseP, 0, IOCTL_LEN_BYTES) <> MMC_STATUS_SUCCESS then
+           if SDIODeviceReadWriteExtended(FNetwork^.Func2^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, ResponseP, 0, IOCTL_LEN_BYTES) <> MMC_STATUS_SUCCESS then
            begin
-             WIFILogError(nil, 'Error trying to read SDPCM header');
+             WIFILogError(nil, 'CYW43455: Error trying to read SDPCM header');
              exit;
            end
            else
@@ -4557,7 +4076,7 @@ begin
              while (not isfinished) and (ResponseP^.Len <> 0) do
              begin
                if ((responsep^.len + responsep^.notlen) <> $ffff) then
-                  WIFILogError(nil, 'IOCTL Header length failure: len='+inttohex(responsep^.len, 8) + ' notlen='+inttohex(responsep^.notlen, 8));
+                  WIFILogError(nil, 'CYW43455: IOCTL Header length failure: len='+inttohex(responsep^.len, 8) + ' notlen='+inttohex(responsep^.notlen, 8));
 
                if (ResponseP^.Len > IOCTL_LEN_BYTES) then
                begin
@@ -4580,14 +4099,14 @@ begin
                  if (blockcount > 0) then
                  begin
                    // Read the rest of first block to maintain alignment for DMA (PIO)
-                   if SDIODeviceReadWriteExtended(@FWIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep) + IOCTL_LEN_BYTES, 0, 512 - IOCTL_LEN_BYTES) <> MMC_STATUS_SUCCESS then
-                     WIFILogError(nil, 'Error trying to read first block for ioctl response');
+                   if SDIODeviceReadWriteExtended(FNetwork^.Func2^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep) + IOCTL_LEN_BYTES, 0, 512 - IOCTL_LEN_BYTES) <> MMC_STATUS_SUCCESS then
+                     WIFILogError(nil, 'CYW43455: Error trying to read first block for ioctl response');
 
                    if (blockcount > 1) then
                    begin
                      // Read the full blocks as a single request (DMA)
-                     if SDIODeviceReadWriteExtended(@FWIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep) + 512, blockcount - 1, 512) <> MMC_STATUS_SUCCESS then
-                       WIFILogError(nil, 'Error trying to read blocks for ioctl response');
+                     if SDIODeviceReadWriteExtended(FNetwork^.Func2^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep) + 512, blockcount - 1, 512) <> MMC_STATUS_SUCCESS then
+                       WIFILogError(nil, 'CYW43455: Error trying to read blocks for ioctl response');
                    end;
                  end;
 
@@ -4599,8 +4118,8 @@ begin
                      offset := 0;
 
                    // Read the partial last block (PIO)
-                   if SDIODeviceReadWriteExtended(@FWIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep) + offset + blockcount * 512, 0, remainder) <> MMC_STATUS_SUCCESS then
-                     WIFILogError(nil, 'Error trying to read remainder for ioctl response (len='+inttostr(responsep^.len)+')');
+                   if SDIODeviceReadWriteExtended(FNetwork^.Func2^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, pbyte(responsep) + offset + blockcount * 512, 0, remainder) <> MMC_STATUS_SUCCESS then
+                     WIFILogError(nil, 'CYW43455: Error trying to read remainder for ioctl response (len='+inttostr(responsep^.len)+')');
                  end;
 
                   if ((responseP^.cmd.sdpcmheader.chan and $f) <= 2) then
@@ -4616,19 +4135,19 @@ begin
                         superpacket that will follow in the next SDIO read. Each length is a 2 byte quantity}
 
                        nGlomPackets := (responseP^.len - responseP^.cmd.sdpcmheader.hdrlen) div 2;
-                       {$ifdef CYW43455_DEBUG}
-                       if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Glom descriptor: ' + nGlomPackets.tostring + ' packets present');
-                       {$endif}
+                       {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+                       if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: Glom descriptor: ' + nGlomPackets.tostring + ' packets present');
+                       {$ENDIF}
 
                        SubPacketLengthP := PWord(pbyte(responseP) + responseP^.cmd.sdpcmheader.hdrlen);
                        for i := 0 to nGlomPackets-1 do
                        begin
-                        {$ifdef CYW43455_DEBUG}
-                         if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Sub packet length : ' + SubPacketLengthP^.ToString);
-                        {$endif}
+                        {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+                         if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: Sub packet length: ' + SubPacketLengthP^.ToString);
+                        {$ENDIF}
 
                          {update total length}
-                         FWIFI^.ReceiveGlomPacketSize += SubPacketLengthP^;
+                         FNetwork^.ReceiveGlomPacketSize += SubPacketLengthP^;
 
                          {next entry}
                          SubPacketLengthP += 1;       {1 word, not byte}
@@ -4637,7 +4156,7 @@ begin
                        {store glom descriptor}
                        move(ResponseP^, GlomDescriptor, ResponseP^.Len);
 
-                       FWIFI^.ReceiveGlomPacketCount += 1;
+                       FNetwork^.ReceiveGlomPacketCount += 1;
 
                        {stop looping if not enough room, so network stack can process data so far}
                        if (bytesleft < nGlomPackets * IOCTL_MAX_BLKLEN) then
@@ -4658,7 +4177,7 @@ begin
 
                          {This scenario should never occur - it results in data loss if it does}
                          if (isfinished) and (p < nGlomPackets-1) then
-                           WIFILogError(nil, 'Error: there was not enough buffer space '
+                           WIFILogError(nil, 'CYW43455: Error: there was not enough buffer space '
                                              + 'available to process the superpacket (bytesleft='
                                              + bytesleft.tostring + ' this len=' + GlomDescriptor.packetlengths[p].ToString + ')');
 
@@ -4675,18 +4194,18 @@ begin
                   end
                   else
                   begin
-                    WIFILogError(nil,'WIFIWorker: Unrecognised channel message received channel='+inttohex(responseP^.cmd.sdpcmheader.chan and $f, 2) + ' msglen='+inttostr(responsep^.len));
+                    WIFILogError(nil,'CYW43455: Unrecognised channel message received channel='+inttohex(responseP^.cmd.sdpcmheader.chan and $f, 2) + ' msglen='+inttostr(responsep^.len));
                     hexdump(pbyte(responsep), responsep^.len, 'Unrecognised message on channel ' + inttohex(responseP^.cmd.sdpcmheader.chan and $f, 2));
                   end;
                end
                else
                  if (ResponseP^.Len > 0) then
-                   WIFILogError(nil, 'WIFIWorkern: Could not read a large message into an undersized buffer (len='+inttostr(responsep^.len)+')');
+                   WIFILogError(nil, 'CYW43455: Could not read a large message into an undersized buffer (len='+inttostr(responsep^.len)+')');
 
                // read next sdpcm header (may not be one present in which case everything will be zero including length)
-               if (not isFinished) and (SDIODeviceReadWriteExtended(@FWIFI^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, ResponseP, 0, IOCTL_LEN_BYTES) <> MMC_STATUS_SUCCESS) then
+               if (not isFinished) and (SDIODeviceReadWriteExtended(FNetwork^.Func2^.MMC, False, WLAN_FUNCTION, BAK_BASE_ADDR and $1ffff, false, ResponseP, 0, IOCTL_LEN_BYTES) <> MMC_STATUS_SUCCESS) then
                begin
-                 WIFILogError(nil, 'Error trying to read SDPCM header (repeat)');
+                 WIFILogError(nil, 'CYW43455: Error trying to read SDPCM header (repeat)');
                  exit;
                end;
              end;
@@ -4699,15 +4218,15 @@ begin
         begin
           if (NetworkEntryP^.Count > 0) then
           begin
-            FWIFI^.NetworkP^.ReceiveQueue.Entries[(FWIFI^.NetworkP^.ReceiveQueue.Start
-                                  + FWIFI^.NetworkP^.ReceiveQueue.Count)
-                                  mod  PCYW43455Network(FWIFI^.NetworkP)^.ReceiveEntryCount]
+            FNetwork^.Network.ReceiveQueue.Entries[(FNetwork^.Network.ReceiveQueue.Start
+                                  + FNetwork^.Network.ReceiveQueue.Count)
+                                  mod  FNetwork^.ReceiveEntryCount]
                                     := NetworkEntryP;
             {Update Count}
-            Inc(FWIFI^.NetworkP^.ReceiveQueue.Count);
+            Inc(FNetwork^.Network.ReceiveQueue.Count);
 
             {Signal Packet Received}
-            SemaphoreSignal(FWIFI^.NetworkP^.ReceiveQueue.Wait);
+            SemaphoreSignal(FNetwork^.Network.ReceiveQueue.Wait);
           end
           else
           begin
@@ -4720,10 +4239,10 @@ begin
         // now look at the transmit queue and see if there is anything to send.
 
         {Check Count}
-        while FWIFI^.NetworkP^.TransmitQueue.Count > 0 do
+        while FNetwork^.Network.TransmitQueue.Count > 0 do
         begin
           {Get Entry}
-          NetworkEntryP := FWIFI^.NetworkP^.TransmitQueue.Entries[FWIFI^.NetworkP^.TransmitQueue.Start];
+          NetworkEntryP := FNetwork^.Network.TransmitQueue.Entries[FNetwork^.Network.TransmitQueue.Start];
           if NetworkEntryP <> nil then
           begin
             {Get Packet}
@@ -4742,7 +4261,7 @@ begin
                 SDPCMHeaderP^.hdrlen:=IOCTL_LEN_BYTES + SDPCM_HEADER_SIZE;
                 SDPCMHeaderP^.credit := 0;
                 SDPCMHeaderP^.flow := 0;
-                SDPCMHeaderP^.seq:=txseq;
+                SDPCMHeaderP^.seq:=FNetwork^.txseq;
                 SDPCMHeaderP^.reserved := 0;
 
                 // Get BCDC Header
@@ -4755,10 +4274,10 @@ begin
                 BCDCHeaderP^.data_offset := 0;
 
                 // needs thread protection?
-                if (txseq < 255) then
-                  txseq := txseq + 1
+                if (FNetwork^.txseq < 255) then
+                  FNetwork^.txseq := FNetwork^.txseq + 1
                 else
-                  txseq := 0;
+                  FNetwork^.txseq := 0;
 
                 // If we are beyond the sending limit then we need to wait a bit.
                 // it may be more advantageous to drop out of the loop and send the rest
@@ -4766,7 +4285,7 @@ begin
                 // code, but that is a larger change.
                 if (CYW43455_USE_FIRMWARE_CREDIT_VALUE) then
                 begin
-                  seqdiff := LastCredit - txseq;
+                  seqdiff := LastCredit - FNetwork^.txseq;
                   if (seqdiff < 0) then
                     seqdiff := seqdiff + 256;
 
@@ -4787,22 +4306,22 @@ begin
                 remainder := txlen mod 512;
 
                 //Update Statistics
-                Inc(FWIFI^.NetworkP^.TransmitCount);
-                Inc(FWIFI^.NetworkP^.TransmitBytes, txlen);
+                Inc(FNetwork^.Network.TransmitCount);
+                Inc(FNetwork^.Network.TransmitBytes, txlen);
 
                 //send data
                 if (blockcount > 0) then
                 begin
-                  if SDIODeviceReadWriteExtended(@FWIFI^.MMC, True, WLAN_FUNCTION,
+                  if SDIODeviceReadWriteExtended(FNetwork^.Func2^.MMC, True, WLAN_FUNCTION,
                         BAK_BASE_ADDR and $1ffff, false, PacketP^.Buffer, blockcount, 512) <> MMC_STATUS_SUCCESS then
-                          WIFILogError(nil, 'Failed to transmit packet data blocks txseq='+inttostr(txseq)+' lastcredit='+inttostr(LastCredit));
+                          WIFILogError(nil, 'CYW43455: Failed to transmit packet data blocks txseq='+inttostr(FNetwork^.txseq)+' lastcredit='+inttostr(LastCredit));
                 end;
 
                 if (remainder > 0) then
                 begin
-                  if SDIODeviceReadWriteExtended(@FWIFI^.MMC, True, WLAN_FUNCTION,
+                  if SDIODeviceReadWriteExtended(FNetwork^.Func2^.MMC, True, WLAN_FUNCTION,
                         BAK_BASE_ADDR and $1ffff, false, PacketP^.Buffer + blockcount*512, 0, remainder) <> MMC_STATUS_SUCCESS then
-                          WIFILogError(nil, 'Failed to transmit packet data remainder txseq='+inttostr(txseq)+' lastcredit='+inttostr(LastCredit));
+                          WIFILogError(nil, 'CYW43455: Failed to transmit packet data remainder txseq='+inttostr(FNetwork^.txseq)+' lastcredit='+inttostr(LastCredit));
                 end;
 
                 if (WIFI_USE_SUPPLICANT) then
@@ -4813,15 +4332,17 @@ begin
 
                   if (pether_header(pbyte(packetp^.buffer) + IOCTL_LEN_BYTES + SDPCM_HEADER_SIZE + BCDC_HEADER_SIZE)^.ethertype = WordNtoBE(PACKET_TYPE_EAPOL)) then
                   begin
-                    WIFILogDebug(nil, 'Detected transmission of an eapol packet');
+                    {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+                    if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: Detected transmission of an eapol packet');
+                    {$ENDIF}
 
                     // if we are transmitting an EAPOL packet, then we must be sending message 2 or greater.
-                    if (PCYW43455Network(FWIFI^.NetworkP)^.EAPOLCompleted) then
+                    if (FNetwork^.EAPOLCompleted) then
                     begin
-                      WIFILogInfo(nil, 'EAPOL Completed - bringing network up');
+                      if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: EAPOL Completed - bringing network up');
 
-                      if (WorkerSchedule(0, @DoNetworkNotify, FWIFI, nil) <> ERROR_SUCCESS) then
-                        WIFILogError(nil, 'Failed to schedule task to signify the network is up');
+                      if (WorkerSchedule(0, @DoNetworkNotify, FNetwork, nil) <> ERROR_SUCCESS) then
+                        if WIFI_LOG_ENABLED then WIFILogError(nil, 'CYW43455: Failed to schedule task to signify the network is up');
                     end;
                   end;
                 end;
@@ -4831,35 +4352,35 @@ begin
           end;
 
           {Update Start}
-          FWIFI^.NetworkP^.TransmitQueue.Start:=(FWIFI^.NetworkP^.TransmitQueue.Start + 1) mod PCYW43455Network(FWIFI^.NetworkP)^.TransmitEntryCount;
+          FNetwork^.Network.TransmitQueue.Start:=(FNetwork^.Network.TransmitQueue.Start + 1) mod FNetwork^.TransmitEntryCount;
 
           {Update Count}
-          Dec(FWIFI^.NetworkP^.TransmitQueue.Count);
+          Dec(FNetwork^.Network.TransmitQueue.Count);
 
           {Signal Queue Free}
-          SemaphoreSignal(FWIFI^.NetworkP^.TransmitQueue.Wait);
+          SemaphoreSignal(FNetwork^.Network.TransmitQueue.Wait);
 
           BufferFree(NetworkEntryP);
         end;
 
       finally
-        MutexUnlock(FWIFI^.NetworkP^.Lock);
+        MutexUnlock(FNetwork^.Network.Lock);
       end
      end
      else
-       WIFILogError(nil, 'WIFIWorkerThread: Failed to get a mutex lock');
+       WIFILogError(nil, 'CYW43455: Failed to get a mutex lock');
   end;
 
   except
-    on e : exception do
-     WIFILogError(nil, 'workerthread execute exception ' + e.message + ' at ' + inttohex(longword(exceptaddr), 8));
+    on e: exception do
+     WIFILogError(nil, 'CYW43455: workerthread execute exception ' + e.message + ' at ' + PtrToHex(exceptaddr));
   end;
 end;
 
-constructor TWirelessReconnectionThread.Create(AWIFI : PWIFIDevice);
+constructor TCYW43455ReconnectionThread.Create(ANetwork: PCYW43455Network);
 begin
   inherited Create(true,THREAD_STACK_DEFAULT_SIZE);
-  FWIFI := AWIFI;
+  FNetwork := ANetwork;
 
   FConnectionLost := SemaphoreCreate(0);
   FUseBSSID := false;
@@ -4867,15 +4388,15 @@ begin
   Start;
 end;
 
-destructor TWirelessReconnectionThread.Destroy;
+destructor TCYW43455ReconnectionThread.Destroy;
 begin
   SemaphoreDestroy(FConnectionLost);
 
   inherited Destroy;
 end;
 
-procedure TWirelessReconnectionThread.SetConnectionDetails(aSSID, aKey, aCountry : string;
-          BSSID : THardwareAddress; useBSSID : boolean; aReconnectionType : TWIFIReconnectionType);
+procedure TCYW43455ReconnectionThread.SetConnectionDetails(aSSID, aKey, aCountry: string;
+          BSSID: THardwareAddress; useBSSID: boolean; aReconnectionType: TWIFIReconnectionType);
 begin
   FSSID := aSSID;
   FKey := aKey;
@@ -4885,11 +4406,11 @@ begin
   FReconnectionType := aReconnectionType;
 end;
 
-procedure TWirelessReconnectionThread.Execute;
+procedure TCYW43455ReconnectionThread.Execute;
 var
-  Res : longword;
+  Res: longword;
 begin
-  ThreadSetName(ThreadGetCurrent, 'WIFI Reconnection Thread');
+  ThreadSetName(ThreadGetCurrent, 'CYW43455 Reconnection Thread');
 
   while not Terminated do
   begin
@@ -4902,7 +4423,7 @@ begin
         // the connection has been lost. Reconnect. Keep trying indefinitely until
         // the join function returns a success.
 
-        WIFILogInfo(nil, 'Reconnection attempt started');
+        WIFILogInfo(nil, 'CYW43455: Reconnection attempt started');
 
         if (WIFI_USE_SUPPLICANT) then
           UltiboEloopTerminate   // Request termination of the supplicant eloop.
@@ -4916,27 +4437,27 @@ begin
             Res := FirmwareWirelessJoinNetwork(FSSID, FKey, FCountry, WIFIJoinBlocking, WIFIReconnectNever, FBSSID, FUseBSSID); // do *not* call with WIFIReconnectAlways from this thread.
             if (Res <> 0) then
             begin
-              {$ifdef CYW43455_DEBUG}
-              if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'Wireless Join returned fail ' + inttostr(res));
-              {$endif}
+              {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+              if WIFI_LOG_ENABLED then WIFILogDebug(nil, 'CYW43455: Wireless Join returned fail ' + inttostr(res));
+              {$ENDIF}
             end
             else
-              WIFILogInfo(nil, 'Successfully reconnected to the WIFI network');
+              WIFILogInfo(nil, 'CYW43455: Successfully reconnected to the WIFI network');
           end;
         end;
       end
       else
       begin
-        WIFILogInfo(nil, 'Not reconnecting as reconnections are disabled');
+        WIFILogInfo(nil, 'CYW43455: Not reconnecting as reconnections are disabled');
       end;
     end;
   end;
 end;
 
-procedure UltiboTimeProc(var epoch : longint; var millisecond : integer); cdecl;
+procedure UltiboTimeProc(var epoch: longint; var millisecond: integer); cdecl;
 var
-  st : SYSTEMTIME;
-  dt : TDateTime;
+  st: SYSTEMTIME;
+  dt: TDateTime;
 begin
   dt := Now;
   DateTimeToSystemTime(dt, st);
@@ -4944,18 +4465,18 @@ begin
   millisecond := st.Millisecond;
 end;
 
-procedure UltiboMonotonicTimeProc(var epoch : longint; var millisecond : integer); cdecl;
+procedure UltiboMonotonicTimeProc(var epoch: longint; var millisecond: integer); cdecl;
 var
-  c : QWord;
+  c: QWord;
 begin
   c := GetTickCount64;
   epoch := c div 1000;
   millisecond := c mod 1000;
 end;
 
-procedure DoSendDriverNewPacketData(data : pointer);
+procedure DoSendDriverNewPacketData(data: pointer);
 var
-  PacketXFerP : PUltiboPacketXFer;
+  PacketXFerP: PUltiboPacketXFer;
 begin
  try
    PacketXFerP := PUltiboPacketXFer(data);
@@ -4963,25 +4484,25 @@ begin
     ultibo_driver_new_packet_data(@PacketXFerP^.source_address[0], PacketXFerP^.packetbufferp, PacketXFerP^.DataLength);
 
    except
-     WIFILogError(nil, 'An exception occurred in the ultibo_driver_new_packet_data' + inttohex(longword(exceptaddr), 8));
+     WIFILogError(nil, 'CYW43455: An exception occurred in the ultibo_driver_new_packet_data' + PtrToHex(exceptaddr));
    end;
 
    FreeMem(PacketXFerP^.packetbufferp);
    FreeMem(PacketXFerP);
 
  except
-   WIFILogError(nil, 'An exception occurred in dosenddrivernewpacketdata at ' + inttohex(longword(exceptaddr), 8));
+   WIFILogError(nil, 'CYW43455: An exception occurred in dosenddrivernewpacketdata at ' + PtrToHex(exceptaddr));
  end;
 end;
 
-procedure EAPOLCallback(Event : TWIFIEvent;
-            EventRecordP : pwhd_event;
-            RequestItemP : PWIFIRequestItem;
-            DataLength : longint);
+procedure EAPOLCallback(Event: TWIFIEvent;
+            EventRecordP: pwhd_event;
+            RequestItemP: PWIFIRequestItem;
+            DataLength: longint);
 var
-  packetbufferp : pbyte;
-  EtherHeaderP : pether_header;
-  PacketXFerP : PUltiboPacketXFer;
+  packetbufferp: pbyte;
+  EtherHeaderP: pether_header;
+  PacketXFerP: PUltiboPacketXFer;
 begin
   if (Event = WLC_E_EAPOL_MSG) then
   begin
@@ -5013,94 +4534,94 @@ begin
 
   end
   else
-    WIFILogError(nil, 'Wireless Scan: Unexpected event received');
+    WIFILogError(nil, 'CYW43455: Wireless Scan: Unexpected event received');
 
 end;
 
-function SupplicantWirelessJoinNetwork(ssid : PChar; authkey : PByte;
-                             authkeylen : longword;
-                             bssid : PHardwareAddress;
-                             usebssid : boolean = false) : longword; cdecl;
+function SupplicantWirelessJoinNetwork(ssid: PChar; authkey: PByte;
+                             authkeylen: longword;
+                             bssid: PHardwareAddress;
+                             usebssid: boolean = false): longword; cdecl;
 var
-  WIFI:PWIFIDevice;
+  Network: PCYW43455Network;
 
-  n : integer;
-  chan : integer;
-  countrysettings : countryparams;
-  res : longword;
-  responseval : longword;
-  wpa_auth : longword;
-  RequestEntryP : PWIFIRequestItem;
-  extjoinparams : wl_extjoin_params;
-  auth_mfp : longword;
-  k : integer;
+  n: integer;
+  chan: integer;
+  countrysettings: countryparams;
+  res: longword;
+  responseval: longword;
+  wpa_auth: longword;
+  RequestEntryP: PWIFIRequestItem;
+  extjoinparams: wl_extjoin_params;
+  auth_mfp: longword;
+  k: integer;
 
 begin
  Result := MMC_STATUS_INVALID_DATA;
 
  // Get Wireless Device
- WIFI := PWIFIDevice(MMCDeviceFindByDescription(CYW43455_SDIO_DESCRIPTION)); //To Do //TestingSDIO // Pass priv pointer from supplicant
- if WIFI = nil then Exit;
+ Network := PCYW43455Network(NetworkDeviceFindByDescription(CYW43455_NETWORK_DESCRIPTION)); //To Do //TestingSDIO // Pass priv pointer from supplicant
+ if Network = nil then Exit;
 
  fillchar(countrysettings, 0, sizeof(countrysettings));
- move(PCYW43455Network(WIFI^.NetworkP)^.CountryCode[0], countrysettings.country_ie[1], 2);
- move(PCYW43455Network(WIFI^.NetworkP)^.CountryCode[0], countrysettings.country_code[1], 2);
+ move(Network^.CountryCode[0], countrysettings.country_ie[1], 2);
+ move(Network^.CountryCode[0], countrysettings.country_code[1], 2);
  countrysettings.revision := -1;
 
- Result := WirelessSetVar(WIFI, 'country', @countrysettings, sizeof(countrysettings));
+ Result := WirelessSetVar(Network, 'country', @countrysettings, sizeof(countrysettings));
  if Result <> MMC_STATUS_SUCCESS then
    exit;
 
  {Set infrastructure mode, 1 = normal, 0 = access point}
- Result := WirelessCommandInt(WIFI, WLC_SET_INFRA, 1);
+ Result := WirelessCommandInt(Network, WLC_SET_INFRA, 1);
  if (Result <> MMC_STATUS_SUCCESS) then
    exit;
 
  {send auth key}
- if (WirelessSetVar(WIFI, 'wpaie', authkey, authkeylen) <> MMC_STATUS_SUCCESS) then
+ if (WirelessSetVar(Network, 'wpaie', authkey, authkeylen) <> MMC_STATUS_SUCCESS) then
    exit;
 
  // Set WPA authentication mode (string style)
  // this one is kinda replaced by the one later down but this is what circle does
  // need a constant for this if it works.
  wpa_auth := WPA2_AUTH_PSK;
- Result := WirelessSetInt(WIFI, 'wpa_auth', 192);
+ Result := WirelessSetInt(Network, 'wpa_auth', 192);
  if (Result <> MMC_STATUS_SUCCESS) then
    exit;
 
- Result := WirelessCommandInt(WIFI, WLC_SET_AUTH, WL_AUTH_OPEN_SYSTEM);
+ Result := WirelessCommandInt(Network, WLC_SET_AUTH, WL_AUTH_OPEN_SYSTEM);
  if (Result <> MMC_STATUS_SUCCESS) then
   exit;
 
  // set auth with string method
-// result := WirelessSetInt(WIFI, 'auth', WL_AUTH_OPEN_SYSTEM);
+// result := WirelessSetInt(Network, 'auth', WL_AUTH_OPEN_SYSTEM);
 // if (Result <> MMC_STATUS_SUCCESS) then
 //   exit;
 
  {Set Wireless Security Type}
- Result := WirelessCommandInt(WIFI, WLC_SET_WSEC, AES_ENABLED);
+ Result := WirelessCommandInt(Network, WLC_SET_WSEC, AES_ENABLED);
  if (Result <> MMC_STATUS_SUCCESS) then
    exit;
 
  // set wsec with string method
-// Result := WirelessSetInt(WIFI, 'wsec', AES_ENABLED);
+// Result := WirelessSetInt(Network, 'wsec', AES_ENABLED);
 // if (Result <> MMC_STATUS_SUCCESS) then
 //   exit;
 
  {Set WPA authentication mode}
  wpa_auth := WPA2_AUTH_PSK;
- Result := WirelessIOCTLCommand(WIFI, WLC_SET_WPA_AUTH, @wpa_auth, sizeof(wpa_auth), true, @responseval, 4);
+ Result := WirelessIOCTLCommand(Network, WLC_SET_WPA_AUTH, @wpa_auth, sizeof(wpa_auth), true, @responseval, 4);
  if (Result <> MMC_STATUS_SUCCESS) then
    exit;
 
  // Set WPA authentication mode (string style)
 // wpa_auth := WPA2_AUTH_PSK;
-// Result := WirelessSetInt(WIFI, 'wpa_auth', WPA2_AUTH_PSK);
+// Result := WirelessSetInt(Network, 'wpa_auth', WPA2_AUTH_PSK);
 // if (Result <> MMC_STATUS_SUCCESS) then
 //   exit;
 
  auth_mfp := 0;
- Result := WirelessSetVar(WIFI, 'mfp', @auth_mfp, 4);
+ Result := WirelessSetVar(Network, 'mfp', @auth_mfp, 4);
  if (Result <> MMC_STATUS_SUCCESS) then
    exit;
 
@@ -5149,51 +4670,51 @@ begin
 
   {execute extended join to network}
   if (chan <> 0) then
-    res := WirelessSetVar(WIFI, 'join', @extjoinparams, SizeOf(wl_extjoin_params))
+    res := WirelessSetVar(Network, 'join', @extjoinparams, SizeOf(wl_extjoin_params))
   else
-    res := WirelessSetVar(WIFI, 'join', @extjoinparams, SizeOf(wl_extjoin_params) - 4);
+    res := WirelessSetVar(Network, 'join', @extjoinparams, SizeOf(wl_extjoin_params) - 4);
 
   if (res <> 0) then
-    WIFILogError(nil, 'Supplicant join: setvar returned fail code of ' + inttostr(res));
+    WIFILogError(nil, 'CYW43455: Supplicant join: setvar returned fail code of ' + inttostr(res));
 
-  RequestEntryP := WIFI^.WorkerThread.AddRequest(0, [WLC_E_SET_SSID, WLC_E_LINK], @JoinCallback, nil);
+  RequestEntryP := Network^.WorkerThread.AddRequest(0, [WLC_E_SET_SSID, WLC_E_LINK], @JoinCallback, nil);
 
   {Set EAPOL not completed}
-  PCYW43455Network(WIFI^.NetworkP)^.EAPOLCompleted := False;
+  Network^.EAPOLCompleted := False;
   for k := 0 to WPA_KEY_MAX do
-    PCYW43455Network(WIFI^.NetworkP)^.ValidKeys[k] := false;
+    Network^.ValidKeys[k] := false;
 
   {wait for a completion signal or timeout.}
-  SemaphoreWaitEx(RequestEntryP^.Signal, 10000);
+  SemaphoreWaitEx(RequestEntryP^.Signal, 15000); //10000
 
   if (RequestEntryP^.RegisteredEvents = []) then
   begin
-    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'Successfully associated ' + SSID);
+    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: Successfully associated ' + SSID);
 
     {Set join completed}
-    PCYW43455Network(WIFI^.NetworkP)^.JoinCompleted := True;
+    Network^.JoinCompleted := True;
   end
   else
   begin
     Result := MMC_STATUS_INVALID_PARAMETER;
-    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'The join attempt to network ' + SSID + ' was unsuccessful');
+    if WIFI_LOG_ENABLED then WIFILogInfo(nil, 'CYW43455: The join attempt to network ' + SSID + ' was unsuccessful');
 
-    {$ifdef CYW43455_DEBUG}
+    {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
     if WIFI_LOG_ENABLED then
     begin
       if (WLC_E_SET_SSID in RequestEntryP^.RegisteredEvents) then
-        WIFILogDebug(nil, 'WLC_E_SET_SSID event was not returned from the join request');
+        WIFILogDebug(nil, 'CYW43455: WLC_E_SET_SSID event was not returned from the join request');
 
       if (WLC_E_LINK in RequestEntryP^.RegisteredEvents) then
-        WIFILogDebug(nil, 'WLC_E_LINK event was not returned from the join request');
+        WIFILogDebug(nil, 'CYW43455: WLC_E_LINK event was not returned from the join request');
     end;
-    {$endif}
+    {$ENDIF}
   end;
 
-  WIFI^.WorkerThread.DoneWithRequest(RequestEntryP);
+  Network^.WorkerThread.DoneWithRequest(RequestEntryP);
 end;
 
-procedure LockEAPOLPacketQueue(trace : pchar); cdecl;
+procedure LockEAPOLPacketQueue(trace: pchar); cdecl;
 var
  CriticalSectionHandle:TCriticalSectionHandle;
 begin
@@ -5236,24 +4757,24 @@ begin
   LeaveCriticalSection(EAPOLQueueLock);
 end;
 
-function UltiboSetKey(const ifname : PChar; priv : pointer; alg : byte;
-		      const addr : PByte; key_idx : integer; set_tx : integer;
-		      const seq : PByte; seq_len : integer;
-		      const key : PByte; key_len : integer) : integer; cdecl;
+function UltiboSetKey(const ifname: PChar; priv: pointer; alg: byte;
+		      const addr: PByte; key_idx: integer; set_tx: integer;
+		      const seq: PByte; seq_len: integer;
+		      const key: PByte; key_len: integer): integer; cdecl;
 var
-  WIFI:PWIFIDevice;
+  Network: PCYW43455Network;
 
-  KeyP : PWPAKey;
-  pairwise : boolean;
+  KeyP: PWPAKey;
+  pairwise: boolean;
 begin
  try
   Result := 0;
 
   // Get Wireless Device
-  WIFI := PWIFIDevice(MMCDeviceFindByDescription(CYW43455_SDIO_DESCRIPTION)); //To Do //TestingSDIO // Pass priv pointer from supplicant
-  if WIFI = nil then Exit;
+  Network := PCYW43455Network(NetworkDeviceFindByDescription(CYW43455_NETWORK_DESCRIPTION)); //To Do //TestingSDIO // Pass priv pointer from supplicant
+  if Network = nil then Exit;
 
-  PCYW43455Network(WIFI^.NetworkP)^.ValidKeys[key_idx] := true;
+  Network^.ValidKeys[key_idx] := true;
 
   {probably a request to clear the key - ignore for now.}
   if (addr = nil) then
@@ -5264,7 +4785,7 @@ begin
     exit;
 
   {take a copy of the parameters and store in a record for later.}
-  KeyP := @(PCYW43455Network(WIFI^.NetworkP)^.WPAKeys[key_idx]);
+  KeyP := @(Network^.WPAKeys[key_idx]);
 
   fillchar(KeyP^, sizeof(TWPAKey), 0);
 
@@ -5296,23 +4817,23 @@ begin
     move(addr^, KeyP^.ethaddr[0], 6);
 
  except
-   WIFILogError(nil, 'Exception in SetKey at ' + inttohex(longword(exceptaddr), 8));
+   WIFILogError(nil, 'CYW43455: Exception in SetKey at ' + PtrToHex(exceptaddr));
  end;
 end;
 
-procedure SendSupplicantL2Packet(PacketBufferP : PByte; Len : longword); cdecl;
+procedure SendSupplicantL2Packet(PacketBufferP: PByte; Len: longword); cdecl;
 var
-  WIFI:PWIFIDevice;
-  NetworkEntryP : PNetworkEntry;
-  TransmitBufferP : Pointer;
+  Network: PCYW43455Network;
+  NetworkEntryP: PNetworkEntry;
+  TransmitBufferP: Pointer;
 begin
   // Get Wireless Device
-  WIFI := PWIFIDevice(MMCDeviceFindByDescription(CYW43455_SDIO_DESCRIPTION)); //To Do //TestingSDIO // Pass priv pointer from supplicant ?
-  if WIFI = nil then Exit;
+  Network := PCYW43455Network(NetworkDeviceFindByDescription(CYW43455_NETWORK_DESCRIPTION)); //To Do //TestingSDIO // Pass priv pointer from supplicant ?
+  if Network = nil then Exit;
 
   try
     {get transmit buffer.}
-    NetworkEntryP:=BufferGet(WIFI^.NetworkP^.TransmitQueue.Buffer);
+    NetworkEntryP:=BufferGet(Network^.Network.TransmitQueue.Buffer);
     if (NetworkEntryP <> nil) and (NetworkEntryP^.Buffer <> nil) then
     begin
       {get packet list pointer}
@@ -5334,102 +4855,102 @@ begin
       move(PacketBufferP^, NetworkEntryP^.Packets[NetworkEntryP^.Count-1].Data^, len);
 
       {Wait for Entry}
-      if SemaphoreWait(WIFI^.NetworkP^.TransmitQueue.Wait) = ERROR_SUCCESS then
+      if SemaphoreWait(Network^.Network.TransmitQueue.Wait) = ERROR_SUCCESS then
       begin
         {Acquire the Lock}
-        if MutexLock(WIFI^.NetworkP^.Lock) = ERROR_SUCCESS then
+        if MutexLock(Network^.Network.Lock) = ERROR_SUCCESS then
         begin
           {Add Entry}
-          WIFI^.NetworkP^.TransmitQueue.Entries[(WIFI^.NetworkP^.TransmitQueue.Start + WIFI^.NetworkP^.TransmitQueue.Count)
-                                                mod PCYW43455Network(WIFI^.NetworkP)^.TransmitEntryCount] := NetworkEntryP;
+          Network^.Network.TransmitQueue.Entries[(Network^.Network.TransmitQueue.Start + Network^.Network.TransmitQueue.Count)
+                                                mod Network^.TransmitEntryCount] := NetworkEntryP;
           {Update Count}
-          Inc(WIFI^.NetworkP^.TransmitQueue.Count);
+          Inc(Network^.Network.TransmitQueue.Count);
 
           {Release the Lock}
-          MutexUnlock(WIFI^.NetworkP^.Lock);
+          MutexUnlock(Network^.Network.Lock);
         end
         else
-          WIFILogError(nil, 'Failed to get network lock!!');
+          WIFILogError(nil, 'CYW43455: Failed to get network lock!!');
       end
       else
-        WIFILogError(nil, 'Failed to wait for transmit semaphore');
+        WIFILogError(nil, 'CYW43455: Failed to wait for transmit semaphore');
     end
     else
-      WIFILogError(nil, 'Failed to get a transmit buffer!');
+      WIFILogError(nil, 'CYW43455: Failed to get a transmit buffer!');
   except
-    on e : exception do
-      WIFILogInfo(nil, 'Exception in sendsupplicantl2packet : ' + e.message + ' at address ' + inttohex(longword(exceptaddr), 8));
+    on e: exception do
+      WIFILogInfo(nil, 'CYW43455: Exception in sendsupplicantl2packet: ' + e.message + ' at address ' + PtrToHex(exceptaddr));
   end;
 end;
 
-procedure DoNetworkNotify(data : pointer);
+procedure DoNetworkNotify(data: pointer);
 var
-  WIFI:PWIFIDevice;
-  KeyP : PWPAKey;
-  k : integer;
+  Network: PCYW43455Network;
+  KeyP: PWPAKey;
+  k: integer;
 begin
   // Get Wireless Device
-  WIFI := PWIFIDevice(data);
-  if WIFI = nil then Exit;
+  Network := PCYW43455Network(data);
+  if Network = nil then Exit;
 
   {set both keys here before bringing up the network.}
   for k := 0 to WPA_KEY_MAX do
-    if (PCYW43455Network(WIFI^.NetworkP)^.ValidKeys[k]) then
+    if (Network^.ValidKeys[k]) then
     begin
-      WIFILogInfo(nil, 'Setting key ' + k.ToString);
+      WIFILogInfo(nil, 'CYW43455: Setting key ' + k.ToString);
 
-      KeyP := @(PCYW43455Network(WIFI^.NetworkP)^.WPAKeys[k]);
-      if (WirelessSetVar(WIFI, 'wsec_key', PByte(KeyP), sizeof(TWPAKey), 'ultibosetkey') <> ERROR_SUCCESS) then
-        WIFILogError(nil, 'Failed to update wsec_key in UltiboSetKey key=' + k.tostring)
+      KeyP := @(Network^.WPAKeys[k]);
+      if (WirelessSetVar(Network, 'wsec_key', PByte(KeyP), sizeof(TWPAKey), 'ultibosetkey') <> ERROR_SUCCESS) then
+        WIFILogError(nil, 'CYW43455: Failed to update wsec_key in UltiboSetKey key=' + k.tostring)
       else
-        WIFILogInfo(nil, 'Successfully set the wsec_key var key=' + k.tostring);
+        WIFILogInfo(nil, 'CYW43455: Successfully set the wsec_key var key=' + k.tostring);
     end;
 
   {Set Status to Up}
-  WIFI^.NetworkP^.NetworkStatus := NETWORK_STATUS_UP;
+  Network^.Network.NetworkStatus := NETWORK_STATUS_UP;
 
   {Notify the Status}
-  NotifierNotify(@WIFI^.NetworkP^.Device, DEVICE_NOTIFICATION_UP);
+  NotifierNotify(@Network^.Network.Device, DEVICE_NOTIFICATION_UP);
 
   {signal network joined}
-  SemaphoreSignal(PCYW43455Network(WIFI^.NetworkP)^.NetworkUpSignal);
+  SemaphoreSignal(Network^.NetworkUpSignal);
 
-  WIFILogInfo(nil, 'The WIFI network status is up');
+  WIFILogInfo(nil, 'CYW43455: The WIFI network status is up');
 end;
 
 procedure UltiboEAPOLComplete; cdecl;
 var
-  WIFI:PWIFIDevice;
+  Network: PCYW43455Network;
 begin
   // Get Wireless Device
-  WIFI := PWIFIDevice(MMCDeviceFindByDescription(CYW43455_SDIO_DESCRIPTION)); //To Do //TestingSDIO // Pass priv pointer from supplicant
-  if WIFI = nil then Exit;
+  Network := PCYW43455Network(NetworkDeviceFindByDescription(CYW43455_NETWORK_DESCRIPTION)); //To Do //TestingSDIO // Pass priv pointer from supplicant
+  if Network = nil then Exit;
 
-  PCYW43455Network(WIFI^.NetworkP)^.EAPOLCompleted := true;
-  WIFILogInfo(nil, 'EAPOL auth is complete.');
+  Network^.EAPOLCompleted := true;
+  WIFILogInfo(nil, 'CYW43455: EAPOL auth is complete.');
 end;
 
-function UltiboSetCountry(priv : pointer; ccode : PChar) : integer; cdecl;
+function UltiboSetCountry(priv: pointer; ccode: PChar): integer; cdecl;
 var
-  WIFI:PWIFIDevice;
+  Network: PCYW43455Network;
 begin
   Result := 0;
 
   // Get Wireless Device
-  WIFI := PWIFIDevice(MMCDeviceFindByDescription(CYW43455_SDIO_DESCRIPTION)); //To Do //TestingSDIO // Pass priv pointer from supplicant
-  if WIFI = nil then Exit;
+  Network := PCYW43455Network(NetworkDeviceFindByDescription(CYW43455_NETWORK_DESCRIPTION)); //To Do //TestingSDIO // Pass priv pointer from supplicant
+  if Network = nil then Exit;
 
-  PCYW43455Network(WIFI^.NetworkP)^.CountryCode[0] := ccode^;
-  PCYW43455Network(WIFI^.NetworkP)^.CountryCode[1] := (ccode+1)^;
+  Network^.CountryCode[0] := ccode^;
+  Network^.CountryCode[1] := (ccode+1)^;
 end;
 
-constructor TWPASupplicantThread.create(AWIFI : PWIFIDevice);
+constructor TWPASupplicantThread.create(ANetwork: PCYW43455Network);
 begin
   {the thread is created suspended. We'll let it run when the application asks for a connection.}
   inherited Create(True,THREAD_STACK_DEFAULT_SIZE);
   FreeOnTerminate := true;
 
-  FWIFI := AWIFI;
+  FNetwork := ANetwork;
 end;
 
 destructor TWPASupplicantThread.Destroy;
@@ -5439,18 +4960,18 @@ end;
 
 procedure TWPASupplicantThread.Execute;
 var
- retcode : integer;
- EAPOLRequestItemP : PWIFIRequestItem;
+ retcode: integer;
+ EAPOLRequestItemP: PWIFIRequestItem;
 begin
   ThreadSetName(ThreadGetCurrent, 'WPA Supplicant Thread');
-  WIFILogInfo(nil, 'WPA Supplicant Thread started execution');
+  WIFILogInfo(nil, 'CYW43455: WPA Supplicant Thread started execution');
 
   {set up the mac address pointer so the supplicant can see it}
-  SetUltiboMacAddress(@FWIFI^.macaddress[0]);
+  SetUltiboMacAddress(@FNetwork^.macaddress[0]);
 
   {add callback request for EAPOL messages. Dunno if this will work.}
   {haven't actually seen any yet.}
-  EAPOLRequestItemP := FWIFI^.WorkerThread.AddRequest(0, [WLC_E_EAPOL_MSG], @EAPOLCallback, nil);
+  EAPOLRequestItemP := FNetwork^.WorkerThread.AddRequest(0, [WLC_E_EAPOL_MSG], @EAPOLCallback, nil);
 
   {call main - this will read the configuration and start the event loop off.}
   {Each time this loop executes, it repeats because the connection was lost. We are asking
@@ -5463,19 +4984,268 @@ begin
     begin
       retcode := wpa_supplicant_main('wpa_supplicant.conf');
 
-      WIFILogInfo(nil, 'The supplicant main loop has terminated - return code ' + inttostr(retcode));
+      WIFILogInfo(nil, 'CYW43455: The supplicant main loop has terminated - return code ' + inttostr(retcode));
     end;
 
-    FWIFI^.WorkerThread.DoneWithRequest(EAPOLRequestItemP);
+    FNetwork^.WorkerThread.DoneWithRequest(EAPOLRequestItemP);
 
-    WIFILogInfo(nil, 'The supplicant thread has terminated - return code ' + inttostr(retcode));
+    WIFILogInfo(nil, 'CYW43455: The supplicant thread has terminated - return code ' + inttostr(retcode));
   except
-    on e : exception do
-      WIFILogError(nil, 'Exception generated in TWPASupplicantThread.Execute ' + e.Message + ' ' + inttohex(longword(exceptaddr), 8));
+    on e: exception do
+      WIFILogError(nil, 'CYW43455: Exception generated in TWPASupplicantThread.Execute ' + e.Message + ' ' + PtrToHex(exceptaddr));
   end;
 
 end;
 
+function WIFIDeviceSDIODriverBind(MMC: PMMCDevice; Func: PSDIOFunction): LongWord;
+var
+ Func1: PSDIOFunction;
+ Func2: PSDIOFunction;
+ Network: PCYW43455Network;
+begin
+ {}
+ Result := MMC_STATUS_INVALID_PARAMETER;
+
+ {Check MMC}
+ if MMC = nil then
+   Exit;
+
+ {Check Function}
+ if Func = nil then
+   Exit;
+
+ {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+ if MMC_LOG_ENABLED then MMCLogDebug(MMC, 'CYW43455: Attempting to bind SDIO function (Number=' + IntToStr(Func^.Number) + ' VendorId=' + IntToHex(Func^.VendorId, 4) + ' DeviceId=' + IntToHex(Func^.DeviceId, 4) + ')');
+ {$ENDIF}
+
+ {Check Function}
+ if WIFIDeviceCheckFunction(Func) <> MMC_STATUS_SUCCESS then
+  begin
+   {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+   if MMC_LOG_ENABLED then MMCLogDebug(MMC, 'CYW43455: Function not found in supported device list');
+   {$ENDIF}
+
+   {Return Result}
+   Result := MMC_STATUS_DEVICE_UNSUPPORTED;
+   Exit;
+  end;
+
+ {Check Function Number}
+ case Func^.Number of
+  1: begin
+    {Function 1 (Backplane)}
+    Func1 := Func;
+
+    {Find Function 2}
+    Func2 := SDIOFunctionFind(MMC, 2);
+   end;
+  2: begin
+    {Function 2 (Wireless LAN)}
+    Func2:=Func;
+
+    {Find Function 1}
+    Func1 := SDIOFunctionFind(MMC, 1);
+   end;
+  else
+   begin
+    {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+    if MMC_LOG_ENABLED then MMCLogDebug(MMC, 'CYW43455: Function number not in supported list');
+    {$ENDIF}
+
+    {Return Result}
+    Result := MMC_STATUS_DEVICE_UNSUPPORTED;
+    Exit;
+   end;
+ end;
+
+ {Check Functions}
+ if (Func1 = nil) or (Func2 = nil) then
+  begin
+   {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+   if MMC_LOG_ENABLED then MMCLogDebug(MMC, 'CYW43455: Unable to locate all required functions');
+   {$ENDIF}
+
+   {Return Result}
+   Result := MMC_STATUS_DEVICE_UNSUPPORTED;
+   Exit;
+  end;
+
+ {Bind Function 1}
+ if SDIOFunctionBind(Func1, CYW43455SDIODriver) <> MMC_STATUS_SUCCESS then
+  begin
+   {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+   if MMC_LOG_ENABLED then MMCLogDebug(MMC, 'CYW43455: Failed to bind driver to function 1');
+   {$ENDIF}
+
+   {Return Result}
+   Result := MMC_STATUS_DEVICE_UNSUPPORTED;
+   Exit;
+  end;
+
+ {Bind Function 2}
+ if SDIOFunctionBind(Func2, CYW43455SDIODriver) <> MMC_STATUS_SUCCESS then
+  begin
+   {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+   if MMC_LOG_ENABLED then MMCLogDebug(MMC, 'CYW43455: Failed to bind driver to function 2');
+   {$ENDIF}
+
+   {Unbind Function 1}
+   SDIOFunctionUnbind(Func1, CYW43455SDIODriver);
+
+   {Return Result}
+   Result := MMC_STATUS_DEVICE_UNSUPPORTED;
+   Exit;
+  end;
+
+ {Create Network}
+ Network := PCYW43455Network(NetworkDeviceCreateEx(SizeOf(TCYW43455Network)));
+ if Network = nil then
+  begin
+   if MMC_LOG_ENABLED then MMCLogError(MMC, 'CYW43455: Failed to create new network device');
+
+   {Unbind Function 2}
+   SDIOFunctionUnbind(Func2, CYW43455SDIODriver);
+
+   {Unbind Function 1}
+   SDIOFunctionUnbind(Func1, CYW43455SDIODriver);
+
+   {Return Result}
+   Result := MMC_STATUS_DEVICE_UNSUPPORTED;
+   Exit;
+  end;
+
+ {Update Network}
+ {Device}
+ Network^.Network.Device.DeviceBus := DEVICE_BUS_SD;
+ Network^.Network.Device.DeviceType := NETWORK_TYPE_ETHERNET;
+ Network^.Network.Device.DeviceFlags := NETWORK_FLAG_RX_BUFFER or NETWORK_FLAG_TX_BUFFER or NETWORK_FLAG_RX_MULTIPACKET;
+ Network^.Network.Device.DeviceData := MMC;
+ Network^.Network.Device.DeviceDescription := CYW43455_NETWORK_DESCRIPTION;
+ {Network}
+ Network^.Network.NetworkState := NETWORK_STATE_CLOSED;
+ Network^.Network.NetworkStatus := NETWORK_STATUS_DOWN;
+ Network^.Network.DeviceOpen := @CYW43455DeviceOpen;
+ Network^.Network.DeviceClose := @CYW43455DeviceClose;
+ Network^.Network.DeviceControl := @CYW43455DeviceControl;
+ Network^.Network.BufferAllocate := @CYW43455BufferAllocate;
+ Network^.Network.BufferRelease := @CYW43455BufferRelease;
+ Network^.Network.BufferReceive := @CYW43455BufferReceive;
+ Network^.Network.BufferTransmit := @CYW43455BufferTransmit;
+ {Driver}
+ //To Do //TestingSDIO // Anything else ?
+ {SDIO}
+ Network^.Func1 := Func1;
+ Network^.Func2 := Func2;
+ {CYW43455}
+ Network^.TXBuffer := nil;
+ Network^.RXBuffer := nil;
+ Network^.DMABuffer := nil;
+ Network^.DMAAlignment := 0;
+
+ {Register Network}
+ if NetworkDeviceRegister(@Network^.Network) <> ERROR_SUCCESS then
+  begin
+   if MMC_LOG_ENABLED then MMCLogError(MMC, 'CYW43455: Failed to register new network device');
+
+   {Unbind Function 2}
+   SDIOFunctionUnbind(Func2, CYW43455SDIODriver);
+
+   {Unbind Function 1}
+   SDIOFunctionUnbind(Func1, CYW43455SDIODriver);
+
+   {Destroy Network}
+   NetworkDeviceDestroy(@Network^.Network);
+
+   {Return Result}
+   Result := MMC_STATUS_DEVICE_UNSUPPORTED;
+   Exit;
+  end;
+
+ {Update Functions}
+ Network^.Func1^.DriverData := Network;
+ Network^.Func2^.DriverData := Network;
+
+ {Return Result}
+ Result := MMC_STATUS_SUCCESS;
+end;
+
+function WIFIDeviceSDIODriverUnbind(MMC: PMMCDevice; Func: PSDIOFunction): LongWord;
+var
+ Network: PCYW43455Network;
+begin
+ Result := MMC_STATUS_INVALID_PARAMETER;
+
+ {Check MMC}
+ if MMC = nil then
+   Exit;
+
+ {Check Function}
+ if Func = nil then
+   Exit;
+
+ {Check Driver}
+ if Func^.Driver <> CYW43455SDIODriver then
+   Exit;
+
+ {$IF DEFINED(CYW43455_DEBUG) or DEFINED(NETWORK_DEBUG)}
+ if MMC_LOG_ENABLED then MMCLogDebug(MMC, 'CYW43455: Unbinding SDIO function (Number=' + IntToStr(Func^.Number) + ' VendorId=' + IntToHex(Func^.VendorId, 4) + ' DeviceId=' + IntToHex(Func^.DeviceId, 4) + ')');
+ {$ENDIF}
+
+ {Get Network}
+ Network := PCYW43455Network(Func^.DriverData);
+ if Network = nil then
+   Exit;
+
+ {Close Network}
+ CYW43455DeviceClose(@Network^.Network);
+
+ {Update Functions}
+ Network^.Func1^.DriverData := nil;
+ Network^.Func2^.DriverData := nil;
+
+ {Unbind Function 1}
+ SDIOFunctionUnbind(Network^.Func1, CYW43455SDIODriver);
+
+ {Unbind Function 2}
+ SDIOFunctionUnbind(Network^.Func2, CYW43455SDIODriver);
+
+ {Deregister Network}
+ if NetworkDeviceDeregister(@Network^.Network) <> ERROR_SUCCESS then
+   Exit;
+
+ {Destroy Network}
+ NetworkDeviceDestroy(@Network^.Network);
+
+ Result := MMC_STATUS_SUCCESS;
+end;
+
+function WIFIDeviceCheckFunction(Func: PSDIOFunction): LongWord;
+begin
+ {}
+ Result := MMC_STATUS_INVALID_PARAMETER;
+
+ {Check Function}
+ if Func = nil then
+   Exit;
+
+ {Check Vendor}
+ if Func^.VendorId = SDIO_VENDOR_ID_BROADCOM then
+  begin
+   case Func^.DeviceId of
+    SDIO_DEVICE_ID_BROADCOM_4330,
+    SDIO_DEVICE_ID_BROADCOM_43362,
+    SDIO_DEVICE_ID_BROADCOM_43430,
+    SDIO_DEVICE_ID_BROADCOM_4345: begin
+      Result := MMC_STATUS_SUCCESS;
+      Exit;
+     end;
+   end;
+  end;
+
+ Result := MMC_STATUS_DEVICE_UNSUPPORTED;
+end;
+
 initialization
+  WIFIDeviceInit;
 
 end.
